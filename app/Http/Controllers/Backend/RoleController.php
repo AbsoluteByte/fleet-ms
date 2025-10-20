@@ -1,0 +1,151 @@
+<?php
+
+namespace App\Http\Controllers\Backend;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Yajra\DataTables\Facades\DataTables;
+
+class RoleController extends Controller
+{
+    protected $url = 'roles.';
+    protected $dir = 'backend.roles.';
+    protected $name = 'Roles';
+
+    public function __construct()
+    {
+        $this->middleware('role:superuser');
+        view()->share('url', $this->url);
+        view()->share('dir', $this->dir);
+        view()->share('singular', Str::singular($this->name));
+        view()->share('plural', Str::plural($this->name));
+    }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        return view($this->dir . 'index');
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        $model = new Role();
+        return view($this->dir . 'create', compact('model'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $this->validate($request, [
+            'name' => ['required', 'string', 'max:50'],
+        ]);
+
+        $model = new Role();
+        $model->name = request('name', null);
+        $model->save();
+        $permissions = $request->input('permission');
+        foreach ($permissions as $permissionId) {
+            $permission = Permission::findOrFail($permissionId);
+            $model->givePermissionTo($permission);
+        }
+
+        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' saved Successfully!');
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  \App\Models\Location  $location
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        $model = Role::where('id', $id)->firstOrFail();
+
+        return view($this->dir . 'show', compact('model'));
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  \App\Models\User  $User
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        $model = Role::where('id', $id)->firstOrFail();
+        return view($this->dir . 'edit', compact('model'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\User  $User
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id)
+    {
+        $model = Role::where('id', $id)->firstOrFail();
+
+        $this->validate($request, [
+            'name' => ['required', 'string', 'max:50'],
+        ]);
+
+        $model->name = request('name', null);
+        $model->save();
+
+        // Sync permissions for the role
+        $permissions = $request->input('permission');
+        $model->syncPermissions($permissions);
+
+        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' updated Successfully!');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  \App\Models\User  $User
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        $model = Role::where('id', $id)->firstOrFail();
+        $model->delete();
+
+        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' deleted Successfully!');
+    }
+
+    public function data()
+    {
+        $models = Role::query();
+        return DataTables::eloquent($models)
+            ->editColumn('created_at', function (Role $model) {
+                return $model->created_at->format('d M Y h:ia');
+            })
+            ->addColumn('action', function (Role $model) {
+                return view($this->dir . 'actionCol', compact('model'));
+            })
+            ->rawColumns(['action'])
+            ->toJson();
+    }
+
+
+
+}

@@ -1,0 +1,91 @@
+@extends('layouts.admin', ['title' => 'Payments'])
+@section('content')
+    <section id="basic-datatable">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">{{ $plural }}</h4>
+                        <a class="btn btn-primary float-right" href="{{ route($url . 'create') }}"><i
+                                class="fa fa-plus"></i>
+                            Create New {{ $singular }}</a>
+                    </div>
+                    <hr>
+                    <div class="card-content">
+                        <div class="card-body card-dashboard">
+                            @include('alerts')
+                            <div class="table-responsive">
+                                <table id="dataTable" class="table datatable table-bordered table-striped">
+                                    <thead>
+                                    <tr>
+                                        <th>Company</th>
+                                        <th>Payment Type</th>
+                                        <th>Bank Name</th>
+                                        <th>Account Number</th>
+                                        <th>Sort Code</th>
+                                        <th>IBAN Number </th>
+                                        <th>Actions</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @forelse($payments as $payment)
+                                        <tr>
+                                            <td>{{ $payment->company->name }}</td>
+                                            <td>{{ $payment->payment_type }}</td>
+                                            <td>{{ $payment->bank_name }}</td>
+                                            <td>{{ $payment->account_number }}</td>
+                                            <td>{{ $payment->sort_code }}</td>
+                                            <td>{{ $payment->iban_number }}</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <a href="{{ route('payments.show', $payment) }}" class="btn btn-sm btn-outline-info">
+                                                        <i class="fa fa-eye"></i>
+                                                    </a>
+                                                    <a href="{{ route('payments.edit', $payment) }}" class="btn btn-sm btn-outline-warning">
+                                                        <i class="fa fa-edit"></i>
+                                                    </a>
+                                                    <form action="{{ route('payments.destroy', $payment) }}" method="POST" style="display: inline;">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                                onclick="return confirm('Are you sure?')">
+                                                            <i class="fa fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted py-4">
+                                                <i class="fas fa-handshake fa-3x mb-3"></i>
+                                                <br>
+                                                No agreements found. <a href="{{ route('payments.create') }}">Create your first payment</a>
+                                            </td>
+                                        </tr>
+                                    @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+@endsection
+@section('css')
+    <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
+@endsection
+@section('js')
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script>
+        $(document).ready(function () {
+            $('#dataTable').DataTable({
+                processing: true,
+                responsive: true,
+            });
+        });
+    </script>
+@endsection
