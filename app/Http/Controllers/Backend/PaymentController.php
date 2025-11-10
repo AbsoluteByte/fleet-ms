@@ -36,24 +36,36 @@ class PaymentController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $rules = [
             'payment_type' => 'required|string|max:255',
-            'bank_name' => 'required|string|max:255',
-            'account_number' => 'required|string|max:255',
-            'sort_code' => 'required|string|max:10',
-            'iban_number' => 'nullable|string|max:34',
             'company_id' => 'required|exists:companies,id',
-        ]);
+        ];
+
+        // Conditional validation based on payment type
+        if ($request->payment_type === 'Bank Transfer') {
+            $rules['bank_name'] = 'required|string|max:255';
+            $rules['account_number'] = 'required|string|max:255';
+            $rules['sort_code'] = 'required|string|max:10';
+            $rules['iban_number'] = 'nullable|string|max:34';
+        } elseif ($request->payment_type === 'Stripe') {
+            $rules['stripe_public_key'] = 'required|string|max:255';
+            $rules['stripe_secret_key'] = 'required|string|max:255';
+        } elseif ($request->payment_type === 'PayPal') {
+            $rules['paypal_client_id'] = 'required|string|max:255';
+            $rules['paypal_secret'] = 'required|string|max:255';
+        }
+
+        $validated = $request->validate($rules);
 
         Payment::create($validated);
 
-        return redirect()->route('payments.index')
+        return redirect()->route($this->url.'index')
             ->with('success', 'Payment method created successfully.');
     }
 
     public function show(Payment $payment)
     {
-        return view('payments.show', compact('payment'));
+        return view($this->dir.'show', compact('payment'));
     }
 
     public function edit($id)
@@ -64,18 +76,30 @@ class PaymentController extends Controller
 
     public function update(Request $request, Payment $payment)
     {
-        $validated = $request->validate([
+        $rules = [
             'payment_type' => 'required|string|max:255',
-            'bank_name' => 'required|string|max:255',
-            'account_number' => 'required|string|max:255',
-            'sort_code' => 'required|string|max:10',
-            'iban_number' => 'nullable|string|max:34',
             'company_id' => 'required|exists:companies,id',
-        ]);
+        ];
+
+        // Conditional validation based on payment type
+        if ($request->payment_type === 'Bank Transfer') {
+            $rules['bank_name'] = 'required|string|max:255';
+            $rules['account_number'] = 'required|string|max:255';
+            $rules['sort_code'] = 'required|string|max:10';
+            $rules['iban_number'] = 'nullable|string|max:34';
+        } elseif ($request->payment_type === 'Stripe') {
+            $rules['stripe_public_key'] = 'required|string|max:255';
+            $rules['stripe_secret_key'] = 'required|string|max:255';
+        } elseif ($request->payment_type === 'PayPal') {
+            $rules['paypal_client_id'] = 'required|string|max:255';
+            $rules['paypal_secret'] = 'required|string|max:255';
+        }
+
+        $validated = $request->validate($rules);
 
         $payment->update($validated);
 
-        return redirect()->route('payments.index')
+        return redirect()->route($this->url.'index')
             ->with('success', 'Payment method updated successfully.');
     }
 
@@ -83,7 +107,7 @@ class PaymentController extends Controller
     {
         $payment->delete();
 
-        return redirect()->route('payments.index')
+        return redirect()->route($this->url.'index')
             ->with('success', 'Payment method deleted successfully.');
     }
 }

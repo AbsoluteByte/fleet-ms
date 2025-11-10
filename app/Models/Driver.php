@@ -11,11 +11,12 @@ class Driver extends Model
 
     protected $fillable = [
         'first_name', 'middle_name', 'last_name', 'dob', 'email',
-        'phone_number', 'address1', 'address2', 'post_code', 'town',
+        'phone_number', 'ni_number', 'address1', 'address2', 'post_code', 'town',
         'county', 'country_id', 'driver_license_number',
         'driver_license_expiry_date', 'phd_license_number',
         'phd_license_expiry_date', 'next_of_kin', 'next_of_kin_phone',
         'driver_license_document', 'driver_phd_license_document',
+        'phd_card_document', 'dvla_license_summary', 'misc_document',
         'proof_of_address_document', 'is_invited', 'invited_at',
         'invitation_token', 'invitation_accepted_at', 'user_id'
     ];

@@ -9,8 +9,16 @@ class Payment extends Model
     use HasFactory;
 
     protected $fillable = [
-        'payment_type', 'bank_name', 'account_number',
-        'sort_code', 'iban_number', 'company_id'
+        'payment_type',
+        'bank_name',
+        'account_number',
+        'sort_code',
+        'iban_number',
+        'company_id',
+        'stripe_public_key',
+        'stripe_secret_key',
+        'paypal_client_id',
+        'paypal_secret'
     ];
 
     public function company()

@@ -65,8 +65,8 @@
     </div>
 </div>
 
-<!-- Bank Details -->
-<div class="card mb-1">
+<!-- Bank Details (Only for Bank Transfer) -->
+<div class="card mb-1" id="bank-details-section" style="display: none;">
     <div class="card-header">
         <h5 class="card-title mb-0">
             <i class="fa fa-university me-2"></i>
@@ -82,7 +82,7 @@
                 <input type="text" name="bank_name" id="bank_name"
                        class="form-control @error('bank_name') is-invalid @enderror"
                        value="{{ old('bank_name') ?? ($model->bank_name ?? '') }}"
-                       placeholder="Enter Bank or Building Society Name" required>
+                       placeholder="Enter Bank or Building Society Name">
                 @error('bank_name')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -95,7 +95,7 @@
                        class="form-control @error('account_number') is-invalid @enderror"
                        value="{{ old('account_number') ?? ($model->account_number ?? '') }}"
                        placeholder="Enter 8-digit Account Number"
-                       maxlength="8" minlength="8" required>
+                       maxlength="8" minlength="8">
                 @error('account_number')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -109,7 +109,7 @@
                        class="form-control @error('sort_code') is-invalid @enderror"
                        value="{{ old('sort_code') ?? ($model->sort_code ?? '') }}"
                        placeholder="XX-XX-XX"
-                       maxlength="8" required>
+                       maxlength="8">
                 @error('sort_code')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -134,6 +134,95 @@
     </div>
 </div>
 
+<!-- Stripe Details (Only for Stripe) -->
+<div class="card mb-1" id="stripe-details-section" style="display: none;">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fab fa-stripe me-2"></i>
+            Stripe API Keys
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {{-- Stripe Public Key --}}
+            <div class="col-md-6 mb-3">
+                <label for="stripe_public_key" class="form-label fw-bold">Stripe Public Key <span class="text-danger">*</span></label>
+                <input type="text" name="stripe_public_key" id="stripe_public_key"
+                       class="form-control @error('stripe_public_key') is-invalid @enderror"
+                       value="{{ old('stripe_public_key') ?? ($model->stripe_public_key ?? '') }}"
+                       placeholder="pk_live_...">
+                @error('stripe_public_key')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <small class="form-text text-muted">Your Stripe publishable key</small>
+            </div>
+
+            {{-- Stripe Secret Key --}}
+            <div class="col-md-6 mb-3">
+                <label for="stripe_secret_key" class="form-label fw-bold">Stripe Secret Key <span class="text-danger">*</span></label>
+                <input type="password" name="stripe_secret_key" id="stripe_secret_key"
+                       class="form-control @error('stripe_secret_key') is-invalid @enderror"
+                       value="{{ old('stripe_secret_key') ?? ($model->stripe_secret_key ?? '') }}"
+                       placeholder="sk_live_...">
+                @error('stripe_secret_key')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <small class="form-text text-muted">Your Stripe secret key (keep it secure)</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PayPal Details (Only for PayPal) -->
+<div class="card mb-1" id="paypal-details-section" style="display: none;">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fab fa-paypal me-2"></i>
+            PayPal API Credentials
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {{-- PayPal Client ID --}}
+            <div class="col-md-6 mb-3">
+                <label for="paypal_client_id" class="form-label fw-bold">PayPal Client ID <span class="text-danger">*</span></label>
+                <input type="text" name="paypal_client_id" id="paypal_client_id"
+                       class="form-control @error('paypal_client_id') is-invalid @enderror"
+                       value="{{ old('paypal_client_id') ?? ($model->paypal_client_id ?? '') }}"
+                       placeholder="AXxxx...">
+                @error('paypal_client_id')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <small class="form-text text-muted">Your PayPal Client ID</small>
+            </div>
+
+            {{-- PayPal Secret --}}
+            <div class="col-md-6 mb-3">
+                <label for="paypal_secret" class="form-label fw-bold">PayPal Secret <span class="text-danger">*</span></label>
+                <input type="password" name="paypal_secret" id="paypal_secret"
+                       class="form-control @error('paypal_secret') is-invalid @enderror"
+                       value="{{ old('paypal_secret') ?? ($model->paypal_secret ?? '') }}"
+                       placeholder="EJxxx...">
+                @error('paypal_secret')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <small class="form-text text-muted">Your PayPal Secret (keep it secure)</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cash Payment Notice (Only for Cash) -->
+<div class="card mb-1" id="cash-notice-section" style="display: none;">
+    <div class="card-body">
+        <div class="alert alert-info mb-0">
+            <i class="fa fa-info-circle me-2"></i>
+            <strong>Cash Payment Method</strong><br>
+            No additional details required for cash payments. This payment method will be available for cash transactions only.
+        </div>
+    </div>
+</div>
+
 <!-- Form Actions -->
 <div class="row">
     <div class="col-12">
@@ -152,6 +241,50 @@
 @push('js')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // Toggle sections based on payment type
+            function togglePaymentSections() {
+                const paymentType = document.getElementById('payment_type').value;
+
+                // Hide all sections first
+                document.getElementById('bank-details-section').style.display = 'none';
+                document.getElementById('stripe-details-section').style.display = 'none';
+                document.getElementById('paypal-details-section').style.display = 'none';
+                document.getElementById('cash-notice-section').style.display = 'none';
+
+                // Clear required attributes from all fields
+                document.getElementById('bank_name').required = false;
+                document.getElementById('account_number').required = false;
+                document.getElementById('sort_code').required = false;
+                document.getElementById('stripe_public_key').required = false;
+                document.getElementById('stripe_secret_key').required = false;
+                document.getElementById('paypal_client_id').required = false;
+                document.getElementById('paypal_secret').required = false;
+
+                // Show relevant section and set required fields
+                if (paymentType === 'Bank Transfer') {
+                    document.getElementById('bank-details-section').style.display = 'block';
+                    document.getElementById('bank_name').required = true;
+                    document.getElementById('account_number').required = true;
+                    document.getElementById('sort_code').required = true;
+                } else if (paymentType === 'Stripe') {
+                    document.getElementById('stripe-details-section').style.display = 'block';
+                    document.getElementById('stripe_public_key').required = true;
+                    document.getElementById('stripe_secret_key').required = true;
+                } else if (paymentType === 'PayPal') {
+                    document.getElementById('paypal-details-section').style.display = 'block';
+                    document.getElementById('paypal_client_id').required = true;
+                    document.getElementById('paypal_secret').required = true;
+                } else if (paymentType === 'Cash') {
+                    document.getElementById('cash-notice-section').style.display = 'block';
+                }
+            }
+
+            // Initialize on page load
+            togglePaymentSections();
+
+            // Listen to payment type changes
+            document.getElementById('payment_type').addEventListener('change', togglePaymentSections);
+
             // Sort code formatting
             const sortCodeField = document.getElementById('sort_code');
             if (sortCodeField) {
@@ -248,100 +381,6 @@
             if (bankField) {
                 bankField.addEventListener('blur', function () {
                     this.value = this.value.replace(/\b\w/g, l => l.toUpperCase());
-                });
-            }
-
-            // Auto-capitalize account holder name
-            const holderField = document.getElementById('account_holder_name');
-            if (holderField) {
-                holderField.addEventListener('blur', function () {
-                    this.value = this.value.replace(/\b\w/g, l => l.toUpperCase());
-                });
-            }
-
-            // Payment type change handler
-            const paymentTypeField = document.getElementById('payment_type');
-            if (paymentTypeField) {
-                paymentTypeField.addEventListener('change', function () {
-                    const bankDetailsCard = document.querySelector('.card:nth-child(2)');
-                    const selectedType = this.value;
-
-                    // Show/hide bank details based on payment type
-                    if (['Cash', 'PayPal', 'Other'].includes(selectedType)) {
-                        bankDetailsCard.style.opacity = '0.5';
-                        // Make bank fields optional for these types
-                        document.getElementById('bank_name').required = false;
-                        document.getElementById('account_number').required = false;
-                        document.getElementById('sort_code').required = false;
-                    } else {
-                        bankDetailsCard.style.opacity = '1';
-                        // Make bank fields required for bank-based payments
-                        document.getElementById('bank_name').required = true;
-                        document.getElementById('account_number').required = true;
-                        document.getElementById('sort_code').required = true;
-                    }
-                });
-
-                // Trigger on page load
-                paymentTypeField.dispatchEvent(new Event('change'));
-            }
-
-            // Form validation before submit
-            const form = document.querySelector('form');
-            if (form) {
-                form.addEventListener('submit', function (e) {
-                    const paymentType = document.getElementById('payment_type').value;
-
-                    // Validate based on payment type
-                    if (!['Cash', 'PayPal', 'Other'].includes(paymentType)) {
-                        const requiredFields = ['company_id', 'payment_type', 'bank_name', 'account_number', 'sort_code'];
-                        let hasErrors = false;
-
-                        requiredFields.forEach(fieldId => {
-                            const field = document.getElementById(fieldId);
-                            if (field && !field.value.trim()) {
-                                field.classList.add('is-invalid');
-                                hasErrors = true;
-                            }
-                        });
-
-                        if (hasErrors) {
-                            e.preventDefault();
-                            alert('Please fill in all required bank details.');
-                            return false;
-                        }
-
-                        // Validate sort code format
-                        const sortCode = document.getElementById('sort_code').value;
-                        if (!/^\d{2}-\d{2}-\d{2}$/.test(sortCode)) {
-                            e.preventDefault();
-                            alert('Please enter a valid sort code format (XX-XX-XX).');
-                            document.getElementById('sort_code').focus();
-                            return false;
-                        }
-
-                        // Validate account number length
-                        const accountNumber = document.getElementById('account_number').value;
-                        if (accountNumber.length !== 8) {
-                            e.preventDefault();
-                            alert('Account number must be exactly 8 digits.');
-                            document.getElementById('account_number').focus();
-                            return false;
-                        }
-                    }
-                });
-            }
-
-            // Default payment method warning
-            const defaultCheckbox = document.getElementById('is_default');
-            if (defaultCheckbox) {
-                defaultCheckbox.addEventListener('change', function () {
-                    if (this.checked) {
-                        const confirmation = confirm('Setting this as default will remove the default status from other payment methods for this company. Continue?');
-                        if (!confirmation) {
-                            this.checked = false;
-                        }
-                    }
                 });
             }
         });

@@ -75,7 +75,7 @@
                 </div>
 
                 <div class="col-md-6">
-                    <div class="mb-1">
+                    <div class="mb-2">
                         <label for="phone_number" class="form-label">Phone Number *</label>
                         <input type="text" name="phone_number" id="phone_number"
                                class="form-control @error('phone_number') is-invalid @enderror"
@@ -84,6 +84,21 @@
                         @error('phone_number')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
+                    </div>
+                </div>
+
+                {{-- NEW FIELD: NI Number --}}
+                <div class="col-md-6">
+                    <div class="mb-1">
+                        <label for="ni_number" class="form-label">NI Number</label>
+                        <input type="text" name="ni_number" id="ni_number"
+                               class="form-control @error('ni_number') is-invalid @enderror"
+                               value="{{ old('ni_number') ?? ($model->ni_number ?? '') }}"
+                               placeholder="e.g. AB123456C" maxlength="9">
+                        @error('ni_number')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <small class="form-text text-muted">National Insurance Number (Optional)</small>
                     </div>
                 </div>
             </div>
@@ -352,6 +367,52 @@
                     </div>
                 </div>
 
+                {{-- NEW FIELD: PHD Card Document --}}
+                <div class="col-md-4">
+                    <div class="mb-2">
+                        <label for="phd_card_document" class="form-label">PHD Card Document</label>
+                        <input type="file" name="phd_card_document" id="phd_card_document"
+                               class="form-control @error('phd_card_document') is-invalid @enderror"
+                               accept=".pdf,.jpg,.jpeg,.png">
+                        @if(isset($model) && $model->phd_card_document)
+                            <div class="mt-2">
+                                <span class="text-muted d-block mb-1">Current Document:</span>
+                                <a href="{{ asset('uploads/driver_licenses/' . $model->phd_card_document) }}"
+                                   target="_blank" class="btn btn-sm btn-outline-info">
+                                    <i class="fa fa-eye"></i> View Document
+                                </a>
+                            </div>
+                        @endif
+                        @error('phd_card_document')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
+                    </div>
+                </div>
+
+                {{-- NEW FIELD: DVLA License Summary --}}
+                <div class="col-md-4">
+                    <div class="mb-2">
+                        <label for="dvla_license_summary" class="form-label">DVLA License Summary</label>
+                        <input type="file" name="dvla_license_summary" id="dvla_license_summary"
+                               class="form-control @error('dvla_license_summary') is-invalid @enderror"
+                               accept=".pdf,.jpg,.jpeg,.png">
+                        @if(isset($model) && $model->dvla_license_summary)
+                            <div class="mt-2">
+                                <span class="text-muted d-block mb-1">Current Document:</span>
+                                <a href="{{ asset('uploads/driver_licenses/' . $model->dvla_license_summary) }}"
+                                   target="_blank" class="btn btn-sm btn-outline-info">
+                                    <i class="fa fa-eye"></i> View Document
+                                </a>
+                            </div>
+                        @endif
+                        @error('dvla_license_summary')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
+                    </div>
+                </div>
+
                 <div class="col-md-4">
                     <div class="mb-2">
                         <label for="proof_of_address_document" class="form-label">Proof of Address</label>
@@ -368,6 +429,29 @@
                             </div>
                         @endif
                         @error('proof_of_address_document')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
+                    </div>
+                </div>
+
+                {{-- NEW FIELD: Misc Document --}}
+                <div class="col-md-4">
+                    <div class="mb-2">
+                        <label for="misc_document" class="form-label">Miscellaneous Document</label>
+                        <input type="file" name="misc_document" id="misc_document"
+                               class="form-control @error('misc_document') is-invalid @enderror"
+                               accept=".pdf,.jpg,.jpeg,.png">
+                        @if(isset($model) && $model->misc_document)
+                            <div class="mt-2">
+                                <span class="text-muted d-block mb-1">Current Document:</span>
+                                <a href="{{ asset('uploads/driver_licenses/' . $model->misc_document) }}"
+                                   target="_blank" class="btn btn-sm btn-outline-info">
+                                    <i class="fa fa-eye"></i> View Document
+                                </a>
+                            </div>
+                        @endif
+                        @error('misc_document')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                         <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
@@ -396,6 +480,17 @@
 @push('js')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // NI Number formatting (UK format: AB123456C)
+            const niField = document.getElementById('ni_number');
+            if (niField) {
+                niField.addEventListener('input', function () {
+                    this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    if (this.value.length > 9) {
+                        this.value = this.value.substring(0, 9);
+                    }
+                });
+            }
+
             // Format postcode automatically
             const postcodeField = document.getElementById('post_code');
             if (postcodeField) {
@@ -481,7 +576,7 @@
                 dobField.addEventListener('change', function () {
                     const dob = new Date(this.value);
                     const today = new Date();
-                    const age = today.getFullYear() - dob.getFullYear();
+                    let age = today.getFullYear() - dob.getFullYear();
                     const monthDiff = today.getMonth() - dob.getMonth();
 
                     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
@@ -499,7 +594,15 @@
             }
 
             // File upload validation
-            const fileFields = ['driver_license_document', 'driver_phd_license_document', 'proof_of_address_document'];
+            const fileFields = [
+                'driver_license_document',
+                'driver_phd_license_document',
+                'phd_card_document',
+                'dvla_license_summary',
+                'misc_document',
+                'proof_of_address_document'
+            ];
+
             fileFields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
                 if (field) {

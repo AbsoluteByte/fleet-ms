@@ -12,8 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('insurance_providers', function (Blueprint $table) {
-            $table->foreignId('company_id')->after('id')->constrained()->onDelete('cascade');
+            if (!Schema::hasColumn('insurance_providers', 'company_id')) {
+                $table->foreignId('company_id')->after('id')->constrained()->onDelete('cascade');
+            } else {
+                $table->foreign('company_id')->references('id')->on('companies')->onDelete('cascade');
+            }
         });
+
     }
 
     /**
