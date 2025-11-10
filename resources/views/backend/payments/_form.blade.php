@@ -45,16 +45,9 @@
                     @php
                         $paymentTypes = [
                             'Bank Transfer' => 'Bank Transfer',
-                            'Direct Debit' => 'Direct Debit',
-                            'Standing Order' => 'Standing Order',
-                            'BACS Payment' => 'BACS Payment',
-                            'CHAPS Payment' => 'CHAPS Payment',
-                            'Faster Payment' => 'Faster Payment',
-                            'Cheque' => 'Cheque',
                             'Cash' => 'Cash',
-                            'Card Payment' => 'Card Payment',
                             'PayPal' => 'PayPal',
-                            'Other' => 'Other'
+                            'Stripe' => 'Stripe',
                         ];
                         $selectedType = old('payment_type') ?? ($model->payment_type ?? '');
                     @endphp

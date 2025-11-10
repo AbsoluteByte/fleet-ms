@@ -8,7 +8,7 @@
                         <h4 class="card-title">{{ $plural }}</h4>
                         <a class="btn btn-primary float-right" href="{{ route($url . 'create') }}"><i
                                 class="fa fa-plus"></i>
-                            Create New {{ $singular }}</a>
+                            Add {{ $singular }}</a>
                     </div>
                     <div class="card-content">
                         <div class="card-body card-dashboard">

@@ -8,7 +8,7 @@
                         <h4 class="card-title">{{ $plural }}</h4>
                         <a class="btn btn-primary float-right" href="{{ route($url . 'create') }}"><i
                                 class="fa fa-plus"></i>
-                            Create New {{ $singular }}</a>
+                            Add {{ $singular }}</a>
                     </div>
                     <hr>
                     <div class="card-content">
@@ -29,11 +29,12 @@
                                     <tbody>
                                     @forelse($drivers as $driver)
                                         <tr>
-                                            <td>
+                                            <td style="width: 500px !important;">
                                                 <strong>{{ $driver->full_name }}</strong>
                                                 <br>
-                                                <small
-                                                    class="text-muted">DOB: {{ $driver->dob->format('M d, Y') }}</small>
+                                                <span>Post Code: {{ $driver->post_code }}</span>
+                                                <br>
+                                                <small class="text-muted">DOB: {{ $driver->dob->format('M d, Y') }}</small>
                                             </td>
                                             <td>{{ $driver->email }}</td>
                                             <td>{{ $driver->phone_number }}</td>
@@ -141,7 +142,8 @@
                 </div>
                 <div class="modal-body">
                     <p>Are you sure you want to send an invitation to <strong id="driverName"></strong>?</p>
-                    <p class="text-muted">The driver will receive an email with instructions to set up their account and access the driver portal.</p>
+                    <p class="text-muted">The driver will receive an email with instructions to set up their account and
+                        access the driver portal.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>

@@ -8,7 +8,7 @@
                         <h4 class="card-title">{{ $plural }}</h4>
                         <a class="btn btn-primary float-right" href="{{ route($url . 'create') }}"><i
                                 class="fa fa-plus"></i>
-                            Create New {{ $singular }}</a>
+                            Add {{ $singular }}</a>
                     </div>
                     <hr>
                     <div class="card-content">
@@ -50,7 +50,7 @@
                                             <td colspan="8" class="text-center text-muted py-4">
                                                 <i class="fa fa-handshake fa-3x mb-3"></i>
                                                 <br>
-                                                No agreements found. <a href="{{ route('counsels.create') }}">Create your first agreement</a>
+                                                No Councils  found. <a href="{{ route('counsels.create') }}">Create your first agreement</a>
                                             </td>
                                         </tr>
                                     @endforelse

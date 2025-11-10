@@ -5,7 +5,7 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h4 class="card-title">{{ $singular }}</h4>
+                        <h4 class="card-title">Edit {{ $singular }}</h4>
                         <a class="btn btn-primary float-right" href="{{ route($url . 'index') }}"><i
                                 class="fa fa-arrow-circle-left"></i> Back</a>
                     </div>

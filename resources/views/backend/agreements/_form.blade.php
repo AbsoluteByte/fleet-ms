@@ -190,7 +190,9 @@
                         <select name="insurance_provider_id" id="insurance_provider_id" class="form-control @error('insurance_provider_id') is-invalid @enderror">
                             <option value="">Select Insurance Provider</option>
                             @foreach($insuranceProviders as $provider)
-                                <option value="{{ $provider->id }}" {{ (old('insurance_provider_id') ?? (isset($model) ? $model->insurance_provider_id : '')) == $provider->id ? 'selected' : '' }}>
+                                <option value="{{ $provider->id }}"
+                                        data-company-id="{{ $provider->company_id }}"
+                                    {{ (old('insurance_provider_id') ?? (isset($model) ? $model->insurance_provider_id : '')) == $provider->id ? 'selected' : '' }}>
                                     {{ $provider->provider_name }}
                                 </option>
                             @endforeach
@@ -564,6 +566,45 @@
     <script>
         let collectionIndex = {{ count($collections ?? []) }};
 
+        // Store all insurance providers with their company IDs
+        const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
+            return [
+                'id' => $provider->id,
+                'company_id' => $provider->company_id,
+                'provider_name' => $provider->provider_name
+            ];
+        }));
+
+        // Filter insurance providers based on selected company
+        function filterInsuranceProviders() {
+            const companyId = document.getElementById('company_id').value;
+            const insuranceProviderSelect = document.getElementById('insurance_provider_id');
+            const selectedProviderId = insuranceProviderSelect.value; // Store current selection
+
+            // Clear existing options except the first one
+            insuranceProviderSelect.innerHTML = '<option value="">Select Insurance Provider</option>';
+
+            if (companyId) {
+                // Filter providers by company_id
+                const filteredProviders = allInsuranceProviders.filter(provider => provider.company_id == companyId);
+
+                // Add filtered options
+                filteredProviders.forEach(provider => {
+                    const option = document.createElement('option');
+                    option.value = provider.id;
+                    option.textContent = provider.provider_name;
+                    option.setAttribute('data-company-id', provider.company_id);
+
+                    // Restore selection if it matches
+                    if (provider.id == selectedProviderId) {
+                        option.selected = true;
+                    }
+
+                    insuranceProviderSelect.appendChild(option);
+                });
+            }
+        }
+
         // Toggle between auto and manual collection modes
         function toggleCollectionMode() {
             const autoScheduleCheckbox = document.getElementById('auto_schedule_collections');
@@ -611,9 +652,16 @@
             toggleCollectionMode();
             toggleInsuranceSections();
 
+            // Initial filter on page load
+            filterInsuranceProviders();
+
+            // Event listeners
             document.getElementById('auto_schedule_collections').addEventListener('change', toggleCollectionMode);
             document.getElementById('using_own_insurance_yes').addEventListener('change', toggleInsuranceSections);
             document.getElementById('using_own_insurance_no').addEventListener('change', toggleInsuranceSections);
+
+            // Filter insurance providers when company changes
+            document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
         });
 
         function addCollection() {
