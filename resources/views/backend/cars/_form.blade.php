@@ -199,7 +199,7 @@
                         if(old('mots')) {
                             $mots = old('mots');
                         } elseif(isset($model) && $model->id && $model->mots->count() > 0) {
-                            $mots = $model->mots->toArray();
+                            $mots = $model->mots;
                         } else {
                             $mots = [[]]; // Empty array for new record
                         }
@@ -303,7 +303,7 @@
                         if(old('road_taxes')) {
                             $roadTaxes = old('road_taxes');
                         } elseif(isset($model) && $model->id && $model->roadTaxes->count() > 0) {
-                            $roadTaxes = $model->roadTaxes->toArray();
+                            $roadTaxes = $model->roadTaxes;
                         } else {
                             $roadTaxes = [[]]; // Empty array for new record
                         }
@@ -398,7 +398,7 @@
                         if(old('phvs')) {
                             $phvs = old('phvs');
                         } elseif(isset($model) && $model->id && $model->phvs->count() > 0) {
-                            $phvs = $model->phvs->toArray();
+                            $phvs = $model->phvs;
                         } else {
                             $phvs = [[]]; // Empty array for new record
                         }
@@ -534,6 +534,7 @@
                                 <option value="">Select Provider</option>
                                 @foreach($insuranceProviders as $provider)
                                     <option value="{{ $provider->id }}"
+                                            data-company-id="{{ $provider->company_id }}"
                                         {{ (old('insurance_provider_id') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->insurance_provider_id : '')) == $provider->id ? 'selected' : '' }}>
                                         {{ $provider->provider_name }}
                                     </option>
@@ -637,9 +638,57 @@
 
 @push('js')
     <script>
-        let motIndex = {{ isset($mots) ? count($mots) : 1 }};
-        let roadTaxIndex = {{ isset($roadTaxes) ? count($roadTaxes) : 1 }};
-        let phvIndex = {{ isset($phvs) ? count($phvs) : 1 }};
+        let motIndex = {{ isset($mots) && is_countable($mots) ? count($mots) : 1 }};
+        let roadTaxIndex = {{ isset($roadTaxes) && is_countable($roadTaxes) ? count($roadTaxes) : 1 }};
+        let phvIndex = {{ isset($phvs) && is_countable($phvs) ? count($phvs) : 1 }};
+
+        // Store all insurance providers with their company IDs
+        const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
+            return [
+                'id' => $provider->id,
+                'company_id' => $provider->company_id,
+                'provider_name' => $provider->provider_name
+            ];
+        }));
+
+        // Filter insurance providers based on selected company
+        function filterInsuranceProviders() {
+            const companyId = document.getElementById('company_id').value;
+            const insuranceProviderSelect = document.getElementById('insurance_provider_id');
+            const selectedProviderId = insuranceProviderSelect.value; // Store current selection
+
+            // Clear existing options except the first one
+            insuranceProviderSelect.innerHTML = '<option value="">Select Provider</option>';
+
+            if (companyId) {
+                // Filter providers by company_id
+                const filteredProviders = allInsuranceProviders.filter(provider => provider.company_id == companyId);
+
+                // Add filtered options
+                filteredProviders.forEach(provider => {
+                    const option = document.createElement('option');
+                    option.value = provider.id;
+                    option.textContent = provider.provider_name;
+                    option.setAttribute('data-company-id', provider.company_id);
+
+                    // Restore selection if it matches
+                    if (provider.id == selectedProviderId) {
+                        option.selected = true;
+                    }
+
+                    insuranceProviderSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initial filter on page load
+            filterInsuranceProviders();
+
+            // Filter insurance providers when company changes
+            document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
+        });
 
         function addMOT() {
             const container = document.getElementById('mots-container');
