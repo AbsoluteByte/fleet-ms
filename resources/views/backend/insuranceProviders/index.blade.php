@@ -34,7 +34,7 @@
                                             <td>{{ $insuranceProvider->insurance_type }}</td>
                                             <td>{{ $insuranceProvider->amount }}</td>
                                             <td>{{ $insuranceProvider->policy_number }}</td>
-                                            <td>{{ $insuranceProvider->expiry_date }}</td>
+                                            <td>{{ $insuranceProvider->expiry_date->format('Y-m-d') }}</td>
                                             <td>{{ $insuranceProvider->status->name }}</td>
                                             <td>
                                                 <div class="btn-group" role="group">

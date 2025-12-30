@@ -201,12 +201,16 @@
                         } elseif(isset($model) && $model->id && $model->mots->count() > 0) {
                             $mots = $model->mots;
                         } else {
-                            $mots = [[]]; // Empty array for new record
+                            $mots = [[]];
                         }
                     @endphp
 
                     @foreach($mots as $index => $mot)
                         <div class="mot-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
+                            @if(isset($mot->id))
+                                <input type="hidden" name="mots[{{ $index }}][id]" value="{{ $mot->id }}">
+                            @endif
+
                             <div class="col-md-3">
                                 <div class="form-group">
                                     <label>Expiry Date <span class="text-danger">*</span></label>
@@ -305,7 +309,7 @@
                         } elseif(isset($model) && $model->id && $model->roadTaxes->count() > 0) {
                             $roadTaxes = $model->roadTaxes;
                         } else {
-                            $roadTaxes = [[]]; // Empty array for new record
+                            $roadTaxes = [[]];
                         }
                     @endphp
 
@@ -400,12 +404,16 @@
                         } elseif(isset($model) && $model->id && $model->phvs->count() > 0) {
                             $phvs = $model->phvs;
                         } else {
-                            $phvs = [[]]; // Empty array for new record
+                            $phvs = [[]];
                         }
                     @endphp
 
                     @foreach($phvs as $index => $phv)
                         <div class="phv-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
+                            @if(isset($phv->id))
+                                <input type="hidden" name="phvs[{{ $index }}][id]" value="{{ $phv->id }}">
+                            @endif
+
                             <div class="col-md-2">
                                 <div class="form-group">
                                     <label>Counsel <span class="text-danger">*</span></label>
@@ -520,17 +528,30 @@
     </div>
 </div>
 
-{{-- Insurance Information Section --}}
+{{-- Insurance Information Section - OPTIONAL --}}
 <div class="row mt-1">
     <div class="col-12">
-        <h5 class="mb-1"><i class="fa fa-shield-alt"></i> Insurance Information</h5>
         <div class="card">
-            <div class="card-body">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fa fa-shield-alt"></i> Insurance Information
+                    </h5>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="has_insurance" name="has_insurance"
+                            {{ (old('has_insurance') ?? (isset($model) && $model->id && $model->insurances->count() > 0)) ? 'checked' : '' }}>
+                        <label class="form-check-label" for="has_insurance">
+                            <strong>Add Insurance</strong>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body" id="insurance-section" style="display: none;">
                 <div class="row">
                     <div class="col-md-6">
                         <div class="form-group">
-                            <label for="insurance_provider_id">Insurance Provider <span class="text-danger">*</span></label>
-                            <select name="insurance_provider_id" id="insurance_provider_id" class="form-control @error('insurance_provider_id') is-invalid @enderror" required>
+                            <label for="insurance_provider_id">Insurance Provider</label>
+                            <select name="insurance_provider_id" id="insurance_provider_id" class="form-control @error('insurance_provider_id') is-invalid @enderror">
                                 <option value="">Select Provider</option>
                                 @foreach($insuranceProviders as $provider)
                                     <option value="{{ $provider->id }}"
@@ -548,8 +569,8 @@
 
                     <div class="col-md-6">
                         <div class="form-group">
-                            <label for="insurance_status_id">Status <span class="text-danger">*</span></label>
-                            <select name="insurance_status_id" id="insurance_status_id" class="form-control @error('insurance_status_id') is-invalid @enderror" required>
+                            <label for="insurance_status_id">Status</label>
+                            <select name="insurance_status_id" id="insurance_status_id" class="form-control @error('insurance_status_id') is-invalid @enderror">
                                 <option value="">Select Status</option>
                                 @foreach($statuses as $status)
                                     <option value="{{ $status->id }}"
@@ -566,10 +587,10 @@
 
                     <div class="col-md-6">
                         <div class="form-group">
-                            <label for="insurance_start_date">Start Date <span class="text-danger">*</span></label>
+                            <label for="insurance_start_date">Start Date</label>
                             <input type="date" name="insurance_start_date" id="insurance_start_date"
                                    class="form-control @error('insurance_start_date') is-invalid @enderror"
-                                   value="{{ old('insurance_start_date') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->start_date->format('Y-m-d') : '') }}" required>
+                                   value="{{ old('insurance_start_date') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->start_date->format('Y-m-d') : '') }}">
                             @error('insurance_start_date')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -578,10 +599,10 @@
 
                     <div class="col-md-6">
                         <div class="form-group">
-                            <label for="insurance_expiry_date">Expiry Date <span class="text-danger">*</span></label>
+                            <label for="insurance_expiry_date">Expiry Date</label>
                             <input type="date" name="insurance_expiry_date" id="insurance_expiry_date"
                                    class="form-control @error('insurance_expiry_date') is-invalid @enderror"
-                                   value="{{ old('insurance_expiry_date') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->expiry_date->format('Y-m-d') : '') }}" required>
+                                   value="{{ old('insurance_expiry_date') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->expiry_date->format('Y-m-d') : '') }}">
                             @error('insurance_expiry_date')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -590,11 +611,11 @@
 
                     <div class="col-md-6">
                         <div class="form-group">
-                            <label for="insurance_notify_before_expiry">Notify Before Expiry (days) <span class="text-danger">*</span></label>
+                            <label for="insurance_notify_before_expiry">Notify Before Expiry (days)</label>
                             <input type="number" name="insurance_notify_before_expiry" id="insurance_notify_before_expiry"
                                    class="form-control @error('insurance_notify_before_expiry') is-invalid @enderror"
                                    value="{{ old('insurance_notify_before_expiry') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->notify_before_expiry : '30') }}"
-                                   min="1" required>
+                                   min="1">
                             @error('insurance_notify_before_expiry')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -642,7 +663,6 @@
         let roadTaxIndex = {{ isset($roadTaxes) && is_countable($roadTaxes) ? count($roadTaxes) : 1 }};
         let phvIndex = {{ isset($phvs) && is_countable($phvs) ? count($phvs) : 1 }};
 
-        // Store all insurance providers with their company IDs
         const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
             return [
                 'id' => $provider->id,
@@ -651,27 +671,22 @@
             ];
         }));
 
-        // Filter insurance providers based on selected company
         function filterInsuranceProviders() {
             const companyId = document.getElementById('company_id').value;
             const insuranceProviderSelect = document.getElementById('insurance_provider_id');
-            const selectedProviderId = insuranceProviderSelect.value; // Store current selection
+            const selectedProviderId = insuranceProviderSelect.value;
 
-            // Clear existing options except the first one
             insuranceProviderSelect.innerHTML = '<option value="">Select Provider</option>';
 
             if (companyId) {
-                // Filter providers by company_id
                 const filteredProviders = allInsuranceProviders.filter(provider => provider.company_id == companyId);
 
-                // Add filtered options
                 filteredProviders.forEach(provider => {
                     const option = document.createElement('option');
                     option.value = provider.id;
                     option.textContent = provider.provider_name;
                     option.setAttribute('data-company-id', provider.company_id);
 
-                    // Restore selection if it matches
                     if (provider.id == selectedProviderId) {
                         option.selected = true;
                     }
@@ -681,13 +696,34 @@
             }
         }
 
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initial filter on page load
-            filterInsuranceProviders();
+        // ✅ Insurance Section Toggle
+        function toggleInsuranceSection() {
+            const hasInsuranceCheckbox = document.getElementById('has_insurance');
+            const insuranceSection = document.getElementById('insurance-section');
 
-            // Filter insurance providers when company changes
+            if (hasInsuranceCheckbox.checked) {
+                insuranceSection.style.display = 'block';
+                document.getElementById('insurance_provider_id').setAttribute('required', 'required');
+                document.getElementById('insurance_start_date').setAttribute('required', 'required');
+                document.getElementById('insurance_expiry_date').setAttribute('required', 'required');
+                document.getElementById('insurance_notify_before_expiry').setAttribute('required', 'required');
+                document.getElementById('insurance_status_id').setAttribute('required', 'required');
+            } else {
+                insuranceSection.style.display = 'none';
+                document.getElementById('insurance_provider_id').removeAttribute('required');
+                document.getElementById('insurance_start_date').removeAttribute('required');
+                document.getElementById('insurance_expiry_date').removeAttribute('required');
+                document.getElementById('insurance_notify_before_expiry').removeAttribute('required');
+                document.getElementById('insurance_status_id').removeAttribute('required');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            filterInsuranceProviders();
+            toggleInsuranceSection();
+
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
+            document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
         });
 
         function addMOT() {
@@ -870,18 +906,7 @@
             button.closest('.phv-item').remove();
         }
 
-        // Validation for dates
-        document.getElementById('insurance_expiry_date').addEventListener('change', function() {
-            const startDate = document.getElementById('insurance_start_date').value;
-            const endDate = this.value;
-
-            if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
-                alert('Insurance expiry date must be after start date');
-                this.value = '';
-            }
-        });
-
-        // VIN validation (17 characters)
+        // VIN validation
         document.getElementById('vin').addEventListener('input', function() {
             this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
             if (this.value.length > 17) {

@@ -20,10 +20,6 @@
                                     <tr>
                                         <th>Company</th>
                                         <th>Payment Type</th>
-                                        <th>Bank Name</th>
-                                        <th>Account Number</th>
-                                        <th>Sort Code</th>
-                                        <th>IBAN Number </th>
                                         <th>Actions</th>
                                     </tr>
                                     </thead>
@@ -32,10 +28,6 @@
                                         <tr>
                                             <td>{{ $payment->company->name }}</td>
                                             <td>{{ $payment->payment_type }}</td>
-                                            <td>{{ $payment->bank_name }}</td>
-                                            <td>{{ $payment->account_number }}</td>
-                                            <td>{{ $payment->sort_code }}</td>
-                                            <td>{{ $payment->iban_number }}</td>
                                             <td>
                                                 <div class="btn-group" role="group">
                                                     <a href="{{ route('payments.show', $payment) }}" class="btn btn-sm btn-outline-info">

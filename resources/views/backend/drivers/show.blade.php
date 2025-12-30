@@ -237,7 +237,37 @@
                                     </p>
                                 </div>
                             @endif
-                            @if(!$driver->driver_license_document && !$driver->driver_phd_license_document && !$driver->proof_of_address_document)
+                            @if($driver->dvla_license_summary)
+                                <div class="col-md-4 mb-3">
+                                    <strong>DVLA License Summary:</strong>
+                                    <p class="mb-0">
+                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->dvla_license_summary) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                            <i class="fa fa-file-pdf"></i> View Document
+                                        </a>
+                                    </p>
+                                </div>
+                            @endif
+                            @if($driver->misc_document)
+                                <div class="col-md-4 mb-3">
+                                    <strong>MISC Document:</strong>
+                                    <p class="mb-0">
+                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->misc_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                            <i class="fa fa-file-pdf"></i> View Document
+                                        </a>
+                                    </p>
+                                </div>
+                            @endif
+                            @if($driver->phd_card_document)
+                                <div class="col-md-4 mb-3">
+                                    <strong>PHD Card Document:</strong>
+                                    <p class="mb-0">
+                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->phd_card_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                            <i class="fa fa-file-pdf"></i> View Document
+                                        </a>
+                                    </p>
+                                </div>
+                            @endif
+                            @if(!$driver->driver_license_document && !$driver->driver_phd_license_document && !$driver->proof_of_address_document && !$driver->$driver->dvla_license_summary && !$driver->misc_document && !$driver->phd_card_document)
                                 <div class="col-12">
                                     <p class="text-muted">No documents uploaded</p>
                                 </div>

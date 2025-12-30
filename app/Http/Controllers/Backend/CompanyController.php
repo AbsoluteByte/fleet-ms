@@ -71,7 +71,8 @@ class CompanyController extends Controller
 
     public function show(Company $company)
     {
-        return view('companies.show', compact('company'));
+        $company->load('country');
+        return view($this->dir.'show', compact('company'));
     }
 
     public function edit($id)
@@ -118,7 +119,7 @@ class CompanyController extends Controller
 
         $company->update($validated);
 
-        return redirect()->route('companies.index')
+        return redirect()->route($this->url.'index')
             ->with('success', 'Company updated successfully.');
     }
 
@@ -131,7 +132,7 @@ class CompanyController extends Controller
             }
         }
         $company->delete();
-        return redirect()->route('companies.index')
+        return redirect()->route($this->url.'index')
             ->with('success', 'Company deleted successfully.');
     }
 }

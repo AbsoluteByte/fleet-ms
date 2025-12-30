@@ -33,8 +33,7 @@ class AgreementController extends Controller
     {
         $agreements = Agreement::with(['company', 'driver', 'car', 'status'])
             ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
-            ->latest()
-            ->paginate(10);
+            ->get();
 
         return view($this->dir . 'index', compact('agreements'));
     }

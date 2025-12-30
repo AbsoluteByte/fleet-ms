@@ -24,6 +24,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'parent_id',
         'profile_pic',
     ];
 
@@ -48,5 +49,22 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function isSuperUser()
+    {
+        return $this->hasRole('superuser');
+    }
+    public function isAdmin()
+    {
+        return $this->hasRole('admin');
+    }
+    public function isDriver()
+    {
+        return $this->hasRole('driver');
+    }
+    public function isUser()
+    {
+        return $this->hasRole('user');
     }
 }

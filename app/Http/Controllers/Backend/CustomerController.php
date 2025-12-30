@@ -33,7 +33,8 @@ class CustomerController extends Controller
      */
     public function index()
     {
-        return view($this->dir . 'index');
+        $users = User::where('parent_id', null)->role(['admin'])->get();
+        return view($this->dir . 'index', compact('users'));
     }
 
     /**
@@ -125,28 +126,5 @@ class CustomerController extends Controller
 
         return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' deleted Successfully!');
     }
-
-    public function restore(Request $request, $id)
-    {
-        $model = User::onlyTrashed()->where('id', $id)->firstOrFail();
-        $model->restore();
-
-        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' restored Successfully!');
-    }
-
-    public function data()
-    {
-        $models = User::role('customer');
-        return DataTables::eloquent($models)
-            ->editColumn('created_at', function (User $model) {
-                return $model->created_at->format('d M Y h:ia');
-            })
-            ->addColumn('action', function (User $model) {
-                return view($this->dir . 'actionCol', compact('model'));
-            })
-            ->rawColumns(['action'])
-            ->toJson();
-    }
-
 
 }

@@ -32,7 +32,8 @@ class PermissionController extends Controller
      */
     public function index()
     {
-        return view($this->dir . 'index');
+        $models = Permission::get();
+        return view($this->dir . 'index', compact('models'));
     }
 
     /**
@@ -126,17 +127,5 @@ class PermissionController extends Controller
 
         return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' deleted Successfully!');
     }
-    public function data()
-    {
-        $models = Permission::query();
-        return DataTables::eloquent($models)
-            ->editColumn('created_at', function (Permission $model) {
-                return $model->created_at->format('d M Y h:ia');
-            })
-            ->addColumn('action', function (Permission $model) {
-                return view($this->dir . 'actionCol', compact('model'));
-            })
-            ->rawColumns(['action'])
-            ->toJson();
-    }
+
 }

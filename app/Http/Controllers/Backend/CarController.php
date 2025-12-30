@@ -13,7 +13,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Storage;
 
 class CarController extends Controller
 {
@@ -32,7 +31,7 @@ class CarController extends Controller
 
     public function index()
     {
-        $cars = Car::with(['company', 'carModel'])->latest()->paginate(10);
+        $cars = Car::with(['company', 'carModel'])->get();
         return view($this->dir . 'index', compact('cars'));
     }
 
@@ -50,7 +49,8 @@ class CarController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        // Build validation rules dynamically
+        $rules = [
             'company_id' => 'required|exists:companies,id',
             'car_model_id' => 'required|exists:car_models,id',
             'registration' => 'required|string|unique:cars',
@@ -81,15 +81,21 @@ class CarController extends Controller
             'phvs.*.expiry_date' => 'required|date',
             'phvs.*.notify_before_expiry' => 'required|integer|min:1',
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ];
 
-            // Insurance
-            'insurance_provider_id' => 'required|exists:insurance_providers,id',
-            'insurance_start_date' => 'required|date',
-            'insurance_expiry_date' => 'required|date',
-            'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'insurance_notify_before_expiry' => 'required|integer|min:1',
-            'insurance_status_id' => 'required|exists:statuses,id',
-        ]);
+        // ✅ Add insurance validation only if checkbox is checked
+        if ($request->has('has_insurance')) {
+            $rules = array_merge($rules, [
+                'insurance_provider_id' => 'required|exists:insurance_providers,id',
+                'insurance_start_date' => 'required|date',
+                'insurance_expiry_date' => 'required|date',
+                'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+                'insurance_notify_before_expiry' => 'required|integer|min:1',
+                'insurance_status_id' => 'required|exists:statuses,id',
+            ]);
+        }
+
+        $validated = $request->validate($rules);
 
         try {
             $car = DB::transaction(function () use ($validated, $request) {
@@ -104,7 +110,6 @@ class CarController extends Controller
                 // Store MOTs
                 if ($request->has('mots')) {
                     foreach ($request->input('mots') as $index => $motData) {
-                        // Handle MOT document upload
                         if ($request->hasFile("mots.{$index}.document")) {
                             $motData['document'] = $this->uploadFile(
                                 $request->file("mots.{$index}.document"),
@@ -125,7 +130,6 @@ class CarController extends Controller
                 // Store PHVs
                 if ($request->has('phvs')) {
                     foreach ($request->input('phvs') as $index => $phvData) {
-                        // Handle PHV document upload
                         if ($request->hasFile("phvs.{$index}.document")) {
                             $phvData['document'] = $this->uploadFile(
                                 $request->file("phvs.{$index}.document"),
@@ -136,24 +140,26 @@ class CarController extends Controller
                     }
                 }
 
-                // Store Insurance
-                $insuranceData = [
-                    'car_id' => $car->id,
-                    'insurance_provider_id' => $validated['insurance_provider_id'],
-                    'start_date' => $validated['insurance_start_date'],
-                    'expiry_date' => $validated['insurance_expiry_date'],
-                    'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
-                    'status_id' => $validated['insurance_status_id'],
-                ];
+                // ✅ Store Insurance ONLY if checkbox is checked
+                if ($request->has('has_insurance')) {
+                    $insuranceData = [
+                        'car_id' => $car->id,
+                        'insurance_provider_id' => $validated['insurance_provider_id'],
+                        'start_date' => $validated['insurance_start_date'],
+                        'expiry_date' => $validated['insurance_expiry_date'],
+                        'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
+                        'status_id' => $validated['insurance_status_id'],
+                    ];
 
-                if ($request->hasFile('insurance_document')) {
-                    $insuranceData['insurance_document'] = $this->uploadFile(
-                        $request->file('insurance_document'),
-                        'uploads/cars/insurance_documents'
-                    );
+                    if ($request->hasFile('insurance_document')) {
+                        $insuranceData['insurance_document'] = $this->uploadFile(
+                            $request->file('insurance_document'),
+                            'uploads/cars/insurance_documents'
+                        );
+                    }
+
+                    $car->insurances()->create($insuranceData);
                 }
-
-                $car->insurances()->create($insuranceData);
 
                 return $car;
             });
@@ -170,7 +176,7 @@ class CarController extends Controller
 
     public function show(Car $car)
     {
-        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider.status']);
+        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status']);
         return view($this->dir . 'show', compact('car'));
     }
 
@@ -190,7 +196,8 @@ class CarController extends Controller
     {
         $car = Car::findOrFail($id);
 
-        $validated = $request->validate([
+        // Build validation rules dynamically
+        $rules = [
             'company_id' => 'required|exists:companies,id',
             'car_model_id' => 'required|exists:car_models,id',
             'registration' => 'required|string|unique:cars,registration,' . $car->id,
@@ -204,6 +211,7 @@ class CarController extends Controller
             'purchase_type' => 'required|in:imported,uk',
 
             // MOTs
+            'mots.*.id' => 'nullable|exists:car_mots,id',
             'mots.*.expiry_date' => 'required|date',
             'mots.*.amount' => 'required|numeric|min:0',
             'mots.*.term' => 'required|string',
@@ -215,61 +223,91 @@ class CarController extends Controller
             'road_taxes.*.amount' => 'required|numeric|min:0',
 
             // PHVs
+            'phvs.*.id' => 'nullable|exists:car_phvs,id',
             'phvs.*.counsel_id' => 'required|exists:counsels,id',
             'phvs.*.amount' => 'required|numeric|min:0',
             'phvs.*.start_date' => 'required|date',
             'phvs.*.expiry_date' => 'required|date',
             'phvs.*.notify_before_expiry' => 'required|integer|min:1',
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ];
 
-            // Insurance
-            'insurance_provider_id' => 'required|exists:insurance_providers,id',
-            'insurance_start_date' => 'required|date',
-            'insurance_expiry_date' => 'required|date',
-            'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'insurance_notify_before_expiry' => 'required|integer|min:1',
-            'insurance_status_id' => 'required|exists:statuses,id',
-        ]);
+        // ✅ Add insurance validation only if checkbox is checked
+        if ($request->has('has_insurance')) {
+            $rules = array_merge($rules, [
+                'insurance_provider_id' => 'required|exists:insurance_providers,id',
+                'insurance_start_date' => 'required|date',
+                'insurance_expiry_date' => 'required|date',
+                'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+                'insurance_notify_before_expiry' => 'required|integer|min:1',
+                'insurance_status_id' => 'required|exists:statuses,id',
+            ]);
+        }
+
+        $validated = $request->validate($rules);
 
         try {
             $updatedCar = DB::transaction(function () use ($validated, $request, $car) {
-                // Handle V5 document upload
-                if ($request->hasFile('v5_document')) {
-                    $oldDocument = $car->v5_document;
-                    $validated['v5_document'] = $this->uploadFile($request->file('v5_document'), 'uploads/cars');
 
-                    // Delete old file
-                    if ($oldDocument) {
-                        $this->deleteFile($oldDocument, 'uploads/cars');
+                // ==================== V5 DOCUMENT HANDLING ====================
+                if ($request->hasFile('v5_document')) {
+                    $oldV5Document = $car->v5_document;
+                    $validated['v5_document'] = $this->uploadFile(
+                        $request->file('v5_document'),
+                        'uploads/cars'
+                    );
+                    if ($oldV5Document) {
+                        $this->deleteFile($oldV5Document, 'uploads/cars');
                     }
                 }
 
                 // Update car record
                 $car->update($validated);
 
-                // Update MOTs - Delete existing and recreate
-                $existingMotDocuments = $car->mots->pluck('document')->filter()->toArray();
-                $car->mots()->delete();
+                // ==================== Update MOTs ====================
+                $existingMots = $car->mots->keyBy('id');
+                $processedMotIds = [];
 
                 if ($request->has('mots')) {
                     foreach ($request->input('mots') as $index => $motData) {
-                        // Handle MOT document upload
+                        $motId = $motData['id'] ?? null;
+                        $existingMot = $motId ? $existingMots->get($motId) : null;
+
                         if ($request->hasFile("mots.{$index}.document")) {
                             $motData['document'] = $this->uploadFile(
                                 $request->file("mots.{$index}.document"),
                                 'uploads/cars/mot_documents'
                             );
+
+                            if ($existingMot && $existingMot->document) {
+                                $this->deleteFile($existingMot->document, 'uploads/cars/mot_documents');
+                            }
+                        } elseif ($existingMot && $existingMot->document) {
+                            $motData['document'] = $existingMot->document;
                         }
-                        $car->mots()->create($motData);
+
+                        unset($motData['id']);
+
+                        if ($existingMot) {
+                            $existingMot->update($motData);
+                            $processedMotIds[] = $existingMot->id;
+                        } else {
+                            $newMot = $car->mots()->create($motData);
+                            $processedMotIds[] = $newMot->id;
+                        }
                     }
                 }
 
-                // Delete old MOT documents
-                foreach ($existingMotDocuments as $oldDoc) {
-                    $this->deleteFile($oldDoc, 'uploads/cars/mot_documents');
+                $motsToDelete = $existingMots->keys()->diff($processedMotIds);
+                foreach ($motsToDelete as $motId) {
+                    $motToDelete = $existingMots->get($motId);
+                    if ($motToDelete->document) {
+                        $this->deleteFile($motToDelete->document, 'uploads/cars/mot_documents');
+                    }
+                    $motToDelete->delete();
                 }
 
-                // Update Road Taxes
+                // ==================== Update Road Taxes ====================
                 $car->roadTaxes()->delete();
                 if ($request->has('road_taxes')) {
                     foreach ($request->input('road_taxes') as $roadTaxData) {
@@ -277,53 +315,89 @@ class CarController extends Controller
                     }
                 }
 
-                // Update PHVs - Delete existing and recreate
-                $existingPhvDocuments = $car->phvs->pluck('document')->filter()->toArray();
-                $car->phvs()->delete();
+                // ==================== Update PHVs ====================
+                $existingPhvs = $car->phvs->keyBy('id');
+                $processedPhvIds = [];
 
                 if ($request->has('phvs')) {
                     foreach ($request->input('phvs') as $index => $phvData) {
-                        // Handle PHV document upload
+                        $phvId = $phvData['id'] ?? null;
+                        $existingPhv = $phvId ? $existingPhvs->get($phvId) : null;
+
                         if ($request->hasFile("phvs.{$index}.document")) {
                             $phvData['document'] = $this->uploadFile(
                                 $request->file("phvs.{$index}.document"),
                                 'uploads/cars/phv_documents'
                             );
+
+                            if ($existingPhv && $existingPhv->document) {
+                                $this->deleteFile($existingPhv->document, 'uploads/cars/phv_documents');
+                            }
+                        } elseif ($existingPhv && $existingPhv->document) {
+                            $phvData['document'] = $existingPhv->document;
                         }
-                        $car->phvs()->create($phvData);
+
+                        unset($phvData['id']);
+
+                        if ($existingPhv) {
+                            $existingPhv->update($phvData);
+                            $processedPhvIds[] = $existingPhv->id;
+                        } else {
+                            $newPhv = $car->phvs()->create($phvData);
+                            $processedPhvIds[] = $newPhv->id;
+                        }
                     }
                 }
 
-                // Delete old PHV documents
-                foreach ($existingPhvDocuments as $oldDoc) {
-                    $this->deleteFile($oldDoc, 'uploads/cars/phv_documents');
+                $phvsToDelete = $existingPhvs->keys()->diff($processedPhvIds);
+                foreach ($phvsToDelete as $phvId) {
+                    $phvToDelete = $existingPhvs->get($phvId);
+                    if ($phvToDelete->document) {
+                        $this->deleteFile($phvToDelete->document, 'uploads/cars/phv_documents');
+                    }
+                    $phvToDelete->delete();
                 }
 
-                // Update Insurance - Delete existing and recreate
-                $existingInsuranceDocuments = $car->insurances->pluck('insurance_document')->filter()->toArray();
-                $car->insurances()->delete();
+                // ==================== Update Insurance ====================
+                $existingInsurance = $car->insurances->first();
 
-                $insuranceData = [
-                    'car_id' => $car->id,
-                    'insurance_provider_id' => $validated['insurance_provider_id'],
-                    'start_date' => $validated['insurance_start_date'],
-                    'expiry_date' => $validated['insurance_expiry_date'],
-                    'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
-                    'status_id' => $validated['insurance_status_id'],
-                ];
+                if ($request->has('has_insurance')) {
+                    // ✅ User wants insurance
+                    $insuranceData = [
+                        'car_id' => $car->id,
+                        'insurance_provider_id' => $validated['insurance_provider_id'],
+                        'start_date' => $validated['insurance_start_date'],
+                        'expiry_date' => $validated['insurance_expiry_date'],
+                        'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
+                        'status_id' => $validated['insurance_status_id'],
+                    ];
 
-                if ($request->hasFile('insurance_document')) {
-                    $insuranceData['insurance_document'] = $this->uploadFile(
-                        $request->file('insurance_document'),
-                        'uploads/cars/insurance_documents'
-                    );
-                }
+                    if ($request->hasFile('insurance_document')) {
+                        $insuranceData['insurance_document'] = $this->uploadFile(
+                            $request->file('insurance_document'),
+                            'uploads/cars/insurance_documents'
+                        );
 
-                $car->insurances()->create($insuranceData);
+                        if ($existingInsurance && $existingInsurance->insurance_document) {
+                            $this->deleteFile($existingInsurance->insurance_document, 'uploads/cars/insurance_documents');
+                        }
+                    } elseif ($existingInsurance && $existingInsurance->insurance_document) {
+                        $insuranceData['insurance_document'] = $existingInsurance->insurance_document;
+                    }
 
-                // Delete old insurance documents
-                foreach ($existingInsuranceDocuments as $oldDoc) {
-                    $this->deleteFile($oldDoc, 'uploads/cars/insurance_documents');
+                    if ($existingInsurance) {
+                        $existingInsurance->update($insuranceData);
+                    } else {
+                        $car->insurances()->create($insuranceData);
+                    }
+                } else {
+                    // ✅ User doesn't want insurance - Delete existing
+                    if ($existingInsurance) {
+                        if ($existingInsurance->insurance_document) {
+                            $this->deleteFile($existingInsurance->insurance_document, 'uploads/cars/insurance_documents');
+                        }
+                        $existingInsurance->delete();
+                    }
                 }
 
                 return $car;
@@ -339,9 +413,6 @@ class CarController extends Controller
         }
     }
 
-    /**
-     * Helper method to handle file uploads
-     */
     private function uploadFile($file, $directory)
     {
         $mimeType = $file->getMimeType();
@@ -357,7 +428,6 @@ class CarController extends Controller
 
         $path = public_path($directory);
 
-        // Create directory if it doesn't exist
         if (!file_exists($path)) {
             mkdir($path, 0755, true);
         }
@@ -369,9 +439,6 @@ class CarController extends Controller
         throw new \Exception('Failed to upload file');
     }
 
-    /**
-     * Helper method to delete files
-     */
     private function deleteFile($filename, $directory)
     {
         if ($filename) {
@@ -381,22 +448,18 @@ class CarController extends Controller
             }
         }
     }
+
     public function destroy(Car $car)
     {
         try {
-            // Delete from database in transaction
             DB::transaction(function () use ($car) {
-                // Delete related records
                 $car->mots()->delete();
                 $car->roadTaxes()->delete();
                 $car->phvs()->delete();
                 $car->insurances()->delete();
-
-                // Delete the car
                 $car->delete();
             });
 
-            // Only delete files after successful database deletion
             $this->deleteCarFiles($car);
 
             return redirect()->route($this->url . 'index')
@@ -408,38 +471,30 @@ class CarController extends Controller
         }
     }
 
-    /**
-     * Helper method to delete files safely
-     */
     private function deleteCarFiles($car)
     {
         $filesToDelete = [
-            // V5 document
             $car->v5_document ? public_path('uploads/cars/' . $car->v5_document) : null,
         ];
 
-        // MOT documents
         foreach ($car->mots as $mot) {
             if ($mot->document) {
                 $filesToDelete[] = public_path('uploads/cars/mot_documents/' . $mot->document);
             }
         }
 
-        // PHV documents
         foreach ($car->phvs as $phv) {
             if ($phv->document) {
                 $filesToDelete[] = public_path('uploads/cars/phv_documents/' . $phv->document);
             }
         }
 
-        // Insurance documents
         foreach ($car->insurances as $insurance) {
             if ($insurance->insurance_document) {
                 $filesToDelete[] = public_path('uploads/cars/insurance_documents/' . $insurance->insurance_document);
             }
         }
 
-        // Delete files
         foreach (array_filter($filesToDelete) as $filePath) {
             if (File::exists($filePath)) {
                 File::delete($filePath);

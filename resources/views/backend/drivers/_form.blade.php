@@ -538,60 +538,6 @@
                 });
             }
 
-            // Date validation for driver license
-            const licenseExpiryField = document.getElementById('driver_license_expiry_date');
-            if (licenseExpiryField) {
-                licenseExpiryField.addEventListener('change', function () {
-                    const selectedDate = new Date(this.value);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-
-                    if (selectedDate <= today) {
-                        alert('Driver license expiry date must be in the future.');
-                        this.value = '';
-                    }
-                });
-            }
-
-            // Date validation for PHD license
-            const phdExpiryField = document.getElementById('phd_license_expiry_date');
-            if (phdExpiryField) {
-                phdExpiryField.addEventListener('change', function () {
-                    if (this.value) {
-                        const selectedDate = new Date(this.value);
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-
-                        if (selectedDate <= today) {
-                            alert('PHD license expiry date must be in the future.');
-                            this.value = '';
-                        }
-                    }
-                });
-            }
-
-            // Age validation for DOB
-            const dobField = document.getElementById('dob');
-            if (dobField) {
-                dobField.addEventListener('change', function () {
-                    const dob = new Date(this.value);
-                    const today = new Date();
-                    let age = today.getFullYear() - dob.getFullYear();
-                    const monthDiff = today.getMonth() - dob.getMonth();
-
-                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-                        age--;
-                    }
-
-                    if (age < 18) {
-                        alert('Driver must be at least 18 years old.');
-                        this.value = '';
-                    } else if (age > 100) {
-                        alert('Please enter a valid date of birth.');
-                        this.value = '';
-                    }
-                });
-            }
 
             // File upload validation
             const fileFields = [

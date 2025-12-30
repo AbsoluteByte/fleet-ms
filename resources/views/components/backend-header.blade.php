@@ -15,6 +15,8 @@
                 </div>
                 <ul class="nav navbar-nav float-right">
                     <!-- Enhanced Fleet Notification System -->
+                    @if(auth()->user()->isAdmin() || auth()->user()->isUser())
+
                     <li class="dropdown dropdown-notification nav-item">
                         <a class="nav-link nav-link-label" href="#" data-toggle="dropdown" id="notificationBell">
                             <i class="ficon feather icon-bell"></i>
@@ -41,7 +43,7 @@
                             </li>
                         </ul>
                     </li>
-
+                    @endif
                     <!-- User Dropdown (unchanged) -->
                     <li class="dropdown dropdown-user nav-item">
                         <a class="dropdown-toggle nav-link dropdown-user-link"

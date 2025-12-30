@@ -30,7 +30,8 @@ class RoleController extends Controller
      */
     public function index()
     {
-        return view($this->dir . 'index');
+        $models = Role::get();
+        return view($this->dir . 'index', compact('models'));
     }
 
     /**
@@ -130,20 +131,6 @@ class RoleController extends Controller
         $model->delete();
 
         return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' deleted Successfully!');
-    }
-
-    public function data()
-    {
-        $models = Role::query();
-        return DataTables::eloquent($models)
-            ->editColumn('created_at', function (Role $model) {
-                return $model->created_at->format('d M Y h:ia');
-            })
-            ->addColumn('action', function (Role $model) {
-                return view($this->dir . 'actionCol', compact('model'));
-            })
-            ->rawColumns(['action'])
-            ->toJson();
     }
 
 

@@ -238,7 +238,7 @@
                                             @foreach($car->insurances as $index => $insurance)
                                                 <tr>
                                                     <td>{{ $index + 1 }}</td>
-                                                    <td>{{ $insurance->insuranceProvider->name ?? 'N/A' }}</td>
+                                                    <td>{{ $insurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
                                                     <td>{{ \Carbon\Carbon::parse($insurance->start_date)->format('d M, Y') }}</td>
                                                     <td>{{ \Carbon\Carbon::parse($insurance->expiry_date)->format('d M, Y') }}</td>
                                                     <td>{{ $insurance->notify_before_expiry }} days</td>

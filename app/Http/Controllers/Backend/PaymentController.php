@@ -65,6 +65,7 @@ class PaymentController extends Controller
 
     public function show(Payment $payment)
     {
+        $payment->load('company');
         return view($this->dir.'show', compact('payment'));
     }
 

@@ -34,7 +34,8 @@
                                                 <br>
                                                 <span>Post Code: {{ $driver->post_code }}</span>
                                                 <br>
-                                                <small class="text-muted">DOB: {{ $driver->dob->format('M d, Y') }}</small>
+                                                <small
+                                                    class="text-muted">DOB: {{ $driver->dob->format('M d, Y') }}</small>
                                             </td>
                                             <td>{{ $driver->email }}</td>
                                             <td>{{ $driver->phone_number }}</td>
@@ -74,42 +75,51 @@
                                                 @else
                                                     <span class="badge bg-secondary">
                                         <i class="feather icon-mail me-1"></i>
-                                        Not Invited
+                                        Not Invite
                                     </span>
                                                 @endif
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">
+
                                                     <a href="{{ route('drivers.show', $driver) }}"
-                                                       class="btn btn-sm btn-outline-info">
+                                                       class="btn btn-sm btn-outline-info"
+                                                       style="margin-right:5px;">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
+
                                                     <a href="{{ route('drivers.edit', $driver) }}"
-                                                       class="btn btn-sm btn-outline-warning">
+                                                       class="btn btn-sm btn-outline-warning"
+                                                       style="margin-right:5px;">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
+
                                                     @if($driver->canBeInvited())
                                                         <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                style="margin-right:5px;"
                                                                 onclick="inviteDriver({{ $driver->id }}, '{{ $driver->full_name }}')">
                                                             <i class="feather icon-send"></i>
-                                                            {{ $driver->is_invited ? 'Resend' : 'Invite' }}
                                                         </button>
                                                     @elseif($driver->is_invited && !$driver->hasAcceptedInvitation())
                                                         <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                                style="margin-right:5px;"
                                                                 onclick="resendInvitation({{ $driver->id }}, '{{ $driver->full_name }}')">
                                                             <i class="feather icon-refresh-cw"></i>
                                                             Resend
                                                         </button>
                                                     @endif
+
                                                     <form action="{{ route('drivers.destroy', $driver) }}" method="POST"
                                                           style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
                                                         <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                                style="margin-right:5px;"
                                                                 onclick="return confirm('Are you sure?')">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
                                                     </form>
+
                                                 </div>
                                             </td>
                                         </tr>

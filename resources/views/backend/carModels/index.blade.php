@@ -28,9 +28,6 @@
                                             <td>{{ $carModel->name }}</td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <a href="{{ route('car-models.show', $carModel) }}" class="btn btn-sm btn-outline-info">
-                                                        <i class="fa fa-eye"></i>
-                                                    </a>
                                                     <a href="{{ route('car-models.edit', $carModel) }}" class="btn btn-sm btn-outline-warning">
                                                         <i class="fa fa-edit"></i>
                                                     </a>

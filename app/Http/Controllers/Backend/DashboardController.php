@@ -23,7 +23,7 @@ class DashboardController extends Controller
 
     public function __construct()
     {
-        $this->middleware('role:admin');
+        $this->middleware('role:admin|superuser');
         view()->share('dir', $this->dir);
     }
 
@@ -94,13 +94,17 @@ class DashboardController extends Controller
             ->latest()
             ->take(5)
             ->get();
-
-        return view($this->dir.'index', compact(
-            'totalCars', 'totalDrivers', 'activeAgreements', 'totalClaims',
-            'overdueCollections', 'upcomingCollections', 'taskBarNotifications',
-            'monthlyRevenue', 'totalOutstanding', 'monthlyRevenueData',
-            'monthlyExpenseData', 'agreementStatusSummary', 'recentClaims'
-        ));
+        if (auth()->user()->isSuperUser()) {
+           return view($this->dir.'superUserDashboard');
+        }
+        else{
+            return view($this->dir.'index', compact(
+                'totalCars', 'totalDrivers', 'activeAgreements', 'totalClaims',
+                'overdueCollections', 'upcomingCollections', 'taskBarNotifications',
+                'monthlyRevenue', 'totalOutstanding', 'monthlyRevenueData',
+                'monthlyExpenseData', 'agreementStatusSummary', 'recentClaims'
+            ));
+        }
     }
 
     public function getUnifiedNotifications()
@@ -420,23 +424,25 @@ class DashboardController extends Controller
 
     public function notificationsIndex(Request $request)
     {
-        $data = $this->getUnifiedNotifications();
-        $notifications = $data['notifications'];
-        $summary = $data['summary'];
+        // If DataTables AJAX request
+        if ($request->ajax()) {
+            $data = $this->getUnifiedNotifications();
+            $notifications = $data['notifications'];
 
-        // Filter by type if requested
-        if ($request->has('type') && $request->type) {
-            $notifications = $notifications->where('type', $request->type);
+            // Filter by type if requested
+            if ($request->has('type') && $request->type) {
+                $notifications = $notifications->where('type', $request->type);
+            }
+
+            return datatables()->of($notifications)->toJson();
         }
 
-        // Paginate notifications (convert to paginator manually if needed)
-        $perPage = 20;
-        $currentPage = $request->get('page', 1);
-        $notifications = $notifications->forPage($currentPage, $perPage);
+        // Regular page load
+        $data = $this->getUnifiedNotifications();
+        $summary = $data['summary'];
 
-        return view($this->dir.'notifications', compact('notifications', 'summary'));
+        return view($this->dir.'notifications', compact('summary'));
     }
-
     // Helper method to calculate road tax expiry date
     private function calculateRoadTaxExpiry($roadTax)
     {

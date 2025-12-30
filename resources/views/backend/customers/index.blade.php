@@ -10,6 +10,7 @@
                                 class="fa fa-plus"></i>
                             Add {{ $singular }}</a>
                     </div>
+                    <hr>
                     <div class="card-content">
                         <div class="card-body card-dashboard">
                             @include('alerts')
@@ -19,11 +20,45 @@
                                     <tr>
                                         <th>Name</th>
                                         <th>Email</th>
-                                        <th>Created</th>
+                                        <th>Role</th>
                                         <th>Action</th>
                                     </tr>
                                     </thead>
-                                    <tbody></tbody>
+                                    <tbody>
+                                    @forelse($users as $user)
+                                        <tr>
+                                            <td>{{ $user->name }}</td>
+                                            <td>{{ $user->email }}</td>
+                                            <td>{{ $user->roles->first()->name ?? 'No Role' }}</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <a href="{{ route('customers.show', $user) }}" class="btn btn-sm btn-outline-info">
+                                                        <i class="fa fa-eye"></i>
+                                                    </a>
+                                                    <a href="{{ route('customers.edit', $user) }}" class="btn btn-sm btn-outline-warning">
+                                                        <i class="fa fa-edit"></i>
+                                                    </a>
+                                                    <form action="{{ route('customers.destroy', $user) }}" method="POST" style="display: inline;">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                                onclick="return confirm('Are you sure?')">
+                                                            <i class="fa fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted py-4">
+                                                <i class="fa fa-handshake fa-3x mb-3"></i>
+                                                <br>
+                                                No customers found. <a href="{{ route('customers.create') }}">Create your first user</a>
+                                            </td>
+                                        </tr>
+                                    @endforelse
+                                    </tbody>
                                 </table>
                             </div>
                         </div>
@@ -33,12 +68,10 @@
         </div>
     </section>
 @endsection
-
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
 @endsection
 @section('js')
-    <script src="{{ asset('custom/reservation.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
     <script>
@@ -46,37 +79,7 @@
             $('#dataTable').DataTable({
                 processing: true,
                 responsive: true,
-                serverSide: false,
-                ajax: "{{ route($url . 'data') }}",
-                aaSorting: [],
-                columnDefs: [{
-                    'targets': 0,
-                    'checkboxes': {
-                        'selectRow': true
-                    }
-                },],
-                dom: '<"pull-left"B><"pull-right"f>rt<"row"<"col-sm-4"l><"col-sm-4"i><"col-sm-4"p>>',
-                columns: [{
-                    data: 'name',
-                    name: 'name'
-                }, {
-                    data: 'email',
-                    name: 'email'
-                },
-                    {
-                        data: 'created_at',
-                        name: 'created_at'
-                    },
-                    {
-                        data: 'action',
-                        name: 'action',
-                        orderable: false,
-                        searchable: false
-                    },
-                ]
             });
         });
     </script>
 @endsection
-
-

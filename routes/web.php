@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Frontend\AgreementController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -14,6 +15,9 @@ Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name
 Route::get('driver/invitation/{token}', [\App\Http\Controllers\HomeController::class, 'showAcceptForm'])->name('driver.accept-invitation');
 Route::post('driver/invitation/{token}', [\App\Http\Controllers\HomeController::class, 'acceptInvitation']);
 
+Route::get('/agreement/create', [AgreementController::class, 'create'])->name('frontend.agreements.create');
+Route::post('/agreement/store', [AgreementController::class, 'store'])->name('frontend.agreements.store');
+Route::get('/agreement/success', [AgreementController::class, 'success'])->name('frontend.agreements.success');
 
 Route::prefix('admin')->middleware('auth')->group(function () {
     // Dashboard
@@ -32,14 +36,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
 
     Route::resource('customers', App\Http\Controllers\Backend\CustomerController::class);
-    Route::get('customers/get/data', [App\Http\Controllers\Backend\CustomerController::class, 'data'])->name('customers.data');
 
     Route::resource('roles', App\Http\Controllers\Backend\RoleController::class);
-    Route::get('roles/get/data', [App\Http\Controllers\Backend\RoleController::class, 'data'])->name('roles.data');
 
     Route::resource('permissions', App\Http\Controllers\Backend\PermissionController::class);
-    Route::get('permissions/get/data', [App\Http\Controllers\Backend\PermissionController::class, 'data'])->name('permissions.data');
-
 
     // Main Features
     Route::resource('companies', App\Http\Controllers\Backend\CompanyController::class);
@@ -73,7 +73,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::post('agreements/{agreement}/collections/{collection}/pay', [App\Http\Controllers\Backend\AgreementController::class, 'payCollection'])
         ->name('agreements.collections.pay');
 
-    Route::post('agreements/{agreement}/regenerate-collections', function(\App\Models\Agreement $agreement) {
+    Route::post('agreements/{agreement}/regenerate-collections', function (\App\Models\Agreement $agreement) {
         $agreement->generateCollections();
         return response()->json(['success' => true]);
     })->name('agreements.regenerate-collections');

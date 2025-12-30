@@ -17,7 +17,7 @@
                         <i class="feather icon-check-circle me-2"></i>
                         Mark All Read
                     </button>
-                    <button class="btn btn-primary" onclick="refreshNotifications()">
+                    <button class="btn btn-primary" onclick="refreshTable()">
                         <i class="feather icon-refresh-cw me-2"></i>
                         Refresh
                     </button>
@@ -29,7 +29,7 @@
     <!-- Notification Summary Cards -->
     <div class="row g-4 mb-4">
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card critical">
+            <div class="summary-card critical" onclick="filterByType('overdue_payment')">
                 <div class="summary-icon">
                     <i class="feather icon-alert-triangle"></i>
                 </div>
@@ -41,7 +41,7 @@
         </div>
 
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card warning">
+            <div class="summary-card warning" onclick="filterByType('due_today')">
                 <div class="summary-icon">
                     <i class="feather icon-clock"></i>
                 </div>
@@ -53,7 +53,7 @@
         </div>
 
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card info">
+            <div class="summary-card info" onclick="filterByType('due_this_week')">
                 <div class="summary-icon">
                     <i class="feather icon-calendar"></i>
                 </div>
@@ -65,7 +65,7 @@
         </div>
 
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card primary">
+            <div class="summary-card primary" onclick="filterByType('insurance_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-shield"></i>
                 </div>
@@ -77,7 +77,7 @@
         </div>
 
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card secondary">
+            <div class="summary-card secondary" onclick="filterByType('mot_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-tool"></i>
                 </div>
@@ -89,7 +89,7 @@
         </div>
 
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card success">
+            <div class="summary-card success" onclick="filterByType('driver_license_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-users"></i>
                 </div>
@@ -105,31 +105,31 @@
     <div class="filter-tabs-container mb-4">
         <ul class="nav nav-pills filter-tabs" role="tablist">
             <li class="nav-item">
-                <a class="nav-link active" href="{{ route('notifications.index') }}">
+                <a class="nav-link active" href="javascript:void(0)" onclick="filterByType('')">
                     All Notifications
                     <span class="badge">{{ $summary['total_count'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="{{ route('notifications.index') }}?type=overdue_payment">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('overdue_payment')">
                     Overdue Payments
                     <span class="badge badge-danger">{{ $summary['overdue_payments'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="{{ route('notifications.index') }}?type=due_today">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('due_today')">
                     Due Today
                     <span class="badge badge-warning">{{ $summary['due_today'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="{{ route('notifications.index') }}?type=insurance_expiry">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('insurance_expiry')">
                     Insurance
                     <span class="badge badge-primary">{{ $summary['expiring_insurance'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="{{ route('notifications.index') }}?type=mot_expiry">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('mot_expiry')">
                     MOT
                     <span class="badge badge-secondary">{{ $summary['expiring_mot'] }}</span>
                 </a>
@@ -137,127 +137,35 @@
         </ul>
     </div>
 
-    <!-- Notifications List -->
+    <!-- Notifications DataTable -->
     <div class="notifications-container">
         <div class="card notifications-card">
-            <div class="card-body p-0">
-                @if($notifications->count() > 0)
-                    <div class="notifications-list">
-                        @foreach($notifications as $notification)
-                            <div class="notification-item {{ $notification['type'] }}"
-                                 style="border-left-color: {{ $notification['border_color'] }};
-                                        background-color: {{ $notification['bg_color'] }}">
-
-                                <div class="notification-main">
-                                    <div class="notification-icon-wrapper">
-                                        <div class="notification-icon text-{{ $notification['color'] }}">
-                                            <i class="feather {{ $notification['icon'] }}"></i>
-                                        </div>
-                                    </div>
-
-                                    <div class="notification-content">
-                                        <div class="notification-header">
-                                            <h5 class="notification-title text-{{ $notification['color'] }}">
-                                                {{ $notification['title'] }}
-                                            </h5>
-                                            <span class="notification-time">
-                                                {{ $notification['time_ago'] }}
-                                            </span>
-                                        </div>
-
-                                        <div class="notification-message">
-                                            {{ $notification['message'] }}
-                                        </div>
-
-                                        <div class="notification-meta">
-                                            @if(isset($notification['vehicle']))
-                                                <span class="meta-item vehicle">
-                                                    <i class="feather icon-truck"></i>
-                                                    {{ $notification['vehicle'] }}
-                                                </span>
-                                            @endif
-
-                                            @if(isset($notification['amount']))
-                                                <span class="meta-item amount text-{{ $notification['color'] }}">
-                                                    <i class="feather icon-pound-sign"></i>
-                                                    {{ $notification['amount'] }}
-                                                </span>
-                                            @endif
-
-                                            @if(isset($notification['driver']))
-                                                <span class="meta-item driver">
-                                                    <i class="feather icon-user"></i>
-                                                    {{ $notification['driver'] }}
-                                                </span>
-                                            @endif
-                                        </div>
-                                    </div>
-
-                                    <div class="notification-actions">
-                                        @if($notification['action_url'])
-                                            <a href="{{ $notification['action_url'] }}"
-                                               class="btn btn-sm btn-outline-{{ $notification['color'] }} action-btn">
-                                                <i class="feather icon-external-link"></i>
-                                                View Details
-                                            </a>
-                                        @endif
-
-                                        @if(in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']))
-                                            <button class="btn btn-sm btn-{{ $notification['color'] }} payment-btn"
-                                                    onclick="quickPayment('{{ $notification['id'] }}')">
-                                                <i class="feather icon-credit-card"></i>
-                                                Pay Now
-                                            </button>
-                                        @endif
-
-                                        <button class="btn btn-sm btn-outline-secondary dismiss-btn"
-                                                onclick="dismissNotification('{{ $notification['id'] }}')">
-                                            <i class="feather icon-x"></i>
-                                            Dismiss
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-
-                    <!-- Pagination -->
-                    <div class="notifications-pagination">
-                        <div class="d-flex justify-content-between align-items-center p-3">
-                            <div class="pagination-info">
-                                Showing {{ $notifications->count() }} of {{ $summary['total_count'] }} notifications
-                            </div>
-                            <div class="pagination-controls">
-                                <button class="btn btn-outline-secondary btn-sm" disabled>
-                                    <i class="feather icon-chevron-left"></i> Previous
-                                </button>
-                                <button class="btn btn-outline-secondary btn-sm">
-                                    Next <i class="feather icon-chevron-right"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                @else
-                    <div class="empty-notifications">
-                        <div class="empty-state">
-                            <i class="feather icon-check-circle"></i>
-                            <h3>All Caught Up!</h3>
-                            <p>No notifications to display. Your fleet is running smoothly.</p>
-                            <button class="btn btn-primary" onclick="refreshNotifications()">
-                                <i class="feather icon-refresh-cw me-2"></i>
-                                Check for Updates
-                            </button>
-                        </div>
-                    </div>
-                @endif
+            <div class="card-body">
+                <table id="notificationsTable" class="table table-hover" style="width:100%">
+                    <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Title</th>
+                        <th>Message</th>
+                        <th>Details</th>
+                        <th>Time</th>
+                        <th>Actions</th>
+                    </tr>
+                    </thead>
+                </table>
             </div>
         </div>
     </div>
 @endsection
 
 @section('css')
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
+
     <style>
-        /* Notifications Page Styles */
+        /* Previous CSS remains same... */
         :root {
             --critical-color: #ef4444;
             --warning-color: #f59e0b;
@@ -271,7 +179,6 @@
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
         }
 
-        /* Header Styles */
         .notifications-header {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(15px);
@@ -290,18 +197,6 @@
             margin-bottom: 0.5rem;
         }
 
-        .notifications-subtitle {
-            color: #6b7280;
-            font-size: 1.1rem;
-            margin-bottom: 0;
-        }
-
-        .notification-actions {
-            display: flex;
-            gap: 1rem;
-        }
-
-        /* Summary Cards */
         .summary-card {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(15px);
@@ -314,6 +209,7 @@
             align-items: center;
             gap: 1rem;
             border-left: 4px solid;
+            cursor: pointer;
         }
 
         .summary-card:hover {
@@ -321,29 +217,12 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.15);
         }
 
-        .summary-card.critical {
-            border-left-color: var(--critical-color);
-        }
-
-        .summary-card.warning {
-            border-left-color: var(--warning-color);
-        }
-
-        .summary-card.info {
-            border-left-color: var(--info-color);
-        }
-
-        .summary-card.primary {
-            border-left-color: var(--primary-color);
-        }
-
-        .summary-card.secondary {
-            border-left-color: var(--secondary-color);
-        }
-
-        .summary-card.success {
-            border-left-color: var(--success-color);
-        }
+        .summary-card.critical { border-left-color: var(--critical-color); }
+        .summary-card.warning { border-left-color: var(--warning-color); }
+        .summary-card.info { border-left-color: var(--info-color); }
+        .summary-card.primary { border-left-color: var(--primary-color); }
+        .summary-card.secondary { border-left-color: var(--secondary-color); }
+        .summary-card.success { border-left-color: var(--success-color); }
 
         .summary-icon {
             width: 50px;
@@ -353,7 +232,6 @@
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
-            flex-shrink: 0;
         }
 
         .critical .summary-icon {
@@ -366,52 +244,11 @@
             color: var(--warning-color);
         }
 
-        .info .summary-icon {
-            background: rgba(59, 130, 246, 0.1);
-            color: var(--info-color);
-        }
-
-        .primary .summary-icon {
-            background: rgba(99, 102, 241, 0.1);
-            color: var(--primary-color);
-        }
-
-        .secondary .summary-icon {
-            background: rgba(107, 114, 128, 0.1);
-            color: var(--secondary-color);
-        }
-
-        .success .summary-icon {
-            background: rgba(34, 197, 94, 0.1);
-            color: var(--success-color);
-        }
-
-        .summary-content h3 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 0.25rem;
-        }
-
-        .summary-content p {
-            color: #6b7280;
-            font-size: 0.9rem;
-            font-weight: 500;
-            margin-bottom: 0;
-        }
-
-        /* Filter Tabs */
         .filter-tabs-container {
             background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(15px);
             border-radius: 15px;
             padding: 1rem;
             box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-        }
-
-        .filter-tabs {
-            border: none;
-            gap: 0.5rem;
         }
 
         .filter-tabs .nav-link {
@@ -431,305 +268,256 @@
         .filter-tabs .nav-link.active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            transform: translateY(-2px);
         }
 
-        .filter-tabs .badge {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        /* Notifications List */
         .notifications-card {
             background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(15px);
             border-radius: 20px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            overflow: hidden;
         }
 
-        .notification-item {
-            padding: 2rem;
-            border-left: 4px solid;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
-            transition: all 0.3s ease;
-            position: relative;
+        /* DataTables Custom Styling */
+        #notificationsTable {
+            font-size: 0.95rem;
         }
 
-        .notification-item:hover {
-            transform: translateX(10px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-        }
-
-        .notification-item:last-child {
-            border-bottom: none;
-        }
-
-        .notification-main {
-            display: flex;
-            align-items: flex-start;
-            gap: 1.5rem;
-        }
-
-        .notification-icon-wrapper {
-            flex-shrink: 0;
-        }
-
-        .notification-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 15px;
-            background: rgba(255, 255, 255, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .notification-content {
-            flex: 1;
-        }
-
-        .notification-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1rem;
-        }
-
-        .notification-title {
-            font-size: 1.25rem;
+        #notificationsTable thead th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
             font-weight: 600;
-            margin-bottom: 0;
+            border: none;
+            padding: 1rem;
         }
 
-        .notification-time {
-            color: #6b7280;
-            font-size: 0.85rem;
-            font-weight: 500;
-            background: rgba(0,0,0,0.05);
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
+        #notificationsTable tbody tr {
+            transition: all 0.3s ease;
         }
 
-        .notification-message {
-            color: #4b5563;
-            font-size: 1rem;
-            line-height: 1.6;
-            margin-bottom: 1rem;
+        #notificationsTable tbody tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+            transform: translateX(5px);
         }
 
-        .notification-meta {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-            flex-wrap: wrap;
-        }
-
-        .meta-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(0,0,0,0.05);
+        .notification-badge {
             padding: 0.5rem 1rem;
             border-radius: 20px;
+            font-weight: 600;
             font-size: 0.85rem;
-            font-weight: 500;
-            color: #6b7280;
+            display: inline-block;
         }
 
-        .meta-item.amount {
-            font-weight: 600;
-        }
+        .badge-critical { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .badge-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .badge-info { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .badge-primary { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
 
-        .notification-actions {
+        .action-btns {
             display: flex;
-            gap: 0.75rem;
-            flex-wrap: wrap;
+            gap: 0.5rem;
         }
 
-        .action-btn,
-        .payment-btn,
-        .dismiss-btn {
+        .btn-sm {
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+
+        .dataTables_wrapper .dataTables_filter input {
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            border: 2px solid #e5e7eb;
+        }
+
+        .dataTables_wrapper .dataTables_length select {
             border-radius: 10px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: all 0.3s ease;
+            padding: 0.5rem;
+            border: 2px solid #e5e7eb;
         }
 
-        .action-btn:hover,
-        .payment-btn:hover,
-        .dismiss-btn:hover {
-            transform: translateY(-2px);
+        .page-item.active .page-link {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
         }
 
-        /* Empty State */
-        .empty-notifications {
-            padding: 4rem 2rem;
-            text-align: center;
-        }
-
-        .empty-state i {
-            font-size: 4rem;
-            color: #22c55e;
-            margin-bottom: 2rem;
-        }
-
-        .empty-state h3 {
-            font-size: 2rem;
-            font-weight: 600;
-            color: #1f2937;
-            margin-bottom: 1rem;
-        }
-
-        .empty-state p {
-            color: #6b7280;
-            font-size: 1.1rem;
-            margin-bottom: 2rem;
-        }
-
-        /* Pagination */
-        .notifications-pagination {
-            background: rgba(0,0,0,0.02);
-            border-top: 1px solid rgba(0,0,0,0.05);
-        }
-
-        .pagination-info {
-            color: #6b7280;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-
-        .pagination-controls {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .notifications-title {
-                font-size: 2rem;
-            }
-
-            .notification-actions {
-                flex-direction: column;
-            }
-
-            .notification-header {
-                flex-direction: column;
-                gap: 1rem;
-            }
-
-            .notification-meta {
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-
-            .summary-card {
-                text-align: center;
-                flex-direction: column;
-            }
-
-            .filter-tabs {
-                flex-direction: column;
-            }
-        }
-
-        /* Animation Classes */
-        .fade-in {
-            animation: fadeIn 0.6s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .slide-in-right {
-            animation: slideInRight 0.6s ease-out;
-        }
-
-        @keyframes slideInRight {
-            from {
-                opacity: 0;
-                transform: translateX(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
+        .page-link {
+            border-radius: 8px;
+            margin: 0 2px;
+            border: 2px solid #e5e7eb;
+            color: #6366f1;
         }
     </style>
 @endsection
 
 @section('js')
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+
     <script>
-        // Notifications Management Functions
-        function refreshNotifications() {
-            location.reload();
+        let notificationsTable;
+        let currentFilter = '';
+
+        $(document).ready(function() {
+            initializeDataTable();
+        });
+
+        function initializeDataTable() {
+            notificationsTable = $('#notificationsTable').DataTable({
+                processing: true,
+                serverSide: false,
+                ajax: {
+                    url: '{{ route("notifications.index") }}',
+                    data: function(d) {
+                        d.type = currentFilter;
+                    }
+                },
+                columns: [
+                    {
+                        data: 'type',
+                        render: function(data, type, row) {
+                            let badgeClass = '';
+                            let icon = '';
+
+                            switch(data) {
+                                case 'overdue_payment':
+                                    badgeClass = 'badge-critical';
+                                    icon = 'icon-alert-triangle';
+                                    break;
+                                case 'due_today':
+                                    badgeClass = 'badge-warning';
+                                    icon = 'icon-clock';
+                                    break;
+                                case 'due_this_week':
+                                    badgeClass = 'badge-info';
+                                    icon = 'icon-calendar';
+                                    break;
+                                case 'insurance_expiry':
+                                    badgeClass = 'badge-primary';
+                                    icon = 'icon-shield';
+                                    break;
+                                default:
+                                    badgeClass = 'badge-secondary';
+                                    icon = 'icon-bell';
+                            }
+
+                            return `<span class="notification-badge ${badgeClass}">
+                                <i class="feather ${icon}"></i>
+                            </span>`;
+                        }
+                    },
+                    {
+                        data: 'title',
+                        render: function(data, type, row) {
+                            return `<strong style="color: ${row.border_color}">${data}</strong>`;
+                        }
+                    },
+                    {
+                        data: 'simple_message'
+                    },
+                    {
+                        data: null,
+                        render: function(data, type, row) {
+                            let html = '';
+                            if (row.vehicle) {
+                                html += `<span class="badge bg-secondary me-1"><i class="feather icon-truck"></i> ${row.vehicle}</span>`;
+                            }
+                            if (row.amount) {
+                                html += `<span class="badge bg-success"><i class="feather icon-pound-sign"></i> ${row.amount}</span>`;
+                            }
+                            if (row.driver) {
+                                html += `<span class="badge bg-info"><i class="feather icon-user"></i> ${row.driver}</span>`;
+                            }
+                            return html || '-';
+                        }
+                    },
+                    {
+                        data: 'time_ago',
+                        render: function(data) {
+                            return `<small class="text-muted">${data}</small>`;
+                        }
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        render: function(data, type, row) {
+                            let html = '<div class="action-btns">';
+
+                            if (row.action_url) {
+                                html += `<a href="${row.action_url}" class="btn btn-sm btn-outline-primary">
+                                    <i class="feather icon-eye"></i>
+                                </a>`;
+                            }
+
+                            if (row.type.includes('payment')) {
+                                html += `<button class="btn btn-sm btn-success" onclick="quickPayment('${row.id}')">
+                                    <i class="feather icon-credit-card"></i>
+                                </button>`;
+                            }
+
+                            html += `<button class="btn btn-sm btn-outline-danger" onclick="dismissNotification('${row.id}')">
+                                <i class="feather icon-x"></i>
+                            </button>`;
+
+                            html += '</div>';
+                            return html;
+                        }
+                    }
+                ],
+                order: [[0, 'asc']],
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+                    '<"row"<"col-sm-12"tr>>' +
+                    '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+                language: {
+                    search: "_INPUT_",
+                    searchPlaceholder: "Search notifications...",
+                    lengthMenu: "Show _MENU_ entries",
+                    info: "Showing _START_ to _END_ of _TOTAL_ notifications",
+                    emptyTable: "No notifications found",
+                    zeroRecords: "No matching notifications found"
+                },
+                responsive: true
+            });
+        }
+
+        function filterByType(type) {
+            currentFilter = type;
+
+            // Update active tab
+            $('.filter-tabs .nav-link').removeClass('active');
+            event.currentTarget.classList.add('active');
+
+            // Reload table
+            notificationsTable.ajax.reload();
+        }
+
+        function refreshTable() {
+            notificationsTable.ajax.reload(null, false);
         }
 
         function markAllAsRead() {
             if (confirm('Mark all notifications as read?')) {
-                // Implementation for marking all notifications as read
-                console.log('Marking all notifications as read...');
-                // You can add AJAX call here
+                console.log('Marking all as read...');
+                // Add AJAX call here
             }
         }
 
         function dismissNotification(notificationId) {
             if (confirm('Dismiss this notification?')) {
-                const notificationElement = document.querySelector(`[onclick*="${notificationId}"]`).closest('.notification-item');
-                notificationElement.style.transition = 'all 0.3s ease';
-                notificationElement.style.transform = 'translateX(100%)';
-                notificationElement.style.opacity = '0';
-
-                setTimeout(() => {
-                    notificationElement.remove();
-                }, 300);
-
-                // You can add AJAX call here to update backend
-                console.log('Dismissing notification:', notificationId);
+                console.log('Dismissing:', notificationId);
+                // Add AJAX call here
+                notificationsTable.ajax.reload();
             }
         }
 
         function quickPayment(notificationId) {
-            // Implementation for quick payment
             console.log('Quick payment for:', notificationId);
-            // You can add payment modal or redirect logic here
+            // Add payment logic here
         }
-
-        // Add animation classes on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            const notifications = document.querySelectorAll('.notification-item');
-            notifications.forEach((notification, index) => {
-                notification.classList.add('fade-in');
-                notification.style.animationDelay = `${index * 0.1}s`;
-            });
-
-            const summaryCards = document.querySelectorAll('.summary-card');
-            summaryCards.forEach((card, index) => {
-                card.classList.add('slide-in-right');
-                card.style.animationDelay = `${index * 0.1}s`;
-            });
-        });
-
-        // Auto-refresh notifications every 5 minutes
-        setInterval(() => {
-            console.log('Auto-refreshing notifications...');
-            // You can add AJAX call here to update notifications without page reload
-        }, 300000);
     </script>
 @endsection

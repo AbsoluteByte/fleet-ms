@@ -75,7 +75,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('driver_license_document');
@@ -93,7 +93,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('driver_phd_license_document');
@@ -111,7 +111,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('phd_card_document');
@@ -129,7 +129,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('dvla_license_summary');
@@ -147,7 +147,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('misc_document');
@@ -165,7 +165,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('proof_of_address_document');
@@ -231,7 +231,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('driver_license_document');
@@ -256,7 +256,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('driver_phd_license_document');
@@ -281,7 +281,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('phd_card_document');
@@ -306,7 +306,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('dvla_license_summary');
@@ -331,7 +331,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('misc_document');
@@ -356,7 +356,7 @@ class DriverController extends Controller
                 $height = $dims[1];
                 $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time() . '-' . uniqid() . '.' . $file->extension();
             }
             $path = public_path('uploads/driver_licenses/');
             $file = $request->file('proof_of_address_document');
