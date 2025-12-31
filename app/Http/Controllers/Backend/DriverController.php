@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\DriverInvitationMail;
 use App\Models\Driver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -26,7 +27,7 @@ class DriverController extends Controller
 
     public function index()
     {
-        $drivers = Driver::get();
+        $drivers = Driver::where('tenant_id', Auth::user()->tenant_id)->get();
         return view($this->dir .'index', compact('drivers'));
     }
 
@@ -173,7 +174,8 @@ class DriverController extends Controller
                 $validated['proof_of_address_document'] = $name;
             }
         }
-
+        $validated['tenant_id'] = Auth::user()->tenant_id;
+        $validated['createdBy'] = Auth::user()->id;
         Driver::create($validated);
 
         return redirect()->route($this->url.'index')
@@ -371,7 +373,7 @@ class DriverController extends Controller
                 $validated['proof_of_address_document'] = $name;
             }
         }
-
+        $validated['updatedBy'] = Auth::user()->id;
         $driver->update($validated);
 
         return redirect()->route($this->url.'index')

@@ -14,6 +14,7 @@ use App\Models\InsurancePolicy;
 use App\Models\Claim;
 use App\Models\Expense;
 use App\Models\Penalty;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 
@@ -30,9 +31,9 @@ class DashboardController extends Controller
     public function index()
     {
         // Basic stats
-        $totalCars = Car::count();
-        $totalDrivers = Driver::count();
-        $activeAgreements = Agreement::whereDate('end_date', '>=', now())->count();
+        $totalCars = Car::where('tenant_id', Auth::user()->tenant_id)->count();
+        $totalDrivers = Driver::where('tenant_id', Auth::user()->tenant_id)->count();
+        $activeAgreements = Agreement::where('tenant_id', Auth::user()->tenant_id)->whereDate('end_date', '>=', now())->count();
         $totalClaims = Claim::count();
 
         // Payment notifications and overdue collections

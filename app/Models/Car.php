@@ -9,15 +9,20 @@ class Car extends Model
     use HasFactory;
 
     protected $fillable = [
-        'company_id', 'car_model_id', 'registration', 'color',
+        'tenant_id','company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
-        'purchase_date', 'purchase_price', 'purchase_type'
+        'purchase_date', 'purchase_price', 'purchase_type', 'createdBy', 'updatedBy'
     ];
 
     protected $casts = [
         'purchase_date' => 'date',
         'purchase_price' => 'decimal:2'
     ];
+
+    public function tenant()
+    {
+        return $this->belongsTo(Tenant::class);
+    }
 
     public function company()
     {

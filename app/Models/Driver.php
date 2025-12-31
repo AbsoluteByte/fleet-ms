@@ -10,7 +10,7 @@ class Driver extends Model
     use HasFactory;
 
     protected $fillable = [
-        'first_name', 'middle_name', 'last_name', 'dob', 'email',
+        'tenant_id','first_name', 'middle_name', 'last_name', 'dob', 'email',
         'phone_number', 'ni_number', 'address1', 'address2', 'post_code', 'town',
         'county', 'country_id', 'driver_license_number',
         'driver_license_expiry_date', 'phd_license_number',
@@ -18,7 +18,7 @@ class Driver extends Model
         'driver_license_document', 'driver_phd_license_document',
         'phd_card_document', 'dvla_license_summary', 'misc_document',
         'proof_of_address_document', 'is_invited', 'invited_at',
-        'invitation_token', 'invitation_accepted_at', 'user_id'
+        'invitation_token', 'invitation_accepted_at', 'user_id', 'createdBy', 'updatedBy'
     ];
 
     protected $casts = [
@@ -29,6 +29,10 @@ class Driver extends Model
         'invitation_accepted_at' => 'datetime',
         'is_invited' => 'boolean'
     ];
+    public function tenant()
+    {
+        return $this->belongsTo(Tenant::class);
+    }
 
     public function agreements()
     {

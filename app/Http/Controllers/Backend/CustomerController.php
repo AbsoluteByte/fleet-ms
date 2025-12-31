@@ -4,12 +4,10 @@ namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Tenant;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
-use Yajra\DataTables\Facades\DataTables;
 
 class CustomerController extends Controller
 {
@@ -20,111 +18,109 @@ class CustomerController extends Controller
     public function __construct()
     {
         $this->middleware('role:superuser');
+
         view()->share('url', $this->url);
         view()->share('dir', $this->dir);
         view()->share('singular', Str::singular($this->name));
         view()->share('plural', Str::plural($this->name));
     }
 
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function index()
     {
-        $users = User::where('parent_id', null)->role(['admin'])->get();
+        // sirf tenant admins
+        $users = User::role('admin')->with('tenant')->get();
         return view($this->dir . 'index', compact('users'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function create()
     {
         $model = new User();
         return view($this->dir . 'create', compact('model'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\Response
-     */
     public function store(Request $request)
     {
-        $this->validate($request, [
-            'name' => ['required', 'string', 'max:50'],
+        $request->validate([
+            'company_name' => ['required', 'string', 'max:100'],
+            'name'         => ['required', 'string', 'max:50'],
+            'email'        => ['required', 'email', 'max:50', 'unique:users'],
+            'password'     => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $model = new User();
-        $model->name = request('name', null);
-        $model->save();
+        /** -------------------------
+         * 1️⃣ Create Tenant
+         * ------------------------- */
+        $tenant = Tenant::create([
+            'company_name'   => $request->company_name,
+            'status' => Tenant::STATUS_ACTIVE,
+        ]);
 
-        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' saved Successfully!');
+        /** -------------------------
+         * 2️⃣ Create Admin User
+         * ------------------------- */
+        $user = User::create([
+            'tenant_id' => $tenant->id,
+            'name'      => $request->name,
+            'email'     => $request->email,
+            'password'  => Hash::make($request->password),
+        ]);
+
+        /** -------------------------
+         * 3️⃣ Assign Role
+         * ------------------------- */
+        $user->assignRole('admin');
+
+        return redirect()
+            ->route($this->url . 'index')
+            ->with('success', 'Customer created successfully!');
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param \App\Models\User $user
-     * @return \Illuminate\Http\Response
-     */
     public function show($id)
     {
-        $model = User::where('id', $id)->firstOrFail();
+        $model = User::with('tenant')->findOrFail($id);
         return view($this->dir . 'show', compact('model'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param \App\Models\User $User
-     * @return \Illuminate\Http\Response
-     */
     public function edit($id)
     {
-        $model = User::where('id', $id)->firstOrFail();
-
+        $model = User::with('tenant')->findOrFail($id);
         return view($this->dir . 'edit', compact('model'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @param \App\Models\User $User
-     * @return \Illuminate\Http\Response
-     */
     public function update(Request $request, $id)
     {
-        $model = User::where('id', $id)->firstOrFail();
+        $model = User::findOrFail($id);
 
-        $this->validate($request, [
-            'name' => ['required', 'string', 'max:50'],
+        $request->validate([
+            'company_name' => ['required', 'string', 'max:100'],
+            'name'         => ['required', 'string', 'max:50'],
+            'email'        => ['required', 'email', 'unique:users,email,' . $model->id],
         ]);
 
-        $model->name = request('name', null);
-        $model->save();
+        /** Update Tenant */
+        $model->tenant->update([
+            'name' => $request->company_name,
+        ]);
 
-        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' updated Successfully!');
+        /** Update User */
+        $model->update([
+            'name'  => $request->name,
+            'email' => $request->email,
+        ]);
+
+        return redirect()
+            ->route($this->url . 'index')
+            ->with('success', 'Customer updated successfully!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param \App\Models\User $User
-     * @return \Illuminate\Http\Response
-     */
     public function destroy($id)
     {
-        $model = User::where('id', $id)->firstOrFail();
-        $model->delete();
+        $model = User::findOrFail($id);
+        // Tenant delete → cascade users (FK cascade)
+        $model->tenant()->delete();
 
-        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' deleted Successfully!');
+        return redirect()
+            ->route($this->url . 'index')
+            ->with('success', 'Customer deleted successfully!');
     }
-
 }

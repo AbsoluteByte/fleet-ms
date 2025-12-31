@@ -10,6 +10,7 @@ use App\Models\Driver;
 use App\Models\Status;
 use App\Models\InsuranceProvider; // Add this
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PDF;
@@ -31,7 +32,7 @@ class AgreementController extends Controller
 
     public function index()
     {
-        $agreements = Agreement::with(['company', 'driver', 'car', 'status'])
+        $agreements = Agreement::where('tenant_id', Auth::user()->tenant_id)->with(['company', 'driver', 'car', 'status'])
             ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
             ->get();
 
@@ -95,6 +96,8 @@ class AgreementController extends Controller
                 }
 
                 // Create agreement record
+                $validated['tenant_id'] = Auth::user()->tenant_id;
+                $validated['createdBy'] = Auth::user()->id;
                 $agreement = Agreement::create($validated);
 
                 // Handle collections based on auto schedule setting
@@ -208,6 +211,7 @@ class AgreementController extends Controller
                 }
 
                 // Update agreement record
+                $validated['updatedBy'] = Auth::user()->id;
                 $agreement->update($validated);
 
                 // Handle collections based on auto schedule setting

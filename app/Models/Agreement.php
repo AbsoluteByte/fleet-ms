@@ -10,7 +10,7 @@ class Agreement extends Model
     use HasFactory;
 
     protected $fillable = [
-        'company_id', 'start_date', 'end_date', 'driver_id',
+        'tenant_id', 'company_id', 'start_date', 'end_date', 'driver_id',
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
         'deposit_amount', 'security_deposit', 'mileage_out', 'mileage_in',
         'collection_type', 'auto_schedule_collections', 'next_collection_date',
@@ -19,7 +19,7 @@ class Agreement extends Model
         'using_own_insurance', 'insurance_provider_id',
         'own_insurance_provider_name', 'own_insurance_start_date',
         'own_insurance_end_date', 'own_insurance_type',
-        'own_insurance_policy_number', 'own_insurance_proof_document'
+        'own_insurance_policy_number', 'own_insurance_proof_document','createdBy', 'updatedBy'
     ];
 
     protected $casts = [

@@ -10,6 +10,7 @@ use App\Models\Counsel;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -31,7 +32,7 @@ class CarController extends Controller
 
     public function index()
     {
-        $cars = Car::with(['company', 'carModel'])->get();
+        $cars = Car::where('tenant_id', Auth::user()->tenant_id)->with(['company', 'carModel'])->get();
         return view($this->dir . 'index', compact('cars'));
     }
 
@@ -105,6 +106,8 @@ class CarController extends Controller
                 }
 
                 // Create car record
+                $validated['tenant_id'] = Auth::user()->tenant_id;
+                $validated['createdBy'] = Auth::user()->id;
                 $car = Car::create($validated);
 
                 // Store MOTs
@@ -262,6 +265,7 @@ class CarController extends Controller
                 }
 
                 // Update car record
+                $validated['updatedBy'] = Auth::user()->id;
                 $car->update($validated);
 
                 // ==================== Update MOTs ====================
