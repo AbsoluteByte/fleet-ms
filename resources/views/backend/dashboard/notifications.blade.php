@@ -13,11 +13,7 @@
             </div>
             <div class="col-auto">
                 <div class="notification-actions">
-                    <button class="btn btn-outline-primary" onclick="markAllAsRead()">
-                        <i class="feather icon-check-circle me-2"></i>
-                        Mark All Read
-                    </button>
-                    <button class="btn btn-primary" onclick="refreshTable()">
+                    <button class="btn btn-outline-primary" onclick="refreshTable()">
                         <i class="feather icon-refresh-cw me-2"></i>
                         Refresh
                     </button>
@@ -191,10 +187,12 @@
         .notifications-title {
             font-size: 2.5rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #1a202c;
             margin-bottom: 0.5rem;
+        }
+        .notifications-subtitle {
+            color: #718096;
+            font-size: 1rem;
         }
 
         .summary-card {
@@ -282,7 +280,7 @@
         }
 
         #notificationsTable thead th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #1a202c;
             color: white;
             font-weight: 600;
             border: none;

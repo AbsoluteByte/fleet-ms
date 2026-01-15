@@ -31,9 +31,9 @@ class DashboardController extends Controller
     public function index()
     {
         // Basic stats
-        $totalCars = Car::where('tenant_id', Auth::user()->tenant_id)->count();
-        $totalDrivers = Driver::where('tenant_id', Auth::user()->tenant_id)->count();
-        $activeAgreements = Agreement::where('tenant_id', Auth::user()->tenant_id)->whereDate('end_date', '>=', now())->count();
+        $totalCars = Car::count();
+        $totalDrivers = Driver::count();
+        $activeAgreements = Agreement::whereDate('end_date', '>=', now())->count();
         $totalClaims = Claim::count();
 
         // Payment notifications and overdue collections
@@ -117,8 +117,9 @@ class DashboardController extends Controller
 
         $notifications = collect();
 
-        // 1. OVERDUE PAYMENTS (Highest Priority)
+        // ==================== 1. OVERDUE PAYMENTS ====================
         $overdueCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
             ->where('payment_status', 'overdue')
             ->orderBy('due_date')
             ->get();
@@ -129,11 +130,11 @@ class DashboardController extends Controller
                 'type' => 'overdue_payment',
                 'priority' => 1,
                 'title' => 'Overdue Payment',
-                'message' => $collection->agreement->driver->full_name . ' - ' . $collection->days_overdue . ' days overdue',
-                'simple_message' => $collection->agreement->driver->full_name . ' - ' . $collection->days_overdue . ' days overdue',
+                'message' => $collection->agreement->driver->full_name . ' - Overdue by ' . $collection->days_overdue . ' days',
+                'simple_message' => $collection->agreement->driver->full_name . ' - Overdue by ' . $collection->days_overdue . ' days',
                 'amount' => '£' . number_format($collection->remaining_amount, 2),
                 'vehicle' => $collection->agreement->car->registration,
-                'time_ago' => $collection->due_date->diffForHumans(),
+                'time_ago' => 'Due ' . $collection->due_date->diffForHumans(),
                 'action_url' => route('agreements.show', $collection->agreement),
                 'icon' => 'icon-alert-triangle',
                 'color' => 'danger',
@@ -143,8 +144,9 @@ class DashboardController extends Controller
             ]);
         }
 
-        // 2. DUE TODAY PAYMENTS
+        // ==================== 2. DUE TODAY PAYMENTS ====================
         $dueTodayCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
             ->where('payment_status', 'pending')
             ->whereDate('due_date', now())
             ->get();
@@ -155,8 +157,8 @@ class DashboardController extends Controller
                 'type' => 'due_today',
                 'priority' => 2,
                 'title' => 'Payment Due Today',
-                'message' => $collection->agreement->driver->full_name . ' - payment due today',
-                'simple_message' => $collection->agreement->driver->full_name . ' - due today',
+                'message' => $collection->agreement->driver->full_name . ' - Payment due today',
+                'simple_message' => $collection->agreement->driver->full_name . ' - Due today',
                 'amount' => '£' . number_format($collection->amount, 2),
                 'vehicle' => $collection->agreement->car->registration,
                 'time_ago' => 'Due Today',
@@ -169,21 +171,22 @@ class DashboardController extends Controller
             ]);
         }
 
-        // 3. DUE THIS WEEK PAYMENTS
+        // ==================== 3. DUE THIS WEEK PAYMENTS ====================
         $dueThisWeekCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
             ->where('payment_status', 'pending')
             ->whereBetween('due_date', [now()->addDay(), now()->addWeek()])
             ->get();
 
         foreach ($dueThisWeekCollections as $collection) {
-            $daysUntilDue = (int) now()->diffInDays($collection->due_date);
+            $daysUntilDue = (int)now()->diffInDays($collection->due_date);
             $notifications->push([
                 'id' => 'due_week_' . $collection->id,
                 'type' => 'due_this_week',
                 'priority' => 3,
                 'title' => 'Payment Due Soon',
-                'message' => $collection->agreement->driver->full_name . ' - due in ' . $daysUntilDue . ' days',
-                'simple_message' => $collection->agreement->driver->full_name . ' - due in ' . $daysUntilDue . ' days',
+                'message' => $collection->agreement->driver->full_name . ' - Due in ' . $daysUntilDue . ' days',
+                'simple_message' => $collection->agreement->driver->full_name . ' - Due in ' . $daysUntilDue . ' days',
                 'amount' => '£' . number_format($collection->amount, 2),
                 'vehicle' => $collection->agreement->car->registration,
                 'time_ago' => $collection->due_date->diffForHumans(),
@@ -196,185 +199,264 @@ class DashboardController extends Controller
             ]);
         }
 
-        // 4. EXPIRING INSURANCE POLICIES
+        // ==================== 4. INSURANCE POLICIES (Including Expired) ====================
         $expiringInsurance = InsurancePolicy::with(['car'])
-            ->whereBetween('policy_end_date', [now(), now()->addDays(30)])
+            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
+            ->where('policy_end_date', '<=', now()->addDays(30)) // ✅ Include expired
             ->orderBy('policy_end_date')
             ->get();
 
         foreach ($expiringInsurance as $policy) {
-            $daysDiff = (int) now()->diffInDays($policy->policy_end_date, false);
-            $msg = $daysDiff >= 0
-                ? 'Expires in ' . $daysDiff . ' days'
-                : 'Expired ' . abs($daysDiff) . ' days ago';
+            $daysDiff = (int)now()->diffInDays($policy->policy_end_date, false);
+
+            // ✅ Better message formatting
+            if ($daysDiff > 0) {
+                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $color = 'primary';
+                $priority = 4;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Expires today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $color = 'danger';
+                $priority = 1;
+            }
 
             $notifications->push([
                 'id' => 'insurance_' . $policy->id,
                 'type' => 'insurance_expiry',
-                'priority' => 4,
-                'title' => 'Insurance Expiry',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'Insurance Expiring' : 'Insurance Expired',
                 'message' => $policy->car->registration . ' - ' . $msg,
                 'simple_message' => $policy->car->registration . ' - ' . $msg,
                 'vehicle' => $policy->car->registration,
                 'time_ago' => $policy->policy_end_date->diffForHumans(),
                 'action_url' => route('cars.show', $policy->car_id),
                 'icon' => 'icon-shield',
-                'color' => 'primary',
-                'bg_color' => 'rgba(99, 102, 241, 0.1)',
-                'border_color' => '#6366f1',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#6366f1',
                 'created_at' => $policy->policy_end_date
             ]);
         }
 
-        // 5. EXPIRING PHV LICENSES
+        // ==================== 5. PHV LICENSES (Including Expired) ====================
         $expiringPhvs = CarPhv::with(['car'])
-            ->whereBetween('expiry_date', [now(), now()->addDays(30)])
+            ->whereHas('car', function ($query) {
+                $query->where('tenant_id', Auth::user()->currentTenant()->id); // ✅ Filter by tenant
+            })
+            ->where('expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
             ->orderBy('expiry_date')
             ->get();
 
         foreach ($expiringPhvs as $phv) {
-            $daysDiff = (int) now()->diffInDays($phv->expiry_date, false);
-            $msg = $daysDiff >= 0
-                ? 'Expires in ' . $daysDiff . ' days'
-                : 'Expired ' . abs($daysDiff) . ' days ago';
+            $daysDiff = (int)now()->diffInDays($phv->expiry_date, false);
+
+            if ($daysDiff > 0) {
+                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $color = 'secondary';
+                $priority = 5;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Expires today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $color = 'danger';
+                $priority = 1;
+            }
 
             $notifications->push([
                 'id' => 'phv_' . $phv->id,
                 'type' => 'phv_expiry',
-                'priority' => 5,
-                'title' => 'PHV License Expiry',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'PHV License Expiring' : 'PHV License Expired',
                 'message' => $phv->car->registration . ' - ' . $msg,
                 'simple_message' => $phv->car->registration . ' - ' . $msg,
                 'vehicle' => $phv->car->registration,
                 'time_ago' => $phv->expiry_date->diffForHumans(),
                 'action_url' => route('cars.edit', $phv->car_id),
                 'icon' => 'icon-award',
-                'color' => 'secondary',
-                'bg_color' => 'rgba(107, 114, 128, 0.1)',
-                'border_color' => '#6b7280',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(107, 114, 128, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#6b7280',
                 'created_at' => $phv->expiry_date
             ]);
         }
 
-        // 6. EXPIRING MOT CERTIFICATES
+        // ==================== 6. MOT CERTIFICATES (Including Expired) ====================
         $expiringMots = CarMot::with(['car'])
-            ->whereBetween('expiry_date', [now(), now()->addDays(30)])
+            ->whereHas('car', function ($query) {
+                $query->where('tenant_id', Auth::user()->currentTenant()->id); // ✅ Filter by tenant
+            })
+            ->where('expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
             ->orderBy('expiry_date')
             ->get();
 
         foreach ($expiringMots as $mot) {
-            $daysDiff = (int) now()->diffInDays($mot->expiry_date, false);
-            $msg = $daysDiff >= 0
-                ? 'Expires in ' . $daysDiff . ' days'
-                : 'Expired ' . abs($daysDiff) . ' days ago';
+            $daysDiff = (int)now()->diffInDays($mot->expiry_date, false);
+
+            if ($daysDiff > 0) {
+                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $color = 'warning';
+                $priority = 6;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Expires today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $color = 'danger';
+                $priority = 1;
+            }
 
             $notifications->push([
                 'id' => 'mot_' . $mot->id,
                 'type' => 'mot_expiry',
-                'priority' => 6,
-                'title' => 'MOT Certificate Expiry',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'MOT Expiring' : 'MOT Expired',
                 'message' => $mot->car->registration . ' - ' . $msg,
                 'simple_message' => $mot->car->registration . ' - ' . $msg,
                 'vehicle' => $mot->car->registration,
                 'time_ago' => $mot->expiry_date->diffForHumans(),
                 'action_url' => route('cars.edit', $mot->car_id),
                 'icon' => 'icon-tool',
-                'color' => 'warning',
-                'bg_color' => 'rgba(245, 158, 11, 0.1)',
-                'border_color' => '#f59e0b',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#f59e0b',
                 'created_at' => $mot->expiry_date
             ]);
         }
 
-        // 7. EXPIRING ROAD TAX
-        $expiringRoadTaxes = CarRoadTax::with(['car'])
-            ->get()
-            ->filter(function ($roadTax) {
-                $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
-                return $expiryDate &&
-                    $expiryDate->between(now(), now()->addDays(30));
-            });
+        // ==================== 7. ROAD TAX (Including Expired) ====================
+        $allRoadTaxes = CarRoadTax::with(['car'])
+            ->whereHas('car', function ($query) {
+                $query->where('tenant_id', Auth::user()->currentTenant()->id); // ✅ Filter by tenant
+            })
+            ->get();
+
+        $expiringRoadTaxes = $allRoadTaxes->filter(function ($roadTax) {
+            $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
+            return $expiryDate && $expiryDate <= now()->addDays(30); // ✅ Include expired
+        });
 
         foreach ($expiringRoadTaxes as $roadTax) {
             $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
-            $daysDiff = (int) now()->diffInDays($expiryDate, false);
-            $msg = $daysDiff >= 0
-                ? 'Expires in ' . $daysDiff . ' days'
-                : 'Expired ' . abs($daysDiff) . ' days ago';
+            $daysDiff = (int)now()->diffInDays($expiryDate, false);
+
+            if ($daysDiff > 0) {
+                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $color = 'success';
+                $priority = 7;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Expires today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $color = 'danger';
+                $priority = 1;
+            }
 
             $notifications->push([
                 'id' => 'road_tax_' . $roadTax->id,
                 'type' => 'road_tax_expiry',
-                'priority' => 7,
-                'title' => 'Road Tax Expiry',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'Road Tax Expiring' : 'Road Tax Expired',
                 'message' => $roadTax->car->registration . ' - ' . $msg,
                 'simple_message' => $roadTax->car->registration . ' - ' . $msg,
                 'vehicle' => $roadTax->car->registration,
                 'time_ago' => $expiryDate->diffForHumans(),
                 'action_url' => route('cars.edit', $roadTax->car_id),
                 'icon' => 'icon-credit-card',
-                'color' => 'success',
-                'bg_color' => 'rgba(34, 197, 94, 0.1)',
-                'border_color' => '#22c55e',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#22c55e',
                 'created_at' => $expiryDate
             ]);
         }
 
-        // 8. EXPIRING DRIVER LICENSES
-        $expiringDriverLicenses = Driver::whereBetween('driver_license_expiry_date', [now(), now()->addDays(30)])
-            ->orderBy('driver_license_expiry_date')
+        // ==================== 8. DRIVER LICENSES (Including Expired) ====================
+        $expiringDriverLicenses = Driver::where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
+        ->where('driver_license_expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
+        ->orderBy('driver_license_expiry_date')
             ->get();
 
         foreach ($expiringDriverLicenses as $driver) {
-            $daysDiff = (int) now()->diffInDays($driver->driver_license_expiry_date, false);
-            $msg = $daysDiff >= 0
-                ? 'Expires in ' . $daysDiff . ' days'
-                : 'Expired ' . abs($daysDiff) . ' days ago';
+            $daysDiff = (int)now()->diffInDays($driver->driver_license_expiry_date, false);
+
+            if ($daysDiff > 0) {
+                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $color = 'info';
+                $priority = 8;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Expires today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $color = 'danger';
+                $priority = 1;
+            }
 
             $notifications->push([
                 'id' => 'driver_license_' . $driver->id,
                 'type' => 'driver_license_expiry',
-                'priority' => 8,
-                'title' => 'Driver License Expiry',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'Driver License Expiring' : 'Driver License Expired',
                 'message' => $driver->full_name . ' - ' . $msg,
                 'simple_message' => $driver->full_name . ' - ' . $msg,
                 'driver' => $driver->full_name,
                 'time_ago' => $driver->driver_license_expiry_date->diffForHumans(),
                 'action_url' => route('drivers.edit', $driver->id),
                 'icon' => 'icon-user',
-                'color' => 'info',
-                'bg_color' => 'rgba(59, 130, 246, 0.1)',
-                'border_color' => '#3b82f6',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#3b82f6',
                 'created_at' => $driver->driver_license_expiry_date
             ]);
         }
 
-        // 9. EXPIRING PHD LICENSES
-        $expiringPhdLicenses = Driver::whereNotNull('phd_license_expiry_date')
-            ->whereBetween('phd_license_expiry_date', [now(), now()->addDays(30)])
+        // ==================== 9. PHD LICENSES (Including Expired) ====================
+        $expiringPhdLicenses = Driver::where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
+        ->whereNotNull('phd_license_expiry_date')
+            ->where('phd_license_expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
             ->orderBy('phd_license_expiry_date')
             ->get();
 
         foreach ($expiringPhdLicenses as $driver) {
-            $daysDiff = (int) now()->diffInDays($driver->phd_license_expiry_date, false);
-            $msg = $daysDiff >= 0
-                ? 'Expires in ' . $daysDiff . ' days'
-                : 'Expired ' . abs($daysDiff) . ' days ago';
+            $daysDiff = (int)now()->diffInDays($driver->phd_license_expiry_date, false);
+
+            if ($daysDiff > 0) {
+                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $color = 'secondary';
+                $priority = 9;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Expires today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $color = 'danger';
+                $priority = 1;
+            }
 
             $notifications->push([
                 'id' => 'phd_license_' . $driver->id,
                 'type' => 'phd_license_expiry',
-                'priority' => 9,
-                'title' => 'PHD License Expiry',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'PHD License Expiring' : 'PHD License Expired',
                 'message' => $driver->full_name . ' - ' . $msg,
                 'simple_message' => $driver->full_name . ' - ' . $msg,
                 'driver' => $driver->full_name,
                 'time_ago' => $driver->phd_license_expiry_date->diffForHumans(),
                 'action_url' => route('drivers.edit', $driver->id),
                 'icon' => 'icon-user-check',
-                'color' => 'secondary',
-                'bg_color' => 'rgba(107, 114, 128, 0.1)',
-                'border_color' => '#6b7280',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(107, 114, 128, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#6b7280',
                 'created_at' => $driver->phd_license_expiry_date
             ]);
         }
