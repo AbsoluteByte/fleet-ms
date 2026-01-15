@@ -119,7 +119,6 @@ class DashboardController extends Controller
 
         // ==================== 1. OVERDUE PAYMENTS ====================
         $overdueCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
             ->where('payment_status', 'overdue')
             ->orderBy('due_date')
             ->get();
@@ -146,7 +145,6 @@ class DashboardController extends Controller
 
         // ==================== 2. DUE TODAY PAYMENTS ====================
         $dueTodayCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
             ->where('payment_status', 'pending')
             ->whereDate('due_date', now())
             ->get();
@@ -173,7 +171,6 @@ class DashboardController extends Controller
 
         // ==================== 3. DUE THIS WEEK PAYMENTS ====================
         $dueThisWeekCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
             ->where('payment_status', 'pending')
             ->whereBetween('due_date', [now()->addDay(), now()->addWeek()])
             ->get();
@@ -201,7 +198,6 @@ class DashboardController extends Controller
 
         // ==================== 4. INSURANCE POLICIES (Including Expired) ====================
         $expiringInsurance = InsurancePolicy::with(['car'])
-            ->where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
             ->where('policy_end_date', '<=', now()->addDays(30)) // ✅ Include expired
             ->orderBy('policy_end_date')
             ->get();
@@ -244,9 +240,6 @@ class DashboardController extends Controller
 
         // ==================== 5. PHV LICENSES (Including Expired) ====================
         $expiringPhvs = CarPhv::with(['car'])
-            ->whereHas('car', function ($query) {
-                $query->where('tenant_id', Auth::user()->currentTenant()->id); // ✅ Filter by tenant
-            })
             ->where('expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
             ->orderBy('expiry_date')
             ->get();
@@ -288,9 +281,6 @@ class DashboardController extends Controller
 
         // ==================== 6. MOT CERTIFICATES (Including Expired) ====================
         $expiringMots = CarMot::with(['car'])
-            ->whereHas('car', function ($query) {
-                $query->where('tenant_id', Auth::user()->currentTenant()->id); // ✅ Filter by tenant
-            })
             ->where('expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
             ->orderBy('expiry_date')
             ->get();
@@ -331,11 +321,7 @@ class DashboardController extends Controller
         }
 
         // ==================== 7. ROAD TAX (Including Expired) ====================
-        $allRoadTaxes = CarRoadTax::with(['car'])
-            ->whereHas('car', function ($query) {
-                $query->where('tenant_id', Auth::user()->currentTenant()->id); // ✅ Filter by tenant
-            })
-            ->get();
+        $allRoadTaxes = CarRoadTax::with(['car'])->get();
 
         $expiringRoadTaxes = $allRoadTaxes->filter(function ($roadTax) {
             $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
@@ -379,8 +365,7 @@ class DashboardController extends Controller
         }
 
         // ==================== 8. DRIVER LICENSES (Including Expired) ====================
-        $expiringDriverLicenses = Driver::where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
-        ->where('driver_license_expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
+        $expiringDriverLicenses = Driver::where('driver_license_expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
         ->orderBy('driver_license_expiry_date')
             ->get();
 
@@ -420,9 +405,8 @@ class DashboardController extends Controller
         }
 
         // ==================== 9. PHD LICENSES (Including Expired) ====================
-        $expiringPhdLicenses = Driver::where('tenant_id', Auth::user()->currentTenant()->id) // ✅ Filter by tenant
-        ->whereNotNull('phd_license_expiry_date')
-            ->where('phd_license_expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
+        $expiringPhdLicenses = Driver::whereNotNull('phd_license_expiry_date')
+            ->where('phd_license_expiry_date', '<=', now()->addDays(30))
             ->orderBy('phd_license_expiry_date')
             ->get();
 
