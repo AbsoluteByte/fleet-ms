@@ -26,7 +26,7 @@
     <!-- Notification Summary Cards - ALL TYPES -->
     <div class="row g-3 mb-4">
         {{-- 1. Overdue Payments - RED --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card critical" onclick="filterByType('overdue_payment')">
                 <div class="summary-icon">
                     <i class="feather icon-alert-triangle"></i>
@@ -39,7 +39,7 @@
         </div>
 
         {{-- 2. Due Today - ORANGE --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card warning" onclick="filterByType('due_today')">
                 <div class="summary-icon">
                     <i class="feather icon-clock"></i>
@@ -52,7 +52,7 @@
         </div>
 
         {{-- 3. Due This Week - BLUE --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card info" onclick="filterByType('due_this_week')">
                 <div class="summary-icon">
                     <i class="feather icon-calendar"></i>
@@ -65,7 +65,7 @@
         </div>
 
         {{-- 4. Expiring Insurance - TEAL --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card teal" onclick="filterByType('insurance_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-shield"></i>
@@ -78,7 +78,7 @@
         </div>
 
         {{-- 5. Expiring PHV - INDIGO --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card indigo" onclick="filterByType('phv_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-award"></i>
@@ -91,7 +91,7 @@
         </div>
 
         {{-- 6. Expiring MOT - YELLOW --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card yellow" onclick="filterByType('mot_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-tool"></i>
@@ -104,7 +104,7 @@
         </div>
 
         {{-- 7. Expiring Road Tax - GREEN --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card success" onclick="filterByType('road_tax_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-credit-card"></i>
@@ -117,7 +117,7 @@
         </div>
 
         {{-- 8. Driver Licenses - CYAN --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card cyan" onclick="filterByType('driver_license_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-user"></i>
@@ -130,7 +130,7 @@
         </div>
 
         {{-- 9. PHD Licenses - GRAY --}}
-        <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-1">
             <div class="summary-card secondary" onclick="filterByType('phd_license_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-user-check"></i>
