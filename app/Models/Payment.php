@@ -18,7 +18,8 @@ class Payment extends Model
         'stripe_public_key',
         'stripe_secret_key',
         'paypal_client_id',
-        'paypal_secret'
+        'paypal_secret',
+        'tenant_id', 'createdBy', 'updatedBy'
     ];
 
     public function company()

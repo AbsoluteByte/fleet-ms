@@ -1,3 +1,4 @@
+{{-- resources/views/backend/dashboard/notifications.blade.php --}}
 @extends('layouts.admin', ['title' => 'Fleet Notifications'])
 
 @section('content')
@@ -22,9 +23,10 @@
         </div>
     </div>
 
-    <!-- Notification Summary Cards -->
-    <div class="row g-4 mb-4">
-        <div class="col-xl-2 col-md-4 col-sm-6">
+    <!-- Notification Summary Cards - ALL TYPES -->
+    <div class="row g-3 mb-4">
+        {{-- 1. Overdue Payments - RED --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
             <div class="summary-card critical" onclick="filterByType('overdue_payment')">
                 <div class="summary-icon">
                     <i class="feather icon-alert-triangle"></i>
@@ -36,7 +38,8 @@
             </div>
         </div>
 
-        <div class="col-xl-2 col-md-4 col-sm-6">
+        {{-- 2. Due Today - ORANGE --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
             <div class="summary-card warning" onclick="filterByType('due_today')">
                 <div class="summary-icon">
                     <i class="feather icon-clock"></i>
@@ -48,7 +51,8 @@
             </div>
         </div>
 
-        <div class="col-xl-2 col-md-4 col-sm-6">
+        {{-- 3. Due This Week - BLUE --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
             <div class="summary-card info" onclick="filterByType('due_this_week')">
                 <div class="summary-icon">
                     <i class="feather icon-calendar"></i>
@@ -60,8 +64,9 @@
             </div>
         </div>
 
-        <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card primary" onclick="filterByType('insurance_expiry')">
+        {{-- 4. Expiring Insurance - TEAL --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="summary-card teal" onclick="filterByType('insurance_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-shield"></i>
                 </div>
@@ -72,8 +77,22 @@
             </div>
         </div>
 
-        <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card secondary" onclick="filterByType('mot_expiry')">
+        {{-- 5. Expiring PHV - INDIGO --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="summary-card indigo" onclick="filterByType('phv_expiry')">
+                <div class="summary-icon">
+                    <i class="feather icon-award"></i>
+                </div>
+                <div class="summary-content">
+                    <h3>{{ $summary['expiring_phv'] }}</h3>
+                    <p>Expiring PHV</p>
+                </div>
+            </div>
+        </div>
+
+        {{-- 6. Expiring MOT - YELLOW --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="summary-card yellow" onclick="filterByType('mot_expiry')">
                 <div class="summary-icon">
                     <i class="feather icon-tool"></i>
                 </div>
@@ -84,50 +103,107 @@
             </div>
         </div>
 
-        <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="summary-card success" onclick="filterByType('driver_license_expiry')">
+        {{-- 7. Expiring Road Tax - GREEN --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="summary-card success" onclick="filterByType('road_tax_expiry')">
                 <div class="summary-icon">
-                    <i class="feather icon-users"></i>
+                    <i class="feather icon-credit-card"></i>
+                </div>
+                <div class="summary-content">
+                    <h3>{{ $summary['expiring_road_tax'] }}</h3>
+                    <p>Expiring Road Tax</p>
+                </div>
+            </div>
+        </div>
+
+        {{-- 8. Driver Licenses - CYAN --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="summary-card cyan" onclick="filterByType('driver_license_expiry')">
+                <div class="summary-icon">
+                    <i class="feather icon-user"></i>
                 </div>
                 <div class="summary-content">
                     <h3>{{ $summary['expiring_driver_licenses'] }}</h3>
-                    <p>Expiring Licenses</p>
+                    <p>Driver Licenses</p>
+                </div>
+            </div>
+        </div>
+
+        {{-- 9. PHD Licenses - GRAY --}}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="summary-card secondary" onclick="filterByType('phd_license_expiry')">
+                <div class="summary-icon">
+                    <i class="feather icon-user-check"></i>
+                </div>
+                <div class="summary-content">
+                    <h3>{{ $summary['expiring_phd_licenses'] }}</h3>
+                    <p>PHD Licenses</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Filter Tabs -->
+    <!-- Filter Tabs - ALL TYPES -->
     <div class="filter-tabs-container mb-4">
-        <ul class="nav nav-pills filter-tabs" role="tablist">
+        <ul class="nav nav-pills filter-tabs flex-wrap" role="tablist">
             <li class="nav-item">
                 <a class="nav-link active" href="javascript:void(0)" onclick="filterByType('')">
-                    All Notifications
-                    <span class="badge">{{ $summary['total_count'] }}</span>
+                    <i class="feather icon-list me-1"></i> All
+                    <span class="badge bg-dark ms-1">{{ $summary['total_count'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" href="javascript:void(0)" onclick="filterByType('overdue_payment')">
-                    Overdue Payments
-                    <span class="badge badge-danger">{{ $summary['overdue_payments'] }}</span>
+                    <i class="feather icon-alert-triangle me-1"></i> Overdue
+                    <span class="badge bg-danger ms-1">{{ $summary['overdue_payments'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" href="javascript:void(0)" onclick="filterByType('due_today')">
-                    Due Today
-                    <span class="badge badge-warning">{{ $summary['due_today'] }}</span>
+                    <i class="feather icon-clock me-1"></i> Due Today
+                    <span class="badge bg-warning ms-1">{{ $summary['due_today'] }}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('due_this_week')">
+                    <i class="feather icon-calendar me-1"></i> This Week
+                    <span class="badge bg-info ms-1">{{ $summary['due_this_week'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" href="javascript:void(0)" onclick="filterByType('insurance_expiry')">
-                    Insurance
-                    <span class="badge badge-primary">{{ $summary['expiring_insurance'] }}</span>
+                    <i class="feather icon-shield me-1"></i> Insurance
+                    <span class="badge bg-primary ms-1">{{ $summary['expiring_insurance'] }}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('phv_expiry')">
+                    <i class="feather icon-award me-1"></i> PHV
+                    <span class="badge bg-secondary ms-1">{{ $summary['expiring_phv'] }}</span>
                 </a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" href="javascript:void(0)" onclick="filterByType('mot_expiry')">
-                    MOT
-                    <span class="badge badge-secondary">{{ $summary['expiring_mot'] }}</span>
+                    <i class="feather icon-tool me-1"></i> MOT
+                    <span class="badge bg-warning ms-1">{{ $summary['expiring_mot'] }}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('road_tax_expiry')">
+                    <i class="feather icon-credit-card me-1"></i> Road Tax
+                    <span class="badge bg-success ms-1">{{ $summary['expiring_road_tax'] }}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('driver_license_expiry')">
+                    <i class="feather icon-user me-1"></i> Driver License
+                    <span class="badge bg-info ms-1">{{ $summary['expiring_driver_licenses'] }}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="javascript:void(0)" onclick="filterByType('phd_license_expiry')">
+                    <i class="feather icon-user-check me-1"></i> PHD License
+                    <span class="badge bg-secondary ms-1">{{ $summary['expiring_phd_licenses'] }}</span>
                 </a>
             </li>
         </ul>
@@ -161,66 +237,75 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
 
     <style>
-        /* Previous CSS remains same... */
+        /* ✅ Standard Bootstrap Colors - No Purple! */
         :root {
-            --critical-color: #ef4444;
-            --warning-color: #f59e0b;
-            --info-color: #3b82f6;
-            --primary-color: #6366f1;
-            --secondary-color: #6b7280;
-            --success-color: #22c55e;
+            --critical-color: #dc3545;    /* Bootstrap Red */
+            --warning-color: #fd7e14;     /* Bootstrap Orange */
+            --info-color: #0dcaf0;        /* Bootstrap Cyan */
+            --primary-color: #0d6efd;     /* Bootstrap Blue */
+            --secondary-color: #6c757d;   /* Bootstrap Gray */
+            --success-color: #198754;     /* Bootstrap Green */
+            --teal-color: #20c997;        /* Bootstrap Teal */
+            --indigo-color: #6610f2;      /* Bootstrap Indigo */
+            --yellow-color: #ffc107;      /* Bootstrap Yellow */
+            --cyan-color: #0dcaf0;        /* Bootstrap Cyan */
         }
 
         body {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            background: #f8f9fa;
         }
 
         .notifications-header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(15px);
-            border-radius: 20px;
+            background: white;
+            border-radius: 10px;
             padding: 2rem;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
         }
 
         .notifications-title {
-            font-size: 2.5rem;
+            font-size: 2rem;
             font-weight: 700;
-            color: #1a202c;
+            color: #212529;
             margin-bottom: 0.5rem;
         }
+
         .notifications-subtitle {
-            color: #718096;
+            color: #6c757d;
             font-size: 1rem;
         }
 
+        /* Summary Cards */
         .summary-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(15px);
-            border-radius: 15px;
-            padding: 1.5rem;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: white;
+            border-radius: 10px;
+            padding: 1.25rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
             gap: 1rem;
             border-left: 4px solid;
             cursor: pointer;
+            height: 100%;
         }
 
         .summary-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         }
 
+        /* Standard Bootstrap Colors */
         .summary-card.critical { border-left-color: var(--critical-color); }
         .summary-card.warning { border-left-color: var(--warning-color); }
         .summary-card.info { border-left-color: var(--info-color); }
         .summary-card.primary { border-left-color: var(--primary-color); }
         .summary-card.secondary { border-left-color: var(--secondary-color); }
         .summary-card.success { border-left-color: var(--success-color); }
+        .summary-card.teal { border-left-color: var(--teal-color); }
+        .summary-card.indigo { border-left-color: var(--indigo-color); }
+        .summary-card.yellow { border-left-color: var(--yellow-color); }
+        .summary-card.cyan { border-left-color: var(--cyan-color); }
 
         .summary-icon {
             width: 50px;
@@ -230,57 +315,124 @@
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
+            flex-shrink: 0;
         }
 
         .critical .summary-icon {
-            background: rgba(239, 68, 68, 0.1);
+            background: rgba(220, 53, 69, 0.1);
             color: var(--critical-color);
         }
 
         .warning .summary-icon {
-            background: rgba(245, 158, 11, 0.1);
+            background: rgba(253, 126, 20, 0.1);
             color: var(--warning-color);
         }
 
+        .info .summary-icon {
+            background: rgba(13, 202, 240, 0.1);
+            color: var(--info-color);
+        }
+
+        .primary .summary-icon {
+            background: rgba(13, 110, 253, 0.1);
+            color: var(--primary-color);
+        }
+
+        .secondary .summary-icon {
+            background: rgba(108, 117, 125, 0.1);
+            color: var(--secondary-color);
+        }
+
+        .success .summary-icon {
+            background: rgba(25, 135, 84, 0.1);
+            color: var(--success-color);
+        }
+
+        .teal .summary-icon {
+            background: rgba(32, 201, 151, 0.1);
+            color: var(--teal-color);
+        }
+
+        .indigo .summary-icon {
+            background: rgba(102, 16, 242, 0.1);
+            color: var(--indigo-color);
+        }
+
+        .yellow .summary-icon {
+            background: rgba(255, 193, 7, 0.1);
+            color: var(--yellow-color);
+        }
+
+        .cyan .summary-icon {
+            background: rgba(13, 202, 240, 0.1);
+            color: var(--cyan-color);
+        }
+
+        .summary-content h3 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            color: #212529;
+        }
+
+        .summary-content p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        /* Filter Tabs */
         .filter-tabs-container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: white;
+            border-radius: 10px;
             padding: 1rem;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
 
         .filter-tabs .nav-link {
-            background: rgba(0,0,0,0.05);
+            background: #f8f9fa;
             border: none;
-            border-radius: 10px;
-            color: #6b7280;
+            border-radius: 8px;
+            color: #495057;
             font-weight: 500;
-            padding: 0.75rem 1.5rem;
+            padding: 0.6rem 1rem;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            margin: 0.25rem;
+            white-space: nowrap;
         }
 
-        .filter-tabs .nav-link:hover,
+        .filter-tabs .nav-link:hover {
+            background: #e9ecef;
+            color: #212529;
+        }
+
         .filter-tabs .nav-link.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0d6efd;
             color: white;
         }
 
-        .notifications-card {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        .filter-tabs .nav-link.active .badge {
+            background: white !important;
+            color: #0d6efd !important;
         }
 
-        /* DataTables Custom Styling */
+        /* Notifications Card */
+        .notifications-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        /* DataTables */
         #notificationsTable {
             font-size: 0.95rem;
         }
 
         #notificationsTable thead th {
-            background: #1a202c;
+            background: #212529;
             color: white;
             font-weight: 600;
             border: none;
@@ -288,12 +440,11 @@
         }
 
         #notificationsTable tbody tr {
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         #notificationsTable tbody tr:hover {
-            background: rgba(102, 126, 234, 0.05);
-            transform: translateX(5px);
+            background: #f8f9fa;
         }
 
         .notification-badge {
@@ -304,10 +455,12 @@
             display: inline-block;
         }
 
-        .badge-critical { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-        .badge-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-        .badge-info { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-        .badge-primary { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
+        .badge-critical { background: rgba(220, 53, 69, 0.1); color: #dc3545; }
+        .badge-warning { background: rgba(253, 126, 20, 0.1); color: #fd7e14; }
+        .badge-info { background: rgba(13, 202, 240, 0.1); color: #0dcaf0; }
+        .badge-primary { background: rgba(13, 110, 253, 0.1); color: #0d6efd; }
+        .badge-secondary { background: rgba(108, 117, 125, 0.1); color: #6c757d; }
+        .badge-success { background: rgba(25, 135, 84, 0.1); color: #198754; }
 
         .action-btns {
             display: flex;
@@ -315,32 +468,47 @@
         }
 
         .btn-sm {
-            border-radius: 8px;
+            border-radius: 6px;
             font-size: 0.85rem;
         }
 
         .dataTables_wrapper .dataTables_filter input {
-            border-radius: 20px;
+            border-radius: 6px;
             padding: 0.5rem 1rem;
-            border: 2px solid #e5e7eb;
+            border: 1px solid #dee2e6;
         }
 
         .dataTables_wrapper .dataTables_length select {
-            border-radius: 10px;
+            border-radius: 6px;
             padding: 0.5rem;
-            border: 2px solid #e5e7eb;
+            border: 1px solid #dee2e6;
         }
 
         .page-item.active .page-link {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
+            background: #0d6efd;
+            border-color: #0d6efd;
         }
 
         .page-link {
-            border-radius: 8px;
+            border-radius: 6px;
             margin: 0 2px;
-            border: 2px solid #e5e7eb;
-            color: #6366f1;
+            color: #0d6efd;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .summary-card {
+                margin-bottom: 0.5rem;
+            }
+
+            .filter-tabs {
+                flex-direction: column;
+            }
+
+            .filter-tabs .nav-link {
+                justify-content: space-between;
+                margin: 0.25rem 0;
+            }
         }
     </style>
 @endsection
@@ -380,6 +548,7 @@
                             let badgeClass = '';
                             let icon = '';
 
+                            // ✅ ALL notification types mapped
                             switch(data) {
                                 case 'overdue_payment':
                                     badgeClass = 'badge-critical';
@@ -396,6 +565,26 @@
                                 case 'insurance_expiry':
                                     badgeClass = 'badge-primary';
                                     icon = 'icon-shield';
+                                    break;
+                                case 'phv_expiry':
+                                    badgeClass = 'badge-secondary';
+                                    icon = 'icon-award';
+                                    break;
+                                case 'mot_expiry':
+                                    badgeClass = 'badge-warning';
+                                    icon = 'icon-tool';
+                                    break;
+                                case 'road_tax_expiry':
+                                    badgeClass = 'badge-success';
+                                    icon = 'icon-credit-card';
+                                    break;
+                                case 'driver_license_expiry':
+                                    badgeClass = 'badge-info';
+                                    icon = 'icon-user';
+                                    break;
+                                case 'phd_license_expiry':
+                                    badgeClass = 'badge-secondary';
+                                    icon = 'icon-user-check';
                                     break;
                                 default:
                                     badgeClass = 'badge-secondary';
@@ -450,8 +639,12 @@
                                 </a>`;
                             }
 
+                            // ✅ Show Pay button for ALL payment types
                             if (row.type.includes('payment')) {
-                                html += `<button class="btn btn-sm btn-success" onclick="quickPayment('${row.id}')">
+                                const collectionId = row.id.split('_')[1];
+                                const amount = row.amount ? row.amount.replace('£', '').replace(',', '') : '0';
+
+                                html += `<button class="btn btn-sm btn-success" onclick="quickPayment('${collectionId}', '${amount}')">
                                     <i class="feather icon-credit-card"></i>
                                 </button>`;
                             }
@@ -465,7 +658,7 @@
                         }
                     }
                 ],
-                order: [[0, 'asc']],
+                order: [[4, 'desc']], // Sort by time
                 pageLength: 25,
                 lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
                 dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
@@ -496,26 +689,24 @@
 
         function refreshTable() {
             notificationsTable.ajax.reload(null, false);
-        }
 
-        function markAllAsRead() {
-            if (confirm('Mark all notifications as read?')) {
-                console.log('Marking all as read...');
-                // Add AJAX call here
-            }
+            // Show success message
+            toastr.success('Notifications refreshed!');
         }
 
         function dismissNotification(notificationId) {
             if (confirm('Dismiss this notification?')) {
                 console.log('Dismissing:', notificationId);
-                // Add AJAX call here
+                // TODO: Add AJAX call to mark as dismissed
                 notificationsTable.ajax.reload();
+                toastr.info('Notification dismissed');
             }
         }
 
-        function quickPayment(notificationId) {
-            console.log('Quick payment for:', notificationId);
-            // Add payment logic here
+        function quickPayment(collectionId, amount) {
+            console.log('Quick payment for collection:', collectionId, 'Amount:', amount);
+            // TODO: Open payment modal or redirect
+            window.location.href = `/agreements/collections/${collectionId}/pay`;
         }
     </script>
 @endsection

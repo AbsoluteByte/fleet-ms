@@ -16,13 +16,15 @@
                         class="form-control @error('company_id') is-invalid @enderror" required>
                     <option value="">-- Select Company --</option>
                     @php
-                        try {
-                            $companies = \App\Models\Company::select('name', 'id')->get()->pluck('name', 'id');
-                            $selectedCompany = old('company_id') ?? ($model->company_id ?? '');
-                        } catch (\Exception $e) {
-                            $companies = collect();
-                            $selectedCompany = old('company_id') ?? '';
-                        }
+                        $tenant = \Illuminate\Support\Facades\Auth::user()->currentTenant();
+
+                    try {
+                        $companies = \App\Models\Company::where('tenant_id', $tenant->id)->select('name', 'id')->get()->pluck('name', 'id');
+                        $selectedCompany = old('company_id') ?? ($model->company_id ?? '');
+                    } catch (\Exception $e) {
+                        $companies = collect();
+                        $selectedCompany = old('company_id') ?? '';
+                    }
                     @endphp
                     @foreach($companies as $id => $name)
                         <option value="{{ $id }}" {{ $selectedCompany == $id ? 'selected' : '' }}>

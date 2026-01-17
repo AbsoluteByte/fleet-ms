@@ -1,4 +1,5 @@
 <?php
+// app/Models/Car.php
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,8 @@ class Car extends Model
         'purchase_date' => 'date',
         'purchase_price' => 'decimal:2'
     ];
+
+    // ==================== RELATIONSHIPS ====================
 
     public function tenant()
     {
@@ -67,5 +70,20 @@ class Car extends Model
     public function insurances()
     {
         return $this->hasMany(CarInsurance::class);
+    }
+
+    // ==================== SCOPES ====================
+
+    // ✅ Scope for specific tenant
+    public function scopeForTenant($query, $tenantId)
+    {
+        return $query->where('tenant_id', $tenantId);
+    }
+
+    // ✅ Scope for current user's tenant
+    public function scopeForCurrentTenant($query)
+    {
+        $tenant = auth()->user()->currentTenant();
+        return $query->where('tenant_id', $tenant->id ?? 0);
     }
 }

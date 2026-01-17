@@ -1,6 +1,56 @@
 @extends('layouts.admin', ['title' => 'Dashboard'])
 
 @section('content')
+
+    {{-- ✅ Subscription Status Widget --}}
+    @php
+        $tenant = auth()->user()->currentTenant();
+        $subscription = $tenant->subscription;
+    @endphp
+
+    @if($subscription && $subscription->isTrialing())
+        <div class="alert alert-warning alert-dismissible mb-3" role="alert">
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">×</span>
+            </button>
+            <h4 class="alert-heading">
+                <i class="fa fa-clock"></i> Trial Period Active
+            </h4>
+            <p class="mb-2">
+                You have <strong>{{ $subscription->trialDaysRemaining() }} days</strong> left in your free
+                trial.
+                Your trial ends on <strong>{{ $subscription->trial_ends_at->format('d M, Y') }}</strong>.
+            </p>
+            <hr>
+            <p class="mb-0">
+                <a href="{{ route('subscription.packages') }}" class="btn btn-warning">
+                    <i class="fa fa-crown"></i> Upgrade Now & Continue After Trial
+                </a>
+                <a href="{{ route('subscription.index') }}" class="btn btn-outline-warning ml-2">
+                    View Subscription Details
+                </a>
+            </p>
+        </div>
+    @elseif($subscription && $subscription->hasExpired())
+        <div class="alert alert-danger mb-3">
+            <h4 class="alert-heading">
+                <i class="fa fa-exclamation-triangle"></i> Trial Expired
+            </h4>
+            <p class="mb-2">
+                Your trial period has ended. Please subscribe to continue using the system.
+            </p>
+            <a href="{{ route('subscription.packages') }}" class="btn btn-danger">
+                <i class="fa fa-shopping-cart"></i> Subscribe Now
+            </a>
+        </div>
+    @elseif($subscription && $subscription->isActive())
+        <div class="alert alert-success alert-dismissible mb-3">
+            <button type="button" class="close" data-dismiss="alert">×</button>
+            <i class="fa fa-check-circle"></i>
+            <strong>Active Subscription:</strong> {{ $subscription->package->name }}
+            - Renews on {{ $subscription->current_period_end->format('d M, Y') }}
+        </div>
+    @endif
     <!-- Dashboard Header -->
     <div class="dashboard-header">
         <div class="row align-items-center">
@@ -123,7 +173,8 @@
                     <div class="alert alert-info-light">
                         <i class="feather icon-info me-2"></i>
                         Showing top {{ $taskBarNotifications->count() }} urgent notifications.
-                        <a href="{{ route('notifications.index') }}" class="alert-link">View all notifications</a>
+                        <a href="{{ route('notifications.index') }}" class="alert-link">View all
+                            notifications</a>
                     </div>
                 </div>
             @endif
@@ -258,7 +309,8 @@
                     <div class="agreement-status-legend-modern">
                         @foreach($agreementStatusSummary as $status)
                             <div class="legend-item-modern">
-                                <span class="legend-indicator" style="background-color: {{ $status['color'] }}"></span>
+                                        <span class="legend-indicator"
+                                              style="background-color: {{ $status['color'] }}"></span>
                                 <span class="legend-text">{{ $status['status'] }}</span>
                                 <span class="legend-count">{{ $status['count'] }}</span>
                             </div>
@@ -306,7 +358,8 @@
                                     <td>
                                         <div class="vehicle-info">
                                             <span class="vehicle-reg">{{ $claim->car->registration }}</span>
-                                            <small class="vehicle-model">{{ $claim->car->carModel->name }}</small>
+                                            <small
+                                                class="vehicle-model">{{ $claim->car->carModel->name }}</small>
                                         </div>
                                     </td>
                                     <td>{{ $claim->case_date->format('M d, Y') }}</td>
@@ -314,12 +367,14 @@
                                         <code class="reference-code">{{ $claim->our_reference }}</code>
                                     </td>
                                     <td>
-                                            <span class="status-badge" style="background-color: {{ $claim->status->color }}">
+                                            <span class="status-badge"
+                                                  style="background-color: {{ $claim->status->color }}">
                                                 {{ $claim->status->name }}
                                             </span>
                                     </td>
                                     <td>
-                                        <a href="{{ route('claims.show', $claim) }}" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ route('claims.show', $claim) }}"
+                                           class="btn btn-sm btn-outline-primary">
                                             <i class="feather icon-eye"></i>
                                             View
                                         </a>
@@ -380,11 +435,13 @@
                         <div class="form-group-modern mb-4">
                             <label for="quick_payment_date" class="form-label-modern">Payment Date</label>
                             <input type="date" name="payment_date" id="quick_payment_date"
-                                   class="form-control form-control-modern" value="{{ date('Y-m-d') }}" required>
+                                   class="form-control form-control-modern" value="{{ date('Y-m-d') }}"
+                                   required>
                         </div>
                         <div class="form-group-modern">
                             <label for="payment_method" class="form-label-modern">Payment Method</label>
-                            <select name="payment_method" id="payment_method" class="form-select form-select-modern">
+                            <select name="payment_method" id="payment_method"
+                                    class="form-select form-select-modern">
                                 <option value="bank_transfer">Bank Transfer</option>
                                 <option value="cash">Cash</option>
                                 <option value="card">Card Payment</option>
@@ -415,8 +472,8 @@
             --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             --warning-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
             --danger-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --card-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            --card-hover-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            --card-hover-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
         }
 
         body {
@@ -462,7 +519,7 @@
 
         .task-bar-header {
             padding: 1.5rem 2rem;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -519,13 +576,13 @@
             margin-bottom: 1.5rem;
             border-left: 4px solid;
             transition: all 0.3s ease;
-            border: 1px solid rgba(0,0,0,0.05);
+            border: 1px solid rgba(0, 0, 0, 0.05);
             position: relative;
         }
 
         .task-item:hover {
             transform: translateX(10px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
         }
 
         .task-icon {
@@ -538,7 +595,7 @@
             justify-content: center;
             font-size: 1.5rem;
             flex-shrink: 0;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
 
         .task-content {
@@ -600,7 +657,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            background: rgba(0,0,0,0.05);
+            background: rgba(0, 0, 0, 0.05);
             padding: 0.5rem 1rem;
             border-radius: 20px;
             font-size: 0.85rem;
@@ -636,8 +693,8 @@
 
         .task-bar-footer {
             padding: 1rem 2rem;
-            border-top: 1px solid rgba(0,0,0,0.05);
-            background: rgba(0,0,0,0.02);
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+            background: rgba(0, 0, 0, 0.02);
         }
 
         .alert-info-light {
@@ -688,10 +745,21 @@
             opacity: 0.1;
         }
 
-        .gradient-primary { background: var(--primary-gradient); }
-        .gradient-success { background: var(--success-gradient); }
-        .gradient-warning { background: var(--warning-gradient); }
-        .gradient-danger { background: var(--danger-gradient); }
+        .gradient-primary {
+            background: var(--primary-gradient);
+        }
+
+        .gradient-success {
+            background: var(--success-gradient);
+        }
+
+        .gradient-warning {
+            background: var(--warning-gradient);
+        }
+
+        .gradient-danger {
+            background: var(--danger-gradient);
+        }
 
         .kpi-card-content {
             position: relative;
@@ -776,7 +844,7 @@
 
         .chart-card-header {
             padding: 1.5rem 2rem 1rem;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -812,7 +880,7 @@
             font-weight: 500;
             padding: 0.5rem 1rem;
             border-radius: 20px;
-            background: rgba(0,0,0,0.05);
+            background: rgba(0, 0, 0, 0.05);
         }
 
         .legend-dot {
@@ -821,8 +889,13 @@
             border-radius: 50%;
         }
 
-        .revenue-pill .legend-dot { background: #667eea; }
-        .expense-pill .legend-dot { background: #f093fb; }
+        .revenue-pill .legend-dot {
+            background: #667eea;
+        }
+
+        .expense-pill .legend-dot {
+            background: #f093fb;
+        }
 
         .chart-container-modern {
             position: relative;
@@ -832,7 +905,7 @@
 
         .agreement-status-legend-modern {
             padding: 1.5rem 2rem;
-            border-top: 1px solid rgba(0,0,0,0.05);
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .legend-item-modern {
@@ -874,7 +947,7 @@
 
         .activity-card-header {
             padding: 1.5rem 2rem;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -899,7 +972,7 @@
 
         .table-modern thead th {
             border: none;
-            background: rgba(0,0,0,0.02);
+            background: rgba(0, 0, 0, 0.02);
             font-weight: 600;
             color: #4b5563;
             font-size: 0.85rem;
@@ -912,7 +985,7 @@
             border: none;
             padding: 1.25rem 1.5rem;
             vertical-align: middle;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .vehicle-info {
@@ -957,14 +1030,14 @@
         .modal-modern .modal-content {
             border: none;
             border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
             overflow: hidden;
         }
 
         .modal-header-modern {
             padding: 2rem 2rem 1rem;
             border: none;
-            background: rgba(0,0,0,0.02);
+            background: rgba(0, 0, 0, 0.02);
         }
 
         .modal-title-section {
@@ -992,7 +1065,7 @@
         }
 
         .btn-close-modern {
-            background: rgba(0,0,0,0.05);
+            background: rgba(0, 0, 0, 0.05);
             border: none;
             border-radius: 50%;
             width: 40px;
@@ -1008,7 +1081,7 @@
         }
 
         .payment-details-section {
-            background: rgba(0,0,0,0.02);
+            background: rgba(0, 0, 0, 0.02);
             border-radius: 12px;
             padding: 1rem;
         }
@@ -1054,11 +1127,11 @@
         .modal-footer-modern {
             padding: 1rem 2rem 2rem;
             border: none;
-            background: rgba(0,0,0,0.02);
+            background: rgba(0, 0, 0, 0.02);
         }
 
         .btn-secondary-modern {
-            background: rgba(0,0,0,0.05);
+            background: rgba(0, 0, 0, 0.05);
             border: none;
             color: #6b7280;
             padding: 0.75rem 1.5rem;
@@ -1168,7 +1241,7 @@
         }
 
         // Animate counters on page load with stagger effect
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const counters = document.querySelectorAll('.kpi-value-modern');
             counters.forEach((counter, index) => {
                 const target = parseInt(counter.dataset.target);
@@ -1253,10 +1326,10 @@
                             size: 13
                         },
                         callbacks: {
-                            title: function(context) {
+                            title: function (context) {
                                 return context[0].label + ' 2024';
                             },
-                            label: function(context) {
+                            label: function (context) {
                                 return context.dataset.label + ': £' + context.parsed.y.toLocaleString();
                             }
                         }
@@ -1291,7 +1364,7 @@
                                 size: 12
                             },
                             color: '#6b7280',
-                            callback: function(value) {
+                            callback: function (value) {
                                 return '£' + (value / 1000) + 'k';
                             },
                             padding: 10
@@ -1336,7 +1409,7 @@
                         cornerRadius: 12,
                         padding: 16,
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
                                 const percentage = ((context.raw / total) * 100).toFixed(1);
                                 return context.label + ': ' + context.raw + ' (' + percentage + '%)';
@@ -1428,7 +1501,7 @@
 
         // Add loading states for payment buttons
         document.querySelectorAll('.task-btn-pay').forEach(button => {
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function () {
                 const originalContent = this.innerHTML;
                 this.innerHTML = '<i class="feather icon-loader rotating"></i> Processing...';
                 this.disabled = true;

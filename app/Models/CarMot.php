@@ -9,7 +9,7 @@ class CarMot extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['car_id', 'expiry_date', 'amount', 'term', 'document'];
+    protected $fillable = ['tenant_id', 'car_id', 'expiry_date', 'amount', 'term', 'document'];
 
     protected $casts = [
         'expiry_date' => 'date',

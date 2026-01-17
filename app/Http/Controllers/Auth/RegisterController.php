@@ -1,72 +1,110 @@
 <?php
-
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Tenant;
+use App\Models\Package;
+use App\Models\Subscription;
 use Illuminate\Foundation\Auth\RegistersUsers;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 
 class RegisterController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | Register Controller
-    |--------------------------------------------------------------------------
-    |
-    | This controller handles the registration of new users as well as their
-    | validation and creation. By default this controller uses a trait to
-    | provide this functionality without requiring any additional code.
-    |
-    */
-
     use RegistersUsers;
 
-    /**
-     * Where to redirect users after registration.
-     *
-     * @var string
-     */
-    protected $redirectTo = '/home';
+    protected $redirectTo = '/admin/dashboard';
 
-    /**
-     * Create a new controller instance.
-     *
-     * @return void
-     */
     public function __construct()
     {
         $this->middleware('guest');
     }
 
-    /**
-     * Get a validator for an incoming registration request.
-     *
-     * @param  array  $data
-     * @return \Illuminate\Contracts\Validation\Validator
-     */
+    // ✅ Simple Registration Form
+    public function showRegistrationForm()
+    {
+        return view('auth.register');
+    }
+
+    // ✅ Validate
     protected function validator(array $data)
     {
         return Validator::make($data, [
+            'company_name' => ['required', 'string', 'max:100', 'unique:tenants,company_name'],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'terms' => ['accepted']
         ]);
     }
 
-    /**
-     * Create a new user instance after a valid registration.
-     *
-     * @param  array  $data
-     * @return \App\Models\User
-     */
-    protected function create(array $data)
+    // ✅ Register User
+    protected function register(Request $request)
     {
-        return User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
-        ]);
+        $this->validator($request->all())->validate();
+
+        try {
+            DB::beginTransaction();
+
+            // 1️⃣ Create Tenant
+            $tenant = Tenant::create([
+                'company_name' => $request->company_name,
+                'status' => Tenant::STATUS_ACTIVE,
+            ]);
+
+            // 2️⃣ Create Admin User
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+            ]);
+
+            // 3️⃣ Assign Admin Role
+            $user->assignRole('admin');
+
+            // 4️⃣ Attach to Tenant
+            $tenant->users()->attach($user->id, [
+                'role' => 'admin',
+                'is_primary' => true,
+                'joined_at' => now()
+            ]);
+
+            // 5️⃣ Auto-assign Trial Package
+            $trialPackage = Package::where('name', 'Free Trial')->first();
+
+            if (!$trialPackage) {
+                throw new \Exception('Trial package not found. Please run seeder.');
+            }
+
+            Subscription::create([
+                'tenant_id' => $tenant->id,
+                'package_id' => $trialPackage->id,
+                'status' => 'trialing',
+                'trial_ends_at' => now()->addDays($trialPackage->trial_days),
+                'current_period_start' => now(),
+                'current_period_end' => now()->addMonth(),
+            ]);
+
+            DB::commit();
+
+            // 6️⃣ Login User
+            auth()->login($user);
+
+            return redirect()
+                ->route('admin.dashboard')
+                ->with('success', 'Welcome! Your 30-day free trial has started. Explore all features!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Registration Failed:', ['error' => $e->getMessage()]);
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('error', 'Registration failed: ' . $e->getMessage());
+        }
     }
 }

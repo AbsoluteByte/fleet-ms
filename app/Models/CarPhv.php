@@ -10,7 +10,7 @@ class CarPhv extends Model
     use HasFactory;
 
     protected $fillable = [
-        'car_id', 'counsel_id', 'amount', 'start_date',
+        'tenant_id', 'car_id', 'counsel_id', 'amount', 'start_date',
         'expiry_date', 'notify_before_expiry', 'document'
     ];
 

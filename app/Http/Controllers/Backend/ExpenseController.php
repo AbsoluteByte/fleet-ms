@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Expense;
 use App\Models\Car;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -26,19 +27,37 @@ class ExpenseController extends Controller
 
     public function index()
     {
-        $expenses = Expense::with('car')->latest()->paginate(10);
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+        $expenses = Expense::where('tenant_id', $tenant->id)->with('car')->latest()->paginate(10);
         return view($this->dir . 'index', compact('expenses'));
     }
 
     public function create()
     {
-        $cars = Car::with(['carModel', 'company'])->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'company'])->get();
         return view($this->dir . 'create', compact('cars'));
     }
 
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'car_id' => 'required|exists:cars,id',
             'type' => 'required|string|max:255',
@@ -65,7 +84,8 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-
+        // ✅ Add tenant_id automatically
+        $validated['tenant_id'] = $tenant->id;
         Expense::create($validated);
 
         return redirect()->route('expenses.index')
@@ -74,20 +94,40 @@ class ExpenseController extends Controller
 
     public function show(Expense $expense)
     {
+
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($expense->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car');
+        }
         $expense->load('car');
         return view('expenses.show', compact('expense'));
     }
 
     public function edit($id)
     {
-        $model = Expense::findOrFail($id);
-        $cars = Car::with(['carModel', 'company'])->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        $model = Expense::where('tenant_id', $tenant->id)->findOrFail($id);
+        $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'company'])->get();
 
         return view($this->dir . 'edit', compact('model', 'cars'));
     }
 
     public function update(Request $request, Expense $expense)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'car_id' => 'required|exists:cars,id',
             'type' => 'required|string|max:255',
@@ -121,7 +161,8 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-
+        // ✅ Ensure tenant_id stays the same
+        $validated['tenant_id'] = $tenant->id;
         $expense->update($validated);
 
         return redirect()->route('expenses.index')
@@ -130,6 +171,12 @@ class ExpenseController extends Controller
 
     public function destroy(Expense $expense)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($expense->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
         if ($expense) {
             $image_path = public_path('uploads/expense_documents/' . $expense->document);
             if (File::exists($image_path)) {

@@ -13,9 +13,7 @@ use App\Models\AgreementCollection;
 use App\Models\InsurancePolicy;
 use App\Models\Claim;
 use App\Models\Expense;
-use App\Models\Penalty;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
@@ -24,65 +22,97 @@ class DashboardController extends Controller
 
     public function __construct()
     {
-        $this->middleware('role:admin|superuser');
+        $this->middleware('role:admin|superuser|user');
         view()->share('dir', $this->dir);
     }
 
     public function index()
     {
-        // Basic stats
-        $totalCars = Car::count();
-        $totalDrivers = Driver::count();
-        $activeAgreements = Agreement::whereDate('end_date', '>=', now())->count();
-        $totalClaims = Claim::count();
+        // ✅ Check if superuser - show special dashboard
+        if (auth()->user()->isSuperUser()) {
+            return view($this->dir . 'superUserDashboard');
+        }
 
-        // Payment notifications and overdue collections
+        // ✅ Get current tenant
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        // ✅ Basic stats (tenant filtered)
+        $totalCars = Car::where('tenant_id', $tenant->id)->count();
+        $totalDrivers = Driver::where('tenant_id', $tenant->id)->count();
+        $activeAgreements = Agreement::where('tenant_id', $tenant->id)
+            ->whereDate('end_date', '>=', now())
+            ->count();
+        $totalClaims = Claim::where('tenant_id', $tenant->id)->count();
+
+        // ✅ Payment notifications (tenant filtered)
         $overdueCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->whereHas('agreement', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
             ->where('payment_status', 'overdue')
             ->orderBy('due_date')
             ->get();
 
         $upcomingCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->whereHas('agreement', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
             ->where('payment_status', 'pending')
             ->whereBetween('due_date', [now(), now()->addDays(7)])
             ->orderBy('due_date')
             ->get();
 
-        // Get unified notifications for dashboard
+        // ✅ Get unified notifications for dashboard
         $notificationData = $this->getUnifiedNotifications();
         $taskBarNotifications = $notificationData['notifications']->take(6);
 
-        // Financial summary
-        $monthlyRevenue = AgreementCollection::where('payment_status', 'paid')
+        // ✅ Financial summary (tenant filtered)
+        $monthlyRevenue = AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
+            $query->where('tenant_id', $tenant->id);
+        })
+            ->where('payment_status', 'paid')
             ->whereMonth('payment_date', now()->month)
             ->sum('amount_paid');
 
-        $totalOutstanding = AgreementCollection::whereIn('payment_status', ['pending', 'overdue'])
+        $totalOutstanding = AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
+            $query->where('tenant_id', $tenant->id);
+        })
+            ->whereIn('payment_status', ['pending', 'overdue'])
             ->sum('amount');
 
-        // Monthly trends
+        // ✅ Monthly trends (tenant filtered)
         $monthlyRevenueData = [];
         $monthlyExpenseData = [];
 
         for ($i = 11; $i >= 0; $i--) {
             $date = now()->subMonths($i);
 
-            $monthlyRevenueData[] = AgreementCollection::where('payment_status', 'paid')
+            $monthlyRevenueData[] = AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
+                ->where('payment_status', 'paid')
                 ->whereYear('payment_date', $date->year)
                 ->whereMonth('payment_date', $date->month)
                 ->sum('amount_paid');
 
-            $monthlyExpenseData[] = Expense::whereYear('date', $date->year)
+            $monthlyExpenseData[] = Expense::where('tenant_id', $tenant->id)
+                ->whereYear('date', $date->year)
                 ->whereMonth('date', $date->month)
                 ->sum('amount');
         }
 
-        // Agreement status summary
+        // ✅ Agreement status summary (tenant filtered)
         $agreementStatusSummary = Agreement::with('status')
+            ->where('tenant_id', $tenant->id)
             ->selectRaw('status_id, COUNT(*) as count')
             ->groupBy('status_id')
             ->get()
-            ->map(function($item) {
+            ->map(function ($item) {
                 return [
                     'status' => $item->status->name,
                     'count' => $item->count,
@@ -90,28 +120,49 @@ class DashboardController extends Controller
                 ];
             });
 
-        // Recent activities
+        // ✅ Recent activities (tenant filtered)
         $recentClaims = Claim::with(['car', 'status'])
+            ->where('tenant_id', $tenant->id)
             ->latest()
             ->take(5)
             ->get();
-        if (auth()->user()->isSuperUser()) {
-           return view($this->dir.'superUserDashboard');
-        }
-        else{
-            return view($this->dir.'index', compact(
-                'totalCars', 'totalDrivers', 'activeAgreements', 'totalClaims',
-                'overdueCollections', 'upcomingCollections', 'taskBarNotifications',
-                'monthlyRevenue', 'totalOutstanding', 'monthlyRevenueData',
-                'monthlyExpenseData', 'agreementStatusSummary', 'recentClaims'
-            ));
-        }
+
+        return view($this->dir . 'index', compact(
+            'totalCars', 'totalDrivers', 'activeAgreements', 'totalClaims',
+            'overdueCollections', 'upcomingCollections', 'taskBarNotifications',
+            'monthlyRevenue', 'totalOutstanding', 'monthlyRevenueData',
+            'monthlyExpenseData', 'agreementStatusSummary', 'recentClaims'
+        ));
     }
 
+    // ✅ UNIFIED METHOD: Get all notifications (tenant filtered)
     public function getUnifiedNotifications()
     {
-        // Update overdue collections first
-        AgreementCollection::where('payment_status', 'pending')
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return [
+                'notifications' => collect(),
+                'summary' => [
+                    'overdue_payments' => 0,
+                    'due_today' => 0,
+                    'due_this_week' => 0,
+                    'expiring_insurance' => 0,
+                    'expiring_phv' => 0,
+                    'expiring_mot' => 0,
+                    'expiring_road_tax' => 0,
+                    'expiring_driver_licenses' => 0,
+                    'expiring_phd_licenses' => 0,
+                    'total_count' => 0
+                ]
+            ];
+        }
+
+        // ✅ Update overdue collections
+        AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
+            $query->where('tenant_id', $tenant->id);
+        })
+            ->where('payment_status', 'pending')
             ->where('due_date', '<', now())
             ->update(['payment_status' => 'overdue']);
 
@@ -119,6 +170,9 @@ class DashboardController extends Controller
 
         // ==================== 1. OVERDUE PAYMENTS ====================
         $overdueCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->whereHas('agreement', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
             ->where('payment_status', 'overdue')
             ->orderBy('due_date')
             ->get();
@@ -145,6 +199,9 @@ class DashboardController extends Controller
 
         // ==================== 2. DUE TODAY PAYMENTS ====================
         $dueTodayCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->whereHas('agreement', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
             ->where('payment_status', 'pending')
             ->whereDate('due_date', now())
             ->get();
@@ -171,6 +228,9 @@ class DashboardController extends Controller
 
         // ==================== 3. DUE THIS WEEK PAYMENTS ====================
         $dueThisWeekCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
+            ->whereHas('agreement', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
             ->where('payment_status', 'pending')
             ->whereBetween('due_date', [now()->addDay(), now()->addWeek()])
             ->get();
@@ -196,16 +256,18 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 4. INSURANCE POLICIES (Including Expired) ====================
+        // ==================== 4. INSURANCE POLICIES ====================
         $expiringInsurance = InsurancePolicy::with(['car'])
-            ->where('policy_end_date', '<=', now()->addDays(30)) // ✅ Include expired
+            ->whereHas('car', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
+            ->where('policy_end_date', '<=', now()->addDays(30))
             ->orderBy('policy_end_date')
             ->get();
 
         foreach ($expiringInsurance as $policy) {
             $daysDiff = (int)now()->diffInDays($policy->policy_end_date, false);
 
-            // ✅ Better message formatting
             if ($daysDiff > 0) {
                 $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
                 $color = 'primary';
@@ -238,9 +300,12 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 5. PHV LICENSES (Including Expired) ====================
+        // ==================== 5. PHV LICENSES ====================
         $expiringPhvs = CarPhv::with(['car'])
-            ->where('expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
+            ->whereHas('car', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
+            ->where('expiry_date', '<=', now()->addDays(30))
             ->orderBy('expiry_date')
             ->get();
 
@@ -279,9 +344,12 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 6. MOT CERTIFICATES (Including Expired) ====================
+        // ==================== 6. MOT CERTIFICATES ====================
         $expiringMots = CarMot::with(['car'])
-            ->where('expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
+            ->whereHas('car', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
+            ->where('expiry_date', '<=', now()->addDays(30))
             ->orderBy('expiry_date')
             ->get();
 
@@ -320,12 +388,16 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 7. ROAD TAX (Including Expired) ====================
-        $allRoadTaxes = CarRoadTax::with(['car'])->get();
+        // ==================== 7. ROAD TAX ====================
+        $allRoadTaxes = CarRoadTax::with(['car'])
+            ->whereHas('car', function ($query) use ($tenant) {
+                $query->where('tenant_id', $tenant->id);
+            })
+            ->get();
 
         $expiringRoadTaxes = $allRoadTaxes->filter(function ($roadTax) {
             $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
-            return $expiryDate && $expiryDate <= now()->addDays(30); // ✅ Include expired
+            return $expiryDate && $expiryDate <= now()->addDays(30);
         });
 
         foreach ($expiringRoadTaxes as $roadTax) {
@@ -364,9 +436,10 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 8. DRIVER LICENSES (Including Expired) ====================
-        $expiringDriverLicenses = Driver::where('driver_license_expiry_date', '<=', now()->addDays(30)) // ✅ Include expired
-        ->orderBy('driver_license_expiry_date')
+        // ==================== 8. DRIVER LICENSES ====================
+        $expiringDriverLicenses = Driver::where('tenant_id', $tenant->id)
+            ->where('driver_license_expiry_date', '<=', now()->addDays(30))
+            ->orderBy('driver_license_expiry_date')
             ->get();
 
         foreach ($expiringDriverLicenses as $driver) {
@@ -404,8 +477,9 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 9. PHD LICENSES (Including Expired) ====================
-        $expiringPhdLicenses = Driver::whereNotNull('phd_license_expiry_date')
+        // ==================== 9. PHD LICENSES ====================
+        $expiringPhdLicenses = Driver::where('tenant_id', $tenant->id)
+            ->whereNotNull('phd_license_expiry_date')
             ->where('phd_license_expiry_date', '<=', now()->addDays(30))
             ->orderBy('phd_license_expiry_date')
             ->get();
@@ -445,7 +519,7 @@ class DashboardController extends Controller
             ]);
         }
 
-        // Sort notifications by priority and then by creation date
+        // Sort notifications
         $sortedNotifications = $notifications->sortBy([
             ['priority', 'asc'],
             ['created_at', 'asc']
@@ -471,24 +545,18 @@ class DashboardController extends Controller
         ];
     }
 
+    // ✅ API Endpoint: Get notifications for header bell
     public function getFleetNotifications()
     {
         $data = $this->getUnifiedNotifications();
 
         return response()->json([
-            'overdue' => $data['summary']['overdue_payments'],
-            'due_today' => $data['summary']['due_today'],
-            'due_this_week' => $data['summary']['due_this_week'],
-            'expiring_insurance' => $data['summary']['expiring_insurance'],
-            'expiring_phv' => $data['summary']['expiring_phv'],
-            'expiring_mot' => $data['summary']['expiring_mot'],
-            'expiring_road_tax' => $data['summary']['expiring_road_tax'],
-            'expiring_driver_licenses' => $data['summary']['expiring_driver_licenses'],
-            'expiring_phd_licenses' => $data['summary']['expiring_phd_licenses'],
-            'notifications' => $data['notifications']->take(15)->values()
+            'notifications' => $data['notifications']->take(15)->values(),
+            'summary' => $data['summary']
         ]);
     }
 
+    // ✅ Notifications Index Page
     public function notificationsIndex(Request $request)
     {
         // If DataTables AJAX request
@@ -508,9 +576,10 @@ class DashboardController extends Controller
         $data = $this->getUnifiedNotifications();
         $summary = $data['summary'];
 
-        return view($this->dir.'notifications', compact('summary'));
+        return view($this->dir . 'notifications', compact('summary'));
     }
-    // Helper method to calculate road tax expiry date
+
+    // ✅ Helper method: Calculate road tax expiry
     private function calculateRoadTaxExpiry($roadTax)
     {
         if (!$roadTax->start_date || !$roadTax->term) {
@@ -538,10 +607,5 @@ class DashboardController extends Controller
                 }
                 return null;
         }
-    }
-
-    public function fileManager()
-    {
-        return view('backend.file-manager');
     }
 }

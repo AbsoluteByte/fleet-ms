@@ -7,6 +7,7 @@ use App\Models\Car;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class ClaimController extends Controller
@@ -27,22 +28,38 @@ class ClaimController extends Controller
 
     public function index()
     {
-        $claims = Claim::with(['car', 'insuranceProvider', 'status'])
-            ->latest()
-            ->paginate(10);
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+        $claims = Claim::where('tenant_id', $tenant->id)->with(['car', 'insuranceProvider', 'status'])->get();
         return view($this->dir.'index', compact('claims'));
     }
 
     public function create()
     {
-        $cars = Car::with(['carModel', 'company'])->get();
-        $insuranceProviders = InsuranceProvider::all();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $cars = Car::with(['carModel', 'company'])->where('tenant_id', $tenant->id)->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'claim')->get();
         return view($this->dir.'create', compact('cars', 'insuranceProviders', 'statuses'));
     }
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'car_id' => 'required|exists:cars,id',
             'insurance_provider_id' => 'required|exists:insurance_providers,id',
@@ -55,7 +72,8 @@ class ClaimController extends Controller
             'notes' => 'nullable|string',
             'status_id' => 'required|exists:statuses,id',
         ]);
-
+        // ✅ Add tenant_id automatically
+        $validated['tenant_id'] = $tenant->id;
         Claim::create($validated);
 
         return redirect()->route('claims.index')
@@ -64,15 +82,28 @@ class ClaimController extends Controller
 
     public function show(Claim $claim)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($claim->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car');
+        }
         $claim->load(['car', 'insuranceProvider', 'status']);
         return view($this->dir.'show', compact('claim'));
     }
 
     public function edit($id)
     {
-        $model = Claim::findOrFail($id);
-        $cars = Car::with(['carModel', 'company'])->get();
-        $insuranceProviders = InsuranceProvider::all();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        $model = Claim::where('tenant_id', $tenant->id)->findOrFail($id);
+        $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'company'])->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'claim')->get();
 
         return view($this->dir.'edit', compact('model', 'cars', 'insuranceProviders', 'statuses'));
@@ -80,6 +111,12 @@ class ClaimController extends Controller
 
     public function update(Request $request, Claim $claim)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'car_id' => 'required|exists:cars,id',
             'insurance_provider_id' => 'required|exists:insurance_providers,id',
@@ -93,6 +130,8 @@ class ClaimController extends Controller
             'status_id' => 'required|exists:statuses,id',
         ]);
 
+        // ✅ Ensure tenant_id stays the same
+        $validated['tenant_id'] = $tenant->id;
         $claim->update($validated);
 
         return redirect()->route('claims.index')
@@ -101,6 +140,12 @@ class ClaimController extends Controller
 
     public function destroy(Claim $claim)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($claim->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
         $claim->delete();
 
         return redirect()->route('claims.index')

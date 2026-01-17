@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
-use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
@@ -25,88 +25,129 @@ class UserController extends Controller
         view()->share('plural', Str::plural($this->name));
     }
 
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function index()
     {
-        $users = User::role(['user', 'driver'])->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        // Get users who belong to current tenant only
+        $users = $tenant->users()
+            ->whereHas('roles', function ($query) {
+                $query->whereIn('name', ['user', 'driver']);
+            })
+            ->get();
 
         return view($this->dir . 'index', compact('users'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function create()
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
         $model = new User();
         return view($this->dir . 'create', compact('model'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\Response
-     */
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
         $this->validate($request, [
             'name' => ['required', 'string', 'max:50'],
             'email' => ['required', 'string', 'email', 'max:50', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed']
         ]);
 
-        $model = new User();
-        $model->name = request('name', null);
-        $model->email = request('email', null);
-        $model->password = Hash::make(request('password'));
-        $model->parent_id = Auth::id();
-        $model->assignRole('user');
-        $model->save();
+        try {
+            DB::beginTransaction();
+            // Create user
+            $model = new User();
+            $model->name = request('name', null);
+            $model->email = request('email', null);
+            $model->password = Hash::make(request('password'));
+            $model->save();
 
-        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' saved Successfully!');
+            // Assign role
+            $model->assignRole('user');
+
+            // Attach user to current tenant
+            $model->tenants()->attach($tenant->id, [
+                'role' => 'user',
+                'is_primary' => true,
+                'joined_at' => now()
+            ]);
+
+            DB::commit();
+
+            return redirect()
+                ->route($this->url . 'index')
+                ->with('success', Str::singular($this->name) . ' saved successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('error', 'Error creating user: ' . $e->getMessage());
+        }
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param \App\Models\User $user
-     * @return \Illuminate\Http\Response
-     */
     public function show($id)
     {
-        $model = User::where('id', $id)->firstOrFail();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        //Check if user belongs to current tenant
+        $model = $tenant->users()->where('users.id', $id)->firstOrFail();
+
         return view($this->dir . 'show', compact('model'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param \App\Models\User $User
-     * @return \Illuminate\Http\Response
-     */
     public function edit($id)
     {
-        $model = User::where('id', $id)->firstOrFail();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        // Check if user belongs to current tenant
+        $model = $tenant->users()->where('users.id', $id)->firstOrFail();
+
         return view($this->dir . 'edit', compact('model'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @param \App\Models\User $User
-     * @return \Illuminate\Http\Response
-     */
     public function update(Request $request, $id)
     {
-        $model = User::where('id', $id)->firstOrFail();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
+        // Check if user belongs to current tenant
+        $model = $tenant->users()->where('users.id', $id)->firstOrFail();
 
         $this->validate($request, [
             'name' => ['required', 'string', 'max:50'],
@@ -117,24 +158,46 @@ class UserController extends Controller
         $model->email = request('email', null);
         $model->save();
 
-        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' updated Successfully!');
+        return redirect()
+            ->route($this->url . 'index')
+            ->with('success', Str::singular($this->name) . ' updated successfully!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param \App\Models\User $User
-     * @return \Illuminate\Http\Response
-     */
     public function destroy($id)
     {
-        $model = User::where('id', $id)->firstOrFail();
-        $model->delete();
+        $tenant = Auth::user()->currentTenant();
 
-        return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' deleted Successfully!');
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
+        // Check if user belongs to current tenant
+        $model = $tenant->users()->where('users.id', $id)->firstOrFail();
+
+        try {
+            DB::beginTransaction();
+
+            // Detach from tenant first
+            $model->tenants()->detach($tenant->id);
+
+            // If user has no other tenants, delete the user
+            if ($model->tenants()->count() === 0) {
+                $model->delete();
+            }
+
+            DB::commit();
+
+            return redirect()
+                ->route($this->url . 'index')
+                ->with('success', Str::singular($this->name) . ' deleted successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return redirect()
+                ->back()
+                ->with('error', 'Error deleting user: ' . $e->getMessage());
+        }
     }
-
-
-
-
 }

@@ -9,7 +9,7 @@ class Penalty extends Model
     use HasFactory;
 
     protected $fillable = [
-        'agreement_id', 'date', 'due_date',
+        'tenant_id', 'agreement_id', 'date', 'due_date',
         'amount', 'document', 'status_id'
     ];
 

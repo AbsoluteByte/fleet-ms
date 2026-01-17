@@ -8,7 +8,7 @@ class Counsel extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name'];
+    protected $fillable = ['tenant_id, name', 'createdBy', 'updatedBy'];
 
     public function carPhvs()
     {

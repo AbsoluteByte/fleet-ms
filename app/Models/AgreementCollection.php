@@ -9,7 +9,7 @@ class AgreementCollection extends Model
     use HasFactory;
 
     protected $fillable = [
-        'agreement_id', 'date', 'due_date', 'method', 'amount',
+        'tenant_id','agreement_id', 'date', 'due_date', 'method', 'amount',
         'payment_status', 'amount_paid', 'payment_date', 'notes', 'is_auto_generated'
     ];
 

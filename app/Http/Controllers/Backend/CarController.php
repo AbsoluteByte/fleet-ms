@@ -1,5 +1,5 @@
 <?php
-
+// app/Http/Controllers/Backend/CarController.php
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
@@ -30,26 +30,56 @@ class CarController extends Controller
         view()->share('plural', Str::plural($this->name));
     }
 
+    // ✅ Updated Index
     public function index()
     {
-        $cars = Car::where('tenant_id', Auth::user()->tenant_id)->with(['company', 'carModel'])->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+
+        $cars = Car::where('tenant_id', $tenant->id)
+            ->with(['company', 'carModel'])
+            ->latest()
+            ->get();
+
         return view($this->dir . 'index', compact('cars'));
     }
 
+    // ✅ Updated Create
     public function create()
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
         $model = new Car();
-        $companies = Company::all();
-        $carModels = CarModel::all();
-        $counsels = Counsel::all();
-        $insuranceProviders = InsuranceProvider::all();
+
+        // ✅ Filter by tenant
+        $companies = Company::where('tenant_id', $tenant->id)->get();
+        $carModels = CarModel::where('tenant_id', $tenant->id)->get();
+        $counsels = Counsel::where('tenant_id', $tenant->id)->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'insurance')->get();
 
         return view($this->dir . 'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
     }
 
+    // ✅ Updated Store
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
         // Build validation rules dynamically
         $rules = [
             'company_id' => 'required|exists:companies,id',
@@ -64,18 +94,15 @@ class CarController extends Controller
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
 
-            // MOTs
             'mots.*.expiry_date' => 'required|date',
             'mots.*.amount' => 'required|numeric|min:0',
             'mots.*.term' => 'required|string',
             'mots.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
 
-            // Road Taxes
             'road_taxes.*.start_date' => 'required|date',
             'road_taxes.*.term' => 'required|string',
             'road_taxes.*.amount' => 'required|numeric|min:0',
 
-            // PHVs
             'phvs.*.counsel_id' => 'required|exists:counsels,id',
             'phvs.*.amount' => 'required|numeric|min:0',
             'phvs.*.start_date' => 'required|date',
@@ -84,7 +111,6 @@ class CarController extends Controller
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ];
 
-        // ✅ Add insurance validation only if checkbox is checked
         if ($request->has('has_insurance')) {
             $rules = array_merge($rules, [
                 'insurance_provider_id' => 'required|exists:insurance_providers,id',
@@ -99,15 +125,14 @@ class CarController extends Controller
         $validated = $request->validate($rules);
 
         try {
-            $car = DB::transaction(function () use ($validated, $request) {
-                // Handle main V5 document upload
+            $car = DB::transaction(function () use ($validated, $request, $tenant) {
                 if ($request->hasFile('v5_document')) {
                     $validated['v5_document'] = $this->uploadFile($request->file('v5_document'), 'uploads/cars');
                 }
 
-                // Create car record
-                $validated['tenant_id'] = Auth::user()->tenant_id;
-                $validated['createdBy'] = Auth::user()->id;
+                // ✅ Add tenant_id automatically
+                $validated['tenant_id'] = $tenant->id;
+                $validated['createdBy'] = Auth::id();
                 $car = Car::create($validated);
 
                 // Store MOTs
@@ -143,7 +168,7 @@ class CarController extends Controller
                     }
                 }
 
-                // ✅ Store Insurance ONLY if checkbox is checked
+                // Store Insurance
                 if ($request->has('has_insurance')) {
                     $insuranceData = [
                         'car_id' => $car->id,
@@ -177,29 +202,60 @@ class CarController extends Controller
         }
     }
 
+    // ✅ Updated Show
     public function show(Car $car)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($car->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car');
+        }
+
         $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status']);
         return view($this->dir . 'show', compact('car'));
     }
 
+    // ✅ Updated Edit
     public function edit($id)
     {
-        $model = Car::with(['mots', 'roadTaxes', 'phvs', 'insurances'])->findOrFail($id);
-        $companies = Company::all();
-        $carModels = CarModel::all();
-        $counsels = Counsel::all();
-        $insuranceProviders = InsuranceProvider::all();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        $model = Car::where('tenant_id', $tenant->id)
+            ->with(['mots', 'roadTaxes', 'phvs', 'insurances'])
+            ->findOrFail($id);
+
+        // ✅ Filter by tenant
+        $companies = Company::where('tenant_id', $tenant->id)->get();
+        $carModels = CarModel::where('tenant_id', $tenant->id)->get();
+        $counsels = Counsel::where('tenant_id', $tenant->id)->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'insurance')->get();
 
         return view($this->dir . 'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
     }
 
+    // ✅ Updated Update
     public function update(Request $request, $id)
     {
-        $car = Car::findOrFail($id);
+        $tenant = Auth::user()->currentTenant();
 
-        // Build validation rules dynamically
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
+        // ✅ Check ownership
+        $car = Car::where('tenant_id', $tenant->id)->findOrFail($id);
+
+        // ... rest of your existing update code (keep it as is)
+        // Just make sure tenant_id stays the same
+
         $rules = [
             'company_id' => 'required|exists:companies,id',
             'car_model_id' => 'required|exists:car_models,id',
@@ -213,19 +269,16 @@ class CarController extends Controller
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
 
-            // MOTs
             'mots.*.id' => 'nullable|exists:car_mots,id',
             'mots.*.expiry_date' => 'required|date',
             'mots.*.amount' => 'required|numeric|min:0',
             'mots.*.term' => 'required|string',
             'mots.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
 
-            // Road Taxes
             'road_taxes.*.start_date' => 'required|date',
             'road_taxes.*.term' => 'required|string',
             'road_taxes.*.amount' => 'required|numeric|min:0',
 
-            // PHVs
             'phvs.*.id' => 'nullable|exists:car_phvs,id',
             'phvs.*.counsel_id' => 'required|exists:counsels,id',
             'phvs.*.amount' => 'required|numeric|min:0',
@@ -235,7 +288,6 @@ class CarController extends Controller
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ];
 
-        // ✅ Add insurance validation only if checkbox is checked
         if ($request->has('has_insurance')) {
             $rules = array_merge($rules, [
                 'insurance_provider_id' => 'required|exists:insurance_providers,id',
@@ -250,9 +302,8 @@ class CarController extends Controller
         $validated = $request->validate($rules);
 
         try {
-            $updatedCar = DB::transaction(function () use ($validated, $request, $car) {
+            $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant) {
 
-                // ==================== V5 DOCUMENT HANDLING ====================
                 if ($request->hasFile('v5_document')) {
                     $oldV5Document = $car->v5_document;
                     $validated['v5_document'] = $this->uploadFile(
@@ -264,9 +315,13 @@ class CarController extends Controller
                     }
                 }
 
-                // Update car record
-                $validated['updatedBy'] = Auth::user()->id;
+                // ✅ Ensure tenant_id stays the same
+                $validated['tenant_id'] = $tenant->id;
+                $validated['updatedBy'] = Auth::id();
                 $car->update($validated);
+
+                // ... rest of your MOT, Road Tax, PHV, Insurance update code (keep as is)
+                // Your existing code is good, just continue with it
 
                 // ==================== Update MOTs ====================
                 $existingMots = $car->mots->keyBy('id');
@@ -366,7 +421,6 @@ class CarController extends Controller
                 $existingInsurance = $car->insurances->first();
 
                 if ($request->has('has_insurance')) {
-                    // ✅ User wants insurance
                     $insuranceData = [
                         'car_id' => $car->id,
                         'insurance_provider_id' => $validated['insurance_provider_id'],
@@ -395,7 +449,6 @@ class CarController extends Controller
                         $car->insurances()->create($insuranceData);
                     }
                 } else {
-                    // ✅ User doesn't want insurance - Delete existing
                     if ($existingInsurance) {
                         if ($existingInsurance->insurance_document) {
                             $this->deleteFile($existingInsurance->insurance_document, 'uploads/cars/insurance_documents');
@@ -417,6 +470,37 @@ class CarController extends Controller
         }
     }
 
+    // ✅ Updated Destroy
+    public function destroy(Car $car)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($car->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        try {
+            DB::transaction(function () use ($car) {
+                $car->mots()->delete();
+                $car->roadTaxes()->delete();
+                $car->phvs()->delete();
+                $car->insurances()->delete();
+                $car->delete();
+            });
+
+            $this->deleteCarFiles($car);
+
+            return redirect()->route($this->url . 'index')
+                ->with('success', 'Car deleted successfully.');
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Error deleting car: ' . $e->getMessage());
+        }
+    }
+
+    // ✅ Keep your existing helper methods
     private function uploadFile($file, $directory)
     {
         $mimeType = $file->getMimeType();
@@ -450,28 +534,6 @@ class CarController extends Controller
             if (File::exists($filePath)) {
                 File::delete($filePath);
             }
-        }
-    }
-
-    public function destroy(Car $car)
-    {
-        try {
-            DB::transaction(function () use ($car) {
-                $car->mots()->delete();
-                $car->roadTaxes()->delete();
-                $car->phvs()->delete();
-                $car->insurances()->delete();
-                $car->delete();
-            });
-
-            $this->deleteCarFiles($car);
-
-            return redirect()->route($this->url . 'index')
-                ->with('success', 'Car deleted successfully.');
-
-        } catch (\Exception $e) {
-            return redirect()->back()
-                ->with('error', 'Error deleting car: ' . $e->getMessage());
         }
     }
 

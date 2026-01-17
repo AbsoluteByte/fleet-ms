@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Company;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class PaymentController extends Controller
@@ -24,18 +25,36 @@ class PaymentController extends Controller
 
     public function index()
     {
-        $payments = Payment::with('company')->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+        $payments = Payment::where('tenant_id', $tenant->id)->with('company')->get();
         return view($this->dir.'index', compact('payments'));
     }
 
     public function create()
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
         $model = new Payment();
         return view($this->dir.'create', compact('model'));
     }
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $rules = [
             'payment_type' => 'required|string|max:255',
             'company_id' => 'required|exists:companies,id',
@@ -56,7 +75,8 @@ class PaymentController extends Controller
         }
 
         $validated = $request->validate($rules);
-
+        $validated['tenant_id'] = $tenant->id;
+        $validated['createdBy'] = Auth::id();
         Payment::create($validated);
 
         return redirect()->route($this->url.'index')
@@ -71,12 +91,24 @@ class PaymentController extends Controller
 
     public function edit($id)
     {
-        $model = Payment::findOrFail($id);
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $model = Payment::where('tenant_id', $tenant->id)->findOrFail($id);
         return view($this->dir.'edit', compact('model'));
     }
 
     public function update(Request $request, Payment $payment)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $rules = [
             'payment_type' => 'required|string|max:255',
             'company_id' => 'required|exists:companies,id',
@@ -97,7 +129,8 @@ class PaymentController extends Controller
         }
 
         $validated = $request->validate($rules);
-
+        $validated['tenant_id'] = $tenant->id;
+        $validated['updatedBy'] = Auth::id();
         $payment->update($validated);
 
         return redirect()->route($this->url.'index')
@@ -106,6 +139,12 @@ class PaymentController extends Controller
 
     public function destroy(Payment $payment)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($payment->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
         $payment->delete();
 
         return redirect()->route($this->url.'index')

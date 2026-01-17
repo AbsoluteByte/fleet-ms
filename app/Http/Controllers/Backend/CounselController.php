@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Counsel;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class CounselController extends Controller
@@ -23,22 +24,31 @@ class CounselController extends Controller
 
     public function index()
     {
-        $counsels = Counsel::get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+        $counsels = Counsel::where('tenant_id', $tenant->id)->get();
         return view($this->dir.'index', compact('counsels'));
     }
 
     public function create()
     {
         $model = new Counsel();
-        return view($this->dir.'create');
+        return view($this->dir.'create', compact('model'));
     }
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:counsels',
         ]);
-
+        $validated['tenant_id'] = $tenant->id;
+        $validated['createdBy'] = Auth::id();
         Counsel::create($validated);
 
         return redirect()->route('counsels.index')
@@ -47,16 +57,24 @@ class CounselController extends Controller
 
     public function edit($id)
     {
-        $model = Counsel::findOrFail($id);
+        $tenant = Auth::user()->currentTenant();
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $model = Counsel::where('tenant_id', $tenant->id)->findOrFail($id);
         return view($this->dir.'edit', compact('model'));
     }
 
     public function update(Request $request, Counsel $counsel)
     {
+        $tenant = Auth::user()->currentTenant();
+
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:counsels,name,' . $counsel->id,
         ]);
-
+        $validated['tenant_id'] = $tenant->id;
+        $validated['updatedBy'] = Auth::id();
         $counsel->update($validated);
 
         return redirect()->route('counsels.index')
@@ -65,6 +83,12 @@ class CounselController extends Controller
 
     public function destroy(Counsel $counsel)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($counsel->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
         $counsel->delete();
 
         return redirect()->route('counsels.index')

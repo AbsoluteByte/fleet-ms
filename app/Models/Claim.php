@@ -11,7 +11,7 @@ class Claim extends Model
     protected $fillable = [
         'car_id', 'insurance_provider_id', 'case_date', 'incident_date',
         'our_reference', 'case_reference', 'courtesy_type',
-        'follow_up', 'notes', 'status_id'
+        'follow_up', 'notes', 'status_id', 'tenant_id'
     ];
 
     protected $casts = [

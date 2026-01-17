@@ -1,4 +1,5 @@
-@extends('layouts.admin', ['title' => 'Customers'])
+@extends('layouts.admin', ['title' => $plural])
+
 @section('content')
     <section id="basic-datatable">
         <div class="row">
@@ -18,31 +19,90 @@
                                 <table id="dataTable" class="table datatable table-bordered table-striped">
                                     <thead>
                                     <tr>
-                                        <th>Name</th>
-                                        <th>Email</th>
-                                        <th>Role</th>
-                                        <th>Action</th>
+                                        <th>#</th>
+                                        <th>Company</th>
+                                        <th>Admin</th>
+                                        <th>Package</th>
+                                        <th>Status</th>
+                                        <th>Subscription</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    @forelse($users as $user)
+                                    @forelse($tenants as $tenant)
+                                        @php
+                                            $admin = $tenant->users->first();
+                                            $subscription = $tenant->subscription;
+                                        @endphp
                                         <tr>
-                                            <td>{{ $user->name }}</td>
-                                            <td>{{ $user->email }}</td>
-                                            <td>{{ $user->roles->first()->name ?? 'No Role' }}</td>
+                                            <td>{{ $loop->iteration }}</td>
+                                            <td>
+                                                <strong>{{ $tenant->company_name }}</strong>
+                                            </td>
+                                            <td>
+                                                {{ $admin->name ?? 'N/A' }}<br>
+                                                <small class="text-muted">{{ $admin->email ?? '' }}</small>
+                                            </td>
+                                            <td>
+                                                @if($subscription && $subscription->package)
+                                                    <span class="badge badge-info">
+                                                    {{ $subscription->package->name }}
+                                                </span><br>
+                                                    <small>£{{ number_format($subscription->package->price, 2) }}</small>
+                                                @elseif($subscription)
+                                                    <span class="badge badge-warning">Package Missing</span>
+                                                    @if(config('app.debug'))
+                                                        <br><small>Sub ID: {{ $subscription->id }}, Pkg
+                                                            ID: {{ $subscription->package_id }}</small>
+                                                    @endif
+                                                @else
+                                                    <span class="badge badge-secondary">No Subscription</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($tenant->isActive())
+                                                    <span class="badge badge-success">Active</span>
+                                                @else
+                                                    <span class="badge badge-danger">Suspended</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($subscription)
+                                                    @if($subscription->isTrialing())
+                                                        <span class="badge badge-warning">Trial</span><br>
+                                                        <small>{{ $subscription->trialDaysRemaining() }} days
+                                                            left</small>
+                                                    @elseif($subscription->isActive())
+                                                        <span class="badge badge-success">Active</span>
+                                                    @elseif($subscription->isSuspended())
+                                                        <span class="badge badge-danger">Suspended</span>
+                                                    @else
+                                                        <span
+                                                            class="badge badge-secondary">{{ ucfirst($subscription->status) }}</span>
+                                                    @endif
+                                                @else
+                                                    <span class="badge badge-secondary">N/A</span>
+                                                @endif
+                                            </td>
+                                            <td>{{ $tenant->created_at->format('d M, Y') }}</td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <a href="{{ route('customers.show', $user) }}" class="btn btn-sm btn-outline-info">
+                                                    <a href="{{ route($url . 'show', $tenant->id) }}"
+                                                       class="btn btn-sm btn-info" title="View">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
-                                                    <a href="{{ route('customers.edit', $user) }}" class="btn btn-sm btn-outline-warning">
+                                                    <a href="{{ route($url . 'edit', $tenant->id) }}"
+                                                       class="btn btn-sm btn-primary" title="Edit">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
-                                                    <form action="{{ route('customers.destroy', $user) }}" method="POST" style="display: inline;">
+                                                    <form action="{{ route($url . 'destroy', $tenant->id) }}"
+                                                          method="POST" style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                                onclick="return confirm('Are you sure?')">
+                                                        <button type="submit" class="btn btn-sm btn-danger"
+                                                                onclick="return confirm('Are you sure?')"
+                                                                title="Delete">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
                                                     </form>
@@ -51,11 +111,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted py-4">
-                                                <i class="fa fa-handshake fa-3x mb-3"></i>
-                                                <br>
-                                                No customers found. <a href="{{ route('customers.create') }}">Create your first user</a>
-                                            </td>
+                                            <td colspan="8" class="text-center">No customers found</td>
                                         </tr>
                                     @endforelse
                                     </tbody>
@@ -68,9 +124,11 @@
         </div>
     </section>
 @endsection
+
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
 @endsection
+
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
@@ -79,6 +137,7 @@
             $('#dataTable').DataTable({
                 processing: true,
                 responsive: true,
+                order: [[0, 'desc']] // Latest first
             });
         });
     </script>

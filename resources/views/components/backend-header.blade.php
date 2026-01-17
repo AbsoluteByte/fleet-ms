@@ -107,7 +107,7 @@
 
         async updateHeaderNotifications() {
             try {
-                const response = await fetch('dashboard/fleet-notifications');
+                const response = await fetch('{{ route("dashboard.fleet-notifications") }}');
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch notifications');

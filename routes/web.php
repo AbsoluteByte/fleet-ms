@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Frontend\AgreementController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
@@ -18,6 +18,10 @@ Route::post('driver/invitation/{token}', [\App\Http\Controllers\HomeController::
 Route::get('/agreement/create', [AgreementController::class, 'create'])->name('frontend.agreements.create');
 Route::post('/agreement/store', [AgreementController::class, 'store'])->name('frontend.agreements.store');
 Route::get('/agreement/success', [AgreementController::class, 'success'])->name('frontend.agreements.success');
+
+// Webhook Route (Outside auth middleware)
+Route::post('stripe/webhook', [App\Http\Controllers\StripeWebhookController::class, 'handleWebhook'])
+    ->name('stripe.webhook');
 
 Route::prefix('admin')->middleware('auth')->group(function () {
     // Dashboard
@@ -36,10 +40,30 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
 
     Route::resource('customers', App\Http\Controllers\Backend\CustomerController::class);
+    Route::post('customers/{id}/suspend', [App\Http\Controllers\Backend\CustomerController::class, 'suspend'])->name('customers.suspend');
+    Route::post('customers/{id}/activate', [App\Http\Controllers\Backend\CustomerController::class, 'activate'])->name('customers.activate');
 
     Route::resource('roles', App\Http\Controllers\Backend\RoleController::class);
 
     Route::resource('permissions', App\Http\Controllers\Backend\PermissionController::class);
+
+    // Subscription Management
+    Route::prefix('subscription')->name('subscription.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Backend\SubscriptionController::class, 'index'])->name('index');
+        Route::get('/packages', [App\Http\Controllers\Backend\SubscriptionController::class, 'packages'])->name('packages');
+        Route::post('/subscribe/{package}', [App\Http\Controllers\Backend\SubscriptionController::class, 'subscribe'])->name('subscribe');
+        Route::post('/cancel', [App\Http\Controllers\Backend\SubscriptionController::class, 'cancel'])->name('cancel');
+        Route::post('/resume', [App\Http\Controllers\Backend\SubscriptionController::class, 'resume'])->name('resume');
+        Route::get('/invoices', [App\Http\Controllers\Backend\SubscriptionController::class, 'invoices'])->name('invoices');
+        Route::get('/invoices/{invoice}', [App\Http\Controllers\Backend\SubscriptionController::class, 'viewInvoice'])->name('invoices.view'); // ✅ Add this
+        Route::get('/payment-methods', [App\Http\Controllers\Backend\SubscriptionController::class, 'paymentMethods'])->name('payment-methods');
+        Route::post('/payment-methods/add', [App\Http\Controllers\Backend\SubscriptionController::class, 'addPaymentMethod'])->name('payment-methods.add');
+        Route::delete('/payment-methods/{paymentMethod}', [App\Http\Controllers\Backend\SubscriptionController::class, 'removePaymentMethod'])->name('payment-methods.remove');
+    });
+
+    // Packages Routes
+    Route::resource('packages', App\Http\Controllers\Backend\PackageController::class);
+    Route::post('packages/{package}/toggle-status', [App\Http\Controllers\Backend\PackageController::class, 'toggleStatus'])->name('packages.toggle-status');
 
     // Main Features
     Route::resource('companies', App\Http\Controllers\Backend\CompanyController::class);
@@ -79,17 +103,12 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     })->name('agreements.regenerate-collections');
 
     // Dashboard API routes
-    Route::get('dashboard/notifications', [App\Http\Controllers\Backend\DashboardController::class, 'getPaymentNotifications'])
-        ->name('dashboard.notifications');
 
+    // ✅ Fleet notifications API (for header bell)
     Route::get('dashboard/fleet-notifications', [App\Http\Controllers\Backend\DashboardController::class, 'getFleetNotifications'])
         ->name('dashboard.fleet-notifications');
 
-    // Single unified route for notifications
-    Route::get('dashboard/fleet-notifications', [App\Http\Controllers\Backend\DashboardController::class, 'getFleetNotifications'])
-        ->name('dashboard.fleet-notifications');
-
-// Notifications index page
+    // ✅ Notifications index page
     Route::get('notifications', [App\Http\Controllers\Backend\DashboardController::class, 'notificationsIndex'])
         ->name('notifications.index');
 

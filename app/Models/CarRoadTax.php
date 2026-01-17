@@ -8,7 +8,7 @@ class CarRoadTax extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['car_id', 'start_date', 'term', 'amount'];
+    protected $fillable = ['tenant_id', 'car_id', 'start_date', 'term', 'amount'];
 
     protected $casts = [
         'start_date' => 'date',

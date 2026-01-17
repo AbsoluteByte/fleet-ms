@@ -11,7 +11,7 @@ class InsuranceProvider extends Model
     protected $fillable = [
         'company_id', 'provider_name', 'insurance_type',
         'amount',
-        'policy_number', 'expiry_date', 'status_id'
+        'policy_number', 'expiry_date', 'status_id', 'tenant_id', 'createdBy', 'updatedBy'
     ];
 
     protected $casts = [

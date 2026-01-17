@@ -46,6 +46,13 @@
                     <span class="menu-title">Permission</span>
                 </a>
             </li>
+            <li class="navigation-header"><span>Settings</span></li>
+            <li class="nav-item {{ Request::is('admin/packages/*') ? 'active' : '' }} {{ Request::is('admin/packages') ? 'active' : '' }}">
+                <a href="{{ route('packages.index') }}">
+                    <i class="fa fa-user"></i>
+                    <span class="menu-title">Packages</span>
+                </a>
+            </li>
             @endrole
             @role('driver')
             <li class="navigation-header"><span>Main</span></li>
@@ -63,6 +70,16 @@
             </li>
             @endrole
             @role('admin')
+            <li class="navigation-header"><span>Subscription</span></li>
+            <li class="nav-item {{ Request::is('admin/subscription/*') ? 'active' : '' }}">
+                <a href="{{ route('subscription.index') }}">
+                    <i class="fa fa-crown"></i>
+                    <span class="menu-title">My Subscription</span>
+                    @if(auth()->user()->currentTenant()->subscription->isTrialing())
+                        <span class="badge badge-warning">Trial</span>
+                    @endif
+                </a>
+            </li>
             <li class="navigation-header"><span>Main</span></li>
             <li class="nav-item {{ Request::is('admin/agreements/*') ? 'active' : '' }} {{ Request::is('admin/agreements') ? 'active' : '' }}">
                 <a href="{{ route('agreements.index') }}">

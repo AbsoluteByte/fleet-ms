@@ -29,7 +29,9 @@
     <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/core/colors/palette-gradient.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/pages/authentication.css') }}">
     <!-- END: Page CSS-->
-
+    @stack('cssFiles')
+    @yield('css')
+    @stack('css')
 </head>
 <!-- END: Head-->
 
@@ -73,7 +75,9 @@
 <!-- END: Theme JS-->
 <!-- BEGIN: Page JS-->
 <!-- END: Page JS-->
-
+@stack('jsFiles')
+@yield('js')
+@stack('js')
 </body>
 <!-- END: Body-->
 

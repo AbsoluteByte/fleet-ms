@@ -27,17 +27,36 @@ class DriverController extends Controller
 
     public function index()
     {
-        $drivers = Driver::where('tenant_id', Auth::user()->tenant_id)->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+        $drivers = Driver::where('tenant_id', $tenant->id)->get();
         return view($this->dir .'index', compact('drivers'));
     }
 
     public function create()
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
         return view($this->dir.'create');
     }
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
@@ -174,8 +193,9 @@ class DriverController extends Controller
                 $validated['proof_of_address_document'] = $name;
             }
         }
-        $validated['tenant_id'] = Auth::user()->tenant_id;
-        $validated['createdBy'] = Auth::user()->id;
+        // ✅ Add tenant_id automatically
+        $validated['tenant_id'] = $tenant->id;
+        $validated['createdBy'] = Auth::id();
         Driver::create($validated);
 
         return redirect()->route($this->url.'index')
@@ -184,17 +204,36 @@ class DriverController extends Controller
 
     public function show(Driver $driver)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($driver->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car');
+        }
         return view($this->dir.'show', compact('driver'));
     }
 
     public function edit($id)
     {
-        $model = Driver::findOrFail($id);
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $model = Driver::where('tenant_id', $tenant->id)->findOrFail($id);
         return view($this->dir.'edit', compact('model'));
     }
 
     public function update(Request $request, Driver $driver)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
@@ -373,7 +412,9 @@ class DriverController extends Controller
                 $validated['proof_of_address_document'] = $name;
             }
         }
-        $validated['updatedBy'] = Auth::user()->id;
+        // ✅ Ensure tenant_id stays the same
+        $validated['tenant_id'] = $tenant->id;
+        $validated['updatedBy'] = Auth::id();
         $driver->update($validated);
 
         return redirect()->route($this->url.'index')
@@ -382,6 +423,13 @@ class DriverController extends Controller
 
     public function destroy(Driver $driver)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($driver->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
         if ($driver) {
             $files = [
                 $driver->driver_license_document,

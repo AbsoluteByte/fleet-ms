@@ -11,7 +11,7 @@ class Company extends Model
     protected $fillable = [
         'name', 'director_name', 'logo', 'address_line_1',
         'address_line_2', 'postcode', 'town', 'county',
-        'country_id', 'phone', 'email'
+        'country_id', 'phone', 'email', 'tenant_id', 'createdBy', 'updatedBy'
     ];
 
     public function payments()

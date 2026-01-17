@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -25,18 +26,39 @@ class CompanyController extends Controller
 
     public function index()
     {
-        $companies = Company::get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+
+        $companies = Company::where('tenant_id', $tenant->id)->get();
         return view($this->dir . 'index', compact('companies'));
     }
 
     public function create()
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
         $model = new Company();
         return view($this->dir . 'create', compact('model'));
     }
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'director_name' => 'required|string|max:255',
@@ -63,6 +85,8 @@ class CompanyController extends Controller
             }
         }
 
+        $validated['tenant_id'] = $tenant->id;
+        $validated['createdBy'] = Auth::id();
         Company::create($validated);
 
         return redirect()->route('companies.index')
@@ -71,18 +95,36 @@ class CompanyController extends Controller
 
     public function show(Company $company)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($company->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car');
+        }
         $company->load('country');
         return view($this->dir.'show', compact('company'));
     }
 
     public function edit($id)
     {
-        $model = Company::findOrFail($id);
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $model = Company::where('tenant_id', $tenant->id)->findOrFail($id);
         return view($this->dir . 'edit', compact('model'));
     }
 
     public function update(Request $request, Company $company)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'director_name' => 'required|string|max:255',
@@ -116,7 +158,8 @@ class CompanyController extends Controller
                 $validated['logo'] = $name;
             }
         }
-
+        $validated['tenant_id'] = $tenant->id;
+        $validated['updatedBy'] = Auth::id();
         $company->update($validated);
 
         return redirect()->route($this->url.'index')
@@ -125,6 +168,12 @@ class CompanyController extends Controller
 
     public function destroy(Company $company)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($company->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
         if ($company) {
             $image_path = public_path('uploads/companies/' . $company->logo);
             if (File::exists($image_path)) {

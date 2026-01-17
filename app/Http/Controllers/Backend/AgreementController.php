@@ -32,7 +32,13 @@ class AgreementController extends Controller
 
     public function index()
     {
-        $agreements = Agreement::where('tenant_id', Auth::user()->tenant_id)->with(['company', 'driver', 'car', 'status'])
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status'])
             ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
             ->get();
 
@@ -41,10 +47,16 @@ class AgreementController extends Controller
 
     public function create()
     {
-        $companies = Company::all();
-        $drivers = Driver::all();
-        $cars = Car::all();
-        $insuranceProviders = InsuranceProvider::all(); // Add this
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $companies = Company::where('tenant_id', $tenant->id)->get();
+        $drivers = Driver::where('tenant_id', $tenant->id)->get();
+        $cars = Car::where('tenant_id', $tenant->id)->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get(); // Add this
         $model = new Agreement();
         $statuses = Status::where('type', 'agreement')->get();
 
@@ -53,6 +65,12 @@ class AgreementController extends Controller
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'start_date' => 'required|date',
@@ -86,7 +104,7 @@ class AgreementController extends Controller
             'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
         ]);
         try {
-            $agreement = DB::transaction(function () use ($validated, $request) {
+            $agreement = DB::transaction(function () use ($validated, $request, $tenant) {
                 // Handle file upload for insurance proof document
                 if ($request->hasFile('own_insurance_proof_document')) {
                     $file = $request->file('own_insurance_proof_document');
@@ -96,8 +114,8 @@ class AgreementController extends Controller
                 }
 
                 // Create agreement record
-                $validated['tenant_id'] = Auth::user()->tenant_id;
-                $validated['createdBy'] = Auth::user()->id;
+                $validated['tenant_id'] = $tenant->id;
+                $validated['createdBy'] = Auth::id();
                 $agreement = Agreement::create($validated);
 
                 // Handle collections based on auto schedule setting
@@ -131,6 +149,12 @@ class AgreementController extends Controller
 
     public function show(Agreement $agreement)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car');
+        }
         $agreement->load([
             'company', 'driver', 'car', 'status', 'insuranceProvider',
             'collections' => function($query) {
@@ -146,11 +170,17 @@ class AgreementController extends Controller
 
     public function edit(Agreement $agreement)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
         $model = $agreement->load('collections');
-        $companies = Company::all();
-        $drivers = Driver::all();
-        $cars = Car::all();
-        $insuranceProviders = InsuranceProvider::all(); // Add this
+        $companies = Company::where('tenant_id', $tenant->id)->all();
+        $drivers = Driver::where('tenant_id', $tenant->id)->all();
+        $cars = Car::where('tenant_id', $tenant->id)->all();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->all(); // Add this
         $statuses = Status::where('type', 'agreement')->get();
 
         return view($this->dir . 'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
@@ -158,6 +188,12 @@ class AgreementController extends Controller
 
     public function update(Request $request, Agreement $agreement)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'start_date' => 'required|date',
@@ -191,7 +227,7 @@ class AgreementController extends Controller
             'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
         ]);
         try {
-            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement) {
+            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant) {
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
 
                 // Handle file upload for insurance proof document
@@ -211,7 +247,8 @@ class AgreementController extends Controller
                 }
 
                 // Update agreement record
-                $validated['updatedBy'] = Auth::user()->id;
+                $validated['tenant_id'] = $tenant->id;
+                $validated['updatedBy'] = Auth::id();
                 $agreement->update($validated);
 
                 // Handle collections based on auto schedule setting
@@ -251,6 +288,12 @@ class AgreementController extends Controller
     public function destroy(Agreement $agreement)
     {
         try {
+            $tenant = Auth::user()->currentTenant();
+
+            // ✅ Check ownership
+            if ($agreement->tenant_id !== $tenant->id) {
+                abort(403, 'Unauthorized access');
+            }
             DB::transaction(function () use ($agreement) {
                 // Delete insurance document if exists
                 if ($agreement->own_insurance_proof_document) {

@@ -7,6 +7,7 @@ use App\Models\Penalty;
 use App\Models\Agreement;
 use App\Models\Status;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -27,13 +28,25 @@ class PenaltyController extends Controller
 
     public function index()
     {
-        $penalties = Penalty::with(['agreement', 'status'])->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+        $penalties = Penalty::where('tenant_id', $tenant->id)->with(['agreement', 'status'])->get();
         return view($this->dir . 'index', compact('penalties'));
     }
 
     public function create()
     {
-        $agreements = Agreement::with(['driver', 'car', 'company'])->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['driver', 'car', 'company'])->get();
         $statuses = Status::where('type', 'penalty')->get();
 
         return view($this->dir . 'create', compact('agreements', 'statuses'));
@@ -41,6 +54,12 @@ class PenaltyController extends Controller
 
     public function store(Request $request)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'agreement_id' => 'required|exists:agreements,id',
             'date' => 'required|date',
@@ -68,7 +87,8 @@ class PenaltyController extends Controller
                 $validated['document'] = $name;
             }
         }
-
+        // ✅ Add tenant_id automatically
+        $validated['tenant_id'] = $tenant->id;
         Penalty::create($validated);
 
         return redirect()->route('penalties.index')
@@ -77,14 +97,26 @@ class PenaltyController extends Controller
 
     public function show(Penalty $penalty)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($penalty->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car');
+        }
         $penalty->load(['agreement.driver', 'agreement.car', 'status']);
         return view($this->dir . 'show', compact('penalty'));
     }
 
     public function edit($id)
     {
-        $model = Penalty::findOrFail($id);
-        $agreements = Agreement::with(['driver', 'car', 'company'])->get();
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+        $model = Penalty::where('tenant_id', $tenant->id)->findOrFail($id);
+        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['driver', 'car', 'company'])->get();
         $statuses = Status::where('type', 'penalty')->get();
 
         return view($this->dir . 'edit', compact('model', 'agreements', 'statuses'));
@@ -92,6 +124,12 @@ class PenaltyController extends Controller
 
     public function update(Request $request, Penalty $penalty)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        if (!$tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
         $validated = $request->validate([
             'agreement_id' => 'required|exists:agreements,id',
             'date' => 'required|date',
@@ -125,7 +163,8 @@ class PenaltyController extends Controller
                 $validated['document'] = $name;
             }
         }
-
+        // ✅ Ensure tenant_id stays the same
+        $validated['tenant_id'] = $tenant->id;
         $penalty->update($validated);
 
         return redirect()->route('penalties.index')
@@ -134,6 +173,12 @@ class PenaltyController extends Controller
 
     public function destroy(Penalty $penalty)
     {
+        $tenant = Auth::user()->currentTenant();
+
+        // ✅ Check ownership
+        if ($penalty->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
         if ($penalty) {
             $image_path = public_path('uploads/penalties/' . $penalty->document);
             if (File::exists($image_path)) {
