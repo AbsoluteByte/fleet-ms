@@ -305,9 +305,13 @@ class DashboardController extends Controller
             ->whereHas('car', function ($query) use ($tenant) {
                 $query->where('tenant_id', $tenant->id);
             })
-            ->where('expiry_date', '<=', now()->addDays(45))
+            ->whereRaw(
+                "expiry_date <= DATE_ADD(?, INTERVAL notify_before_expiry DAY)",
+                [now()]
+            )
             ->orderBy('expiry_date')
             ->get();
+
 
         foreach ($expiringPhvs as $phv) {
             $daysDiff = (int)now()->diffInDays($phv->expiry_date, false);
