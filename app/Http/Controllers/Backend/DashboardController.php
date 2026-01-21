@@ -305,7 +305,7 @@ class DashboardController extends Controller
             ->whereHas('car', function ($query) use ($tenant) {
                 $query->where('tenant_id', $tenant->id);
             })
-            ->where('expiry_date', '<=', now()->addDays(30))
+            ->where('expiry_date', '<=', now()->addDays(45))
             ->orderBy('expiry_date')
             ->get();
 
