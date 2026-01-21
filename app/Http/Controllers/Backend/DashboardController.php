@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\Car;
+use App\Models\CarInsurance;
 use App\Models\CarMot;
 use App\Models\CarPhv;
 use App\Models\CarRoadTax;
@@ -257,16 +258,19 @@ class DashboardController extends Controller
         }
 
         // ==================== 4. INSURANCE POLICIES ====================
-        $expiringInsurance = InsurancePolicy::with(['car'])
+        $expiringInsurance = CarInsurance::with(['car'])
             ->whereHas('car', function ($query) use ($tenant) {
                 $query->where('tenant_id', $tenant->id);
             })
-            ->where('policy_end_date', '<=', now()->addDays(30))
-            ->orderBy('policy_end_date')
+            ->whereRaw(
+                "expiry_date <= DATE_ADD(?, INTERVAL notify_before_expiry DAY)",
+                [now()]
+            )
+            ->orderBy('expiry_date')
             ->get();
 
         foreach ($expiringInsurance as $policy) {
-            $daysDiff = (int)now()->diffInDays($policy->policy_end_date, false);
+            $daysDiff = (int)now()->diffInDays($policy->expiry_date, false);
 
             if ($daysDiff > 0) {
                 $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
@@ -290,7 +294,7 @@ class DashboardController extends Controller
                 'message' => $policy->car->registration . ' - ' . $msg,
                 'simple_message' => $policy->car->registration . ' - ' . $msg,
                 'vehicle' => $policy->car->registration,
-                'time_ago' => $policy->policy_end_date->diffForHumans(),
+                'time_ago' => $policy->expiry_date->diffForHumans(),
                 'action_url' => route('cars.show', $policy->car_id),
                 'icon' => 'icon-shield',
                 'color' => $color,
