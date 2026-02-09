@@ -24,6 +24,7 @@
                                         <th>Start Date</th>
                                         <th>End Date</th>
                                         <th>Rent</th>
+                                        <th>E-Sign</th>
                                         <th>Status</th>
                                         <th>Actions</th>
                                     </tr>
@@ -38,22 +39,37 @@
                                             <td>{{ $agreement->end_date->format('M d, Y') }}</td>
                                             <td>£{{ number_format($agreement->agreed_rent, 2) }}</td>
                                             <td>
-                                                <span class="badge" style="background-color: {{ $agreement->status->color }}">
+                                                @if($agreement->hellosign_status)
+                                                    <span class="badge {{ $agreement->esign_status_badge }}">
+                                                        {{ ucfirst($agreement->hellosign_status) }}
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-light text-dark">Not Sent</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <span class="badge"
+                                                      style="background-color: {{ $agreement->status->color }}">
                                                     {{ $agreement->status->name }}
                                                 </span>
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <a href="{{ route('agreements.show', $agreement) }}" class="btn btn-sm btn-outline-info">
+                                                    <a href="{{ route('agreements.show', $agreement) }}"
+                                                       class="btn btn-sm btn-outline-info">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
-                                                    <a href="{{ route('agreements.edit', $agreement) }}" class="btn btn-sm btn-outline-warning">
+                                                    <a href="{{ route('agreements.edit', $agreement) }}"
+                                                       class="btn btn-sm btn-outline-warning">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
-                                                    <a href="{{ route('agreements.pdf', $agreement) }}" class="btn btn-sm btn-outline-danger" target="_blank" title="Generate PDF">
+                                                    <a href="{{ route('agreements.pdf', $agreement) }}"
+                                                       class="btn btn-sm btn-outline-danger" target="_blank"
+                                                       title="Generate PDF">
                                                         <i class="fa fa-file-pdf-o"></i>
                                                     </a>
-                                                    <form action="{{ route('agreements.destroy', $agreement) }}" method="POST" style="display: inline;">
+                                                    <form action="{{ route('agreements.destroy', $agreement) }}"
+                                                          method="POST" style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
                                                         <button type="submit" class="btn btn-sm btn-outline-danger"
@@ -69,7 +85,8 @@
                                             <td colspan="8" class="text-center text-muted py-4">
                                                 <i class="fa fa-handshake fa-3x mb-3"></i>
                                                 <br>
-                                                No agreements found. <a href="{{ route('agreements.create') }}">Create your first agreement</a>
+                                                No agreements found. <a href="{{ route('agreements.create') }}">Create
+                                                    your first agreement</a>
                                             </td>
                                         </tr>
                                     @endforelse

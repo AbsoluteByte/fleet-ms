@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5e5acfce081681f05900ffd6706616ff",
+    "content-hash": "f13222c6805ede7f8fd7b6ce2d4db510",
     "packages": [
         {
             "name": "alexusmai/laravel-file-manager",
@@ -1344,6 +1344,52 @@
                 }
             ],
             "time": "2025-02-03T10:55:03+00:00"
+        },
+        {
+            "name": "hellosign/hellosign-php-sdk",
+            "version": "3.8.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/hellosign/hellosign-php-sdk.git",
+                "reference": "820e436cefa7912f5a4f3a91492bd378d82676ae"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/hellosign/hellosign-php-sdk/zipball/820e436cefa7912f5a4f3a91492bd378d82676ae",
+                "reference": "820e436cefa7912f5a4f3a91492bd378d82676ae",
+                "shasum": ""
+            },
+            "require": {
+                "guzzlehttp/guzzle": "^6.3|^7.0",
+                "php": "^8.0|8.1"
+            },
+            "require-dev": {
+                "phpstan/phpstan": "^1.8",
+                "phpunit/phpunit": "^8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "HelloSign\\": "library/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "HelloSign",
+                    "email": "apisupport@hellosign.com"
+                }
+            ],
+            "description": "This is the official PHP wrapper for HelloSign's API",
+            "support": {
+                "issues": "https://github.com/hellosign/hellosign-php-sdk/issues",
+                "source": "https://github.com/hellosign/hellosign-php-sdk/tree/3.8.0"
+            },
+            "abandoned": true,
+            "time": "2022-07-07T23:40:31+00:00"
         },
         {
             "name": "intervention/gif",

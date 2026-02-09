@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -19,7 +20,15 @@ class Agreement extends Model
         'using_own_insurance', 'insurance_provider_id',
         'own_insurance_provider_name', 'own_insurance_start_date',
         'own_insurance_end_date', 'own_insurance_type',
-        'own_insurance_policy_number', 'own_insurance_proof_document','createdBy', 'updatedBy'
+        'own_insurance_policy_number', 'own_insurance_proof_document', 'createdBy', 'updatedBy',
+
+        'hellosign_request_id',
+        'hellosign_sign_url',
+        'hellosign_status',
+        'hellosign_document_path',
+        'esign_sent_at',
+        'esign_completed_at',
+        'esign_document_path'
     ];
 
     protected $casts = [
@@ -33,7 +42,11 @@ class Agreement extends Model
 
         'using_own_insurance' => 'boolean',
         'own_insurance_start_date' => 'date',
-        'own_insurance_end_date' => 'date'
+        'own_insurance_end_date' => 'date',
+
+        // New e-signature casts
+        'esign_sent_at' => 'datetime',
+        'esign_completed_at' => 'datetime',
     ];
 
     public function company()
@@ -160,5 +173,57 @@ class Agreement extends Model
         return $this->collections()
             ->where('payment_status', 'paid')
             ->sum('amount_paid');
+    }
+
+    /**
+     * Check if agreement can be sent for e-signature
+     */
+    public function canSendForESignature()
+    {
+        return !$this->hellosign_request_id &&
+            $this->driver &&
+            $this->driver->email &&
+            !empty($this->driver->email);
+    }
+
+    /**
+     * Get e-signature status badge
+     */
+    public function getEsignStatusBadgeAttribute()
+    {
+        switch ($this->hellosign_status) {
+            case 'pending':
+                return 'badge bg-warning';
+            case 'signed':
+                return 'badge bg-success';
+            case 'declined':
+                return 'badge bg-danger';
+            case 'cancelled':
+                return 'badge bg-secondary';
+            default:
+                return 'badge bg-light';
+        }
+    }
+
+    /**
+     * Get signed document URL
+     */
+    public function getSignedDocumentUrlAttribute()
+    {
+        if ($this->esign_document_path && file_exists(public_path($this->esign_document_path))) {
+            return asset($this->esign_document_path);
+        }
+        return null;
+    }
+
+    /**
+     * Get e-signature status text
+     */
+    public function getEsignStatusTextAttribute()
+    {
+        if (!$this->hellosign_status) {
+            return 'Not Sent';
+        }
+        return ucfirst($this->hellosign_status);
     }
 }

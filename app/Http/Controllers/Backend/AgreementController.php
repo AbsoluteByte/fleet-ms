@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PDF;
 use Carbon\Carbon;
+use App\Services\HelloSignService;
+use Illuminate\Support\Facades\File;
 class AgreementController extends Controller
 {
     protected $url = 'agreements.';
@@ -177,10 +179,10 @@ class AgreementController extends Controller
                 ->with('error', 'No active company found!');
         }
         $model = $agreement->load('collections');
-        $companies = Company::where('tenant_id', $tenant->id)->all();
-        $drivers = Driver::where('tenant_id', $tenant->id)->all();
-        $cars = Car::where('tenant_id', $tenant->id)->all();
-        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->all(); // Add this
+        $companies = Company::where('tenant_id', $tenant->id)->get();
+        $drivers = Driver::where('tenant_id', $tenant->id)->get();
+        $cars = Car::where('tenant_id', $tenant->id)->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get(); // Add this
         $statuses = Status::where('type', 'agreement')->get();
 
         return view($this->dir . 'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
@@ -365,6 +367,318 @@ class AgreementController extends Controller
 
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to generate PDF: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send agreement for e-signature
+     */
+    public function sendForESignature(Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        if ($agreement->hellosign_request_id) {
+            return redirect()->back()
+                ->with('error', 'Agreement already sent for signature.');
+        }
+
+        if (!$agreement->driver || !$agreement->driver->email) {
+            return redirect()->back()
+                ->with('error', 'Driver email is required for e-signature.');
+        }
+
+        \Log::info('Starting e-signature process for agreement: ' . $agreement->id);
+
+        try {
+            // Generate PDF
+            $pdfPath = $this->generatePDFForESign($agreement);
+
+            if (!$pdfPath) {
+                throw new \Exception('Failed to generate PDF');
+            }
+
+            // Create HelloSign service instance
+            $helloSignService = new \App\Services\HelloSignService();
+
+            // Send to HelloSign
+            $result = $helloSignService->sendAgreementForSignature($agreement, $pdfPath);
+
+            \Log::info('HelloSign Result:', $result);
+
+            if ($result['success']) {
+                $agreement->update([
+                    'hellosign_request_id' => $result['request_id'],
+                    'hellosign_sign_url' => $result['signing_url'],
+                    'hellosign_status' => 'pending',
+                    'esign_sent_at' => now(),
+                ]);
+
+                // Send email
+                $this->sendSignatureEmailToDriver($agreement, $result['signing_url']);
+
+                return redirect()->route('agreements.show', $agreement)
+                    ->with('success', 'Agreement sent for e-signature successfully.');
+            }
+
+            return redirect()->back()
+                ->with('error', 'Failed: ' . ($result['error'] ?? 'Unknown error'));
+
+        } catch (\Exception $e) {
+            \Log::error('Error: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate PDF for e-signature in public/uploads/agreements/temp/
+     */
+    private function generatePDFForESign(Agreement $agreement)
+    {
+        try {
+            $agreement->load(['company', 'driver', 'car', 'car.carModel', 'status']);
+
+            $data = [
+                'agreement' => $agreement,
+                'driver' => $agreement->driver,
+                'car' => $agreement->car,
+                'company' => $agreement->company,
+                'currentDate' => Carbon::now()->format('d/m/Y'),
+            ];
+
+            // Use your existing PDF generation code
+            $pdf = PDF::loadView('backend.agreements.agreement_pdf', $data);
+            $pdf->setPaper('A4', 'portrait');
+
+            // Create directory if not exists
+            $directory = public_path('uploads/agreements/temp');
+            if (!file_exists($directory)) {
+                File::makeDirectory($directory, 0755, true, true);
+            }
+
+            $fileName = "agreement_{$agreement->id}_esign.pdf";
+            $fullPath = "{$directory}/{$fileName}";
+            $relativePath = "uploads/agreements/temp/{$fileName}";
+
+            // Save PDF
+            $pdf->save($fullPath);
+
+            // Check if file exists
+            if (file_exists($fullPath)) {
+                return $relativePath;
+            }
+
+            throw new \Exception('PDF file not created');
+
+        } catch (\Exception $e) {
+            \Log::error('PDF Generation Error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Send email to driver with signing link
+     */
+    private function sendSignatureEmailToDriver(Agreement $agreement, $signingUrl)
+    {
+        try {
+            $driver = $agreement->driver;
+            $company = $agreement->company;
+
+            \Mail::send('emails.agreement_signature', [
+                'driver' => $driver,
+                'agreement' => $agreement,
+                'signing_url' => $signingUrl,
+                'company' => $company
+            ], function ($message) use ($driver, $agreement) {
+                $message->to($driver->email)
+                    ->subject('Fleet Agreement for Signature - ' . $agreement->car->registration);
+            });
+
+            \Log::info('E-signature email sent to driver: ' . $driver->email);
+            return true;
+        } catch (\Exception $e) {
+            \Log::error('Email sending failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check e-signature status
+     */
+    public function checkESignStatus(Agreement $agreement, HelloSignService $helloSignService)
+    {
+        if (!$agreement->hellosign_request_id) {
+            return response()->json(['error' => 'No signature request found'], 400);
+        }
+
+        $status = $helloSignService->getSignatureStatus($agreement->hellosign_request_id);
+
+        if ($status['success'] && $status['is_signed']) {
+            // Download signed PDF
+            $download = $helloSignService->downloadSignedPDF(
+                $agreement->hellosign_request_id,
+                $agreement->id
+            );
+
+            if ($download['success']) {
+                $agreement->update([
+                    'hellosign_status' => 'signed',
+                    'esign_document_path' => $download['path'],
+                    'esign_completed_at' => now(),
+                ]);
+
+                // Delete temporary PDF
+                $tempPath = public_path("uploads/agreements/temp/agreement_{$agreement->id}_esign.pdf");
+                if (file_exists($tempPath)) {
+                    unlink($tempPath);
+                }
+            }
+        }
+
+        return response()->json($status);
+    }
+
+    /**
+     * Webhook handler for HelloSign
+     */
+    public function helloSignWebhook(Request $request, HelloSignService $helloSignService)
+    {
+        try {
+            $event = $request->json()->all();
+
+            \Log::info('HelloSign Webhook Received:', $event);
+
+            $eventType = $event['event']['event_type'] ?? null;
+            $requestId = $event['signature_request']['signature_request_id'] ?? null;
+
+            if (!$requestId) {
+                return response()->json(['error' => 'Invalid webhook data'], 400);
+            }
+
+            // Find agreement
+            $agreement = Agreement::where('hellosign_request_id', $requestId)->first();
+
+            if (!$agreement) {
+                \Log::error('Agreement not found for HelloSign request: ' . $requestId);
+                return response()->json(['error' => 'Agreement not found'], 404);
+            }
+
+            // Handle different events
+            switch ($eventType) {
+                case 'signature_request_signed':
+                    // Download signed PDF
+                    $download = $helloSignService->downloadSignedPDF($requestId, $agreement->id);
+
+                    if ($download['success']) {
+                        $agreement->update([
+                            'hellosign_status' => 'signed',
+                            'esign_document_path' => $download['path'],
+                            'esign_completed_at' => now(),
+                        ]);
+
+                        // Send notification to admin
+                        $this->sendNotificationToAdmin($agreement);
+
+                        \Log::info('Agreement signed: ' . $agreement->id);
+                    }
+                    break;
+
+                case 'signature_request_declined':
+                    $agreement->update(['hellosign_status' => 'declined']);
+                    \Log::info('Agreement declined: ' . $agreement->id);
+                    break;
+
+                case 'signature_request_canceled':
+                    $agreement->update(['hellosign_status' => 'cancelled']);
+                    \Log::info('Agreement cancelled: ' . $agreement->id);
+                    break;
+            }
+
+            return response()->json(['success' => true]);
+
+        } catch (\Exception $e) {
+            \Log::error('Webhook Error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Resend e-signature request
+     */
+    public function resendESignature(Agreement $agreement, HelloSignService $helloSignService)
+    {
+        if (!$agreement->hellosign_request_id) {
+            return redirect()->back()
+                ->with('error', 'No signature request found.');
+        }
+
+        try {
+            $result = $helloSignService->sendReminder(
+                $agreement->hellosign_request_id,
+                $agreement->driver->email,
+                $agreement->driver->full_name
+            );
+
+            if ($result['success']) {
+                return redirect()->back()
+                    ->with('success', 'Signature reminder sent successfully.');
+            }
+
+            return redirect()->back()
+                ->with('error', 'Failed to send reminder: ' . ($result['error'] ?? 'Unknown error'));
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Failed to send reminder: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * View signed document
+     */
+    public function viewSignedDocument(Agreement $agreement)
+    {
+        if (!$agreement->esign_document_path) {
+            abort(404, 'Signed document not found');
+        }
+
+        $fullPath = public_path($agreement->esign_document_path);
+
+        if (!file_exists($fullPath)) {
+            abort(404, 'Document file not found');
+        }
+
+        return response()->file($fullPath, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="signed_agreement_' . $agreement->id . '.pdf"'
+        ]);
+    }
+
+    /**
+     * Send notification to admin
+     */
+    private function sendNotificationToAdmin(Agreement $agreement)
+    {
+        try {
+            $admin = Auth::user();
+
+            \Mail::send('emails.agreement_signed_notification', [
+                'agreement' => $agreement,
+                'admin' => $admin
+            ], function ($message) use ($admin, $agreement) {
+                $message->to($admin->email)
+                    ->subject('Agreement Signed - ' . $agreement->car->registration);
+            });
+
+            \Log::info('Admin notification sent for signed agreement: ' . $agreement->id);
+
+        } catch (\Exception $e) {
+            \Log::error('Admin notification failed: ' . $e->getMessage());
         }
     }
 

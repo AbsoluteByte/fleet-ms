@@ -23,6 +23,9 @@ Route::get('/agreement/success', [AgreementController::class, 'success'])->name(
 Route::post('stripe/webhook', [App\Http\Controllers\StripeWebhookController::class, 'handleWebhook'])
     ->name('stripe.webhook');
 
+Route::post('hellosign/webhook', [App\Http\Controllers\Backend\AgreementController::class, 'helloSignWebhook'])
+    ->name('hellosign.webhook');
+
 Route::prefix('admin')->middleware('auth')->group(function () {
     // Dashboard
     Route::get('/', [App\Http\Controllers\Backend\DashboardController::class, 'index']);
@@ -75,6 +78,17 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     Route::resource('agreements', App\Http\Controllers\Backend\AgreementController::class);
     Route::get('agreements/{agreement}/pdf', [App\Http\Controllers\Backend\AgreementController::class, 'generatePDF'])->name('agreements.pdf');
+
+    // Inside admin prefix group
+    Route::post('agreements/{agreement}/send-esign', [App\Http\Controllers\Backend\AgreementController::class, 'sendForESignature'])
+        ->name('agreements.send-esign');
+    Route::get('agreements/{agreement}/esign-status', [App\Http\Controllers\Backend\AgreementController::class, 'checkESignStatus'])
+        ->name('agreements.esign-status');
+    Route::post('agreements/{agreement}/resend-esign', [App\Http\Controllers\Backend\AgreementController::class, 'resendESignature'])
+        ->name('agreements.resend-esign');
+    Route::get('agreements/{agreement}/view-signed', [App\Http\Controllers\Backend\AgreementController::class, 'viewSignedDocument'])
+        ->name('agreements.view-signed');
+
     // Settings
     Route::resource('payments', App\Http\Controllers\Backend\PaymentController::class);
     Route::resource('users', App\Http\Controllers\Backend\UserController::class);

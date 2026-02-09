@@ -109,7 +109,6 @@
                 </div>
             </div>
         </div>
-
         <div class="col-xl-4">
             <div class="card">
                 <div class="card-header">
@@ -128,6 +127,88 @@
                         <div class="mb-3">
                             <h6 class="text-warning">Next Collection</h6>
                             <p class="mb-0">{{ $agreement->next_collection_date->format('M d, Y') }}</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+        <!-- E-Signature Status Card -->
+        <div class="col-xl-4 mt-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-signature me-2"></i>
+                        E-Signature Status
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if($agreement->hellosign_status)
+                        <div class="mb-3">
+                            <h6>Status</h6>
+                            <span class="{{ $agreement->esign_status_badge }}">
+                        {{ $agreement->esign_status_text }}
+                    </span>
+                        </div>
+
+                        @if($agreement->esign_sent_at)
+                            <div class="mb-3">
+                                <h6>Sent On</h6>
+                                <p class="mb-0">{{ $agreement->esign_sent_at->format('M d, Y h:i A') }}</p>
+                            </div>
+                        @endif
+
+                        @if($agreement->esign_completed_at)
+                            <div class="mb-3">
+                                <h6>Signed On</h6>
+                                <p class="mb-0">{{ $agreement->esign_completed_at->format('M d, Y h:i A') }}</p>
+                            </div>
+                        @endif
+
+                        @if($agreement->hellosign_status == 'pending')
+                            <div class="d-grid gap-2">
+                                <a href="{{ $agreement->hellosign_sign_url }}"
+                                   class="btn btn-warning btn-sm" target="_blank">
+                                    <i class="fas fa-external-link-alt me-1"></i>
+                                    View Signing Link
+                                </a>
+
+                                <form action="{{ route('agreements.resend-esign', $agreement) }}" method="POST">
+                                    @csrf
+                                    <button type="submit" class="btn btn-info btn-sm w-100">
+                                        <i class="fas fa-paper-plane me-1"></i>
+                                        Resend Reminder
+                                    </button>
+                                </form>
+                            </div>
+                        @endif
+
+                        @if($agreement->hellosign_status == 'signed' && $agreement->signed_document_url)
+                            <a href="{{ route('agreements.view-signed', $agreement) }}"
+                               class="btn btn-success btn-sm w-100" target="_blank">
+                                <i class="fas fa-file-pdf me-1"></i>
+                                View Signed Document
+                            </a>
+                        @endif
+                    @else
+                        <div class="text-center py-4">
+                            <i class="fas fa-signature fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">Not sent for e-signature</p>
+
+                            @if($agreement->canSendForESignature())
+                                <form action="{{ route('agreements.send-esign', $agreement) }}" method="POST">
+                                    @csrf
+                                    <button type="submit" class="btn btn-primary btn-sm"
+                                            onclick="return confirm('Send this agreement for e-signature to {{ $agreement->driver->email }}?')">
+                                        <i class="fas fa-paper-plane me-1"></i>
+                                        Send for E-Signature
+                                    </button>
+                                </form>
+                            @else
+                                <p class="small text-danger mt-2">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    Driver email is required for e-signature
+                                </p>
+                            @endif
                         </div>
                     @endif
                 </div>
