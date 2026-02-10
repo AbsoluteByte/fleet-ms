@@ -3,7 +3,7 @@
 @section('content')
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h2">
-            <i class="fas fa-handshake me-2"></i>
+            <i class="fa fa-handshake me-2"></i>
             Agreement Details
         </h1>
         <div class="btn-group">
@@ -22,6 +22,7 @@
         </div>
     </div>
 
+    @include('alerts')
     <!-- Agreement Overview -->
     <div class="row mb-4">
         <div class="col-xl-8">
@@ -137,7 +138,7 @@
             <div class="card">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
-                        <i class="fas fa-signature me-2"></i>
+                        <i class="fa fa-signature me-2"></i>
                         E-Signature Status
                     </h5>
                 </div>
@@ -164,34 +165,61 @@
                             </div>
                         @endif
 
+                        {{-- ✅ PENDING STATUS - Show Check Status + Resend --}}
                         @if($agreement->hellosign_status == 'pending')
                             <div class="d-grid gap-2">
-                                <a href="{{ $agreement->hellosign_sign_url }}"
-                                   class="btn btn-warning btn-sm" target="_blank">
-                                    <i class="fas fa-external-link-alt me-1"></i>
-                                    View Signing Link
-                                </a>
+                                {{-- ✅ Check Status Button --}}
+                                <form action="{{ route('agreements.esign-status', $agreement) }}" method="GET">
+                                    <button type="submit" class="btn btn-info btn-sm w-100">
+                                        <i class="fa fa-sync me-1"></i>
+                                        Check Status & Download
+                                    </button>
+                                </form>
 
+                                {{-- ✅ Resend Reminder --}}
                                 <form action="{{ route('agreements.resend-esign', $agreement) }}" method="POST">
                                     @csrf
-                                    <button type="submit" class="btn btn-info btn-sm w-100">
-                                        <i class="fas fa-paper-plane me-1"></i>
+                                    <button type="submit" class="btn btn-warning btn-sm w-100">
+                                        <i class="fa fa-paper-plane me-1"></i>
                                         Resend Reminder
                                     </button>
                                 </form>
                             </div>
                         @endif
 
-                        @if($agreement->hellosign_status == 'signed' && $agreement->signed_document_url)
-                            <a href="{{ route('agreements.view-signed', $agreement) }}"
-                               class="btn btn-success btn-sm w-100" target="_blank">
-                                <i class="fas fa-file-pdf me-1"></i>
-                                View Signed Document
-                            </a>
+                        {{-- ✅ SIGNED STATUS - Show Download Button --}}
+                        @if($agreement->hellosign_status == 'signed' && $agreement->esign_document_path)
+                            <div class="d-grid gap-2">
+                                <a href="{{ route('agreements.view-signed', $agreement) }}"
+                                   class="btn btn-success btn-sm w-100" target="_blank">
+                                    <i class="fa fa-file-pdf me-1"></i>
+                                    View Signed Document
+                                </a>
+
+                                <a href="{{ asset($agreement->esign_document_path) }}"
+                                   class="btn btn-outline-success btn-sm w-100" download>
+                                    <i class="fa fa-download me-1"></i>
+                                    Download Signed PDF
+                                </a>
+                            </div>
+                        @elseif($agreement->hellosign_status == 'signed' && !$agreement->esign_document_path)
+                            {{-- ✅ If signed but no document, fetch it --}}
+                            <div class="alert alert-info">
+                                <i class="fa fa-info-circle me-1"></i>
+                                Document is signed. Click below to download:
+                            </div>
+                            <form action="{{ route('agreements.esign-status', $agreement) }}" method="GET">
+                                <button type="submit" class="btn btn-success btn-sm w-100">
+                                    <i class="fa fa-download me-1"></i>
+                                    Download Signed Document
+                                </button>
+                            </form>
                         @endif
+
                     @else
+                        {{-- ✅ NOT SENT YET --}}
                         <div class="text-center py-4">
-                            <i class="fas fa-signature fa-3x text-muted mb-3"></i>
+                            <i class="fa fa-signature fa-3x text-muted mb-3"></i>
                             <p class="text-muted">Not sent for e-signature</p>
 
                             @if($agreement->canSendForESignature())
@@ -199,13 +227,13 @@
                                     @csrf
                                     <button type="submit" class="btn btn-primary btn-sm"
                                             onclick="return confirm('Send this agreement for e-signature to {{ $agreement->driver->email }}?')">
-                                        <i class="fas fa-paper-plane me-1"></i>
+                                        <i class="fa fa-paper-plane me-1"></i>
                                         Send for E-Signature
                                     </button>
                                 </form>
                             @else
                                 <p class="small text-danger mt-2">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    <i class="fa fa-exclamation-triangle me-1"></i>
                                     Driver email is required for e-signature
                                 </p>
                             @endif
@@ -220,12 +248,12 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0">
-                <i class="fas fa-calendar-alt me-2"></i>
+                <i class="fa fa-calendar-alt me-2"></i>
                 Payment Collections
             </h5>
             @if($agreement->auto_schedule_collections)
                 <button class="btn btn-sm btn-outline-primary" onclick="regenerateCollections()">
-                    <i class="fas fa-sync me-1"></i>
+                    <i class="fa fa-sync me-1"></i>
                     Regenerate Schedule
                 </button>
             @endif
@@ -268,7 +296,7 @@
                                 @if($collection->payment_status !== 'paid')
                                     <button class="btn btn-sm btn-success"
                                             onclick="showPaymentModal({{ $collection->id }}, {{ $collection->remaining_amount }})">
-                                        <i class="fas fa-pound-sign"></i>
+                                        <i class="fa fa-pound-sign"></i>
                                         Pay
                                     </button>
                                 @endif

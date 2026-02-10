@@ -25,7 +25,6 @@ class Agreement extends Model
         'hellosign_request_id',
         'hellosign_sign_url',
         'hellosign_status',
-        'hellosign_document_path',
         'esign_sent_at',
         'esign_completed_at',
         'esign_document_path'
@@ -176,7 +175,7 @@ class Agreement extends Model
     }
 
     /**
-     * Check if agreement can be sent for e-signature
+     * Check if can send for e-signature
      */
     public function canSendForESignature()
     {
@@ -187,7 +186,7 @@ class Agreement extends Model
     }
 
     /**
-     * Get e-signature status badge
+     * Get e-signature status badge class
      */
     public function getEsignStatusBadgeAttribute()
     {
@@ -201,19 +200,8 @@ class Agreement extends Model
             case 'cancelled':
                 return 'badge bg-secondary';
             default:
-                return 'badge bg-light';
+                return 'badge bg-light text-dark';
         }
-    }
-
-    /**
-     * Get signed document URL
-     */
-    public function getSignedDocumentUrlAttribute()
-    {
-        if ($this->esign_document_path && file_exists(public_path($this->esign_document_path))) {
-            return asset($this->esign_document_path);
-        }
-        return null;
     }
 
     /**
@@ -225,5 +213,16 @@ class Agreement extends Model
             return 'Not Sent';
         }
         return ucfirst($this->hellosign_status);
+    }
+
+    /**
+     * Get signed document URL
+     */
+    public function getSignedDocumentUrlAttribute()
+    {
+        if ($this->esign_document_path && file_exists(public_path($this->esign_document_path))) {
+            return asset($this->esign_document_path);
+        }
+        return null;
     }
 }

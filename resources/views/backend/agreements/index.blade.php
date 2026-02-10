@@ -43,6 +43,16 @@
                                                     <span class="badge {{ $agreement->esign_status_badge }}">
                                                         {{ ucfirst($agreement->hellosign_status) }}
                                                     </span>
+                                                    {{-- ✅ Quick Download Link --}}
+                                                    @if($agreement->hellosign_status === 'signed' && $agreement->esign_document_path)
+                                                        <br>
+                                                        <a href="{{ asset($agreement->esign_document_path) }}"
+                                                           class="btn btn-sm btn-success mt-1"
+                                                           download
+                                                           title="Download Signed Document">
+                                                            <i class="fa fa-download"></i>
+                                                        </a>
+                                                    @endif
                                                 @else
                                                     <span class="badge bg-light text-dark">Not Sent</span>
                                                 @endif
