@@ -34,7 +34,6 @@
                 </a>
             </li>
             @if (auth()->user()->isSuperUser())
-                {
                 <li class="navigation-header"><span>User Management</span></li>
                 <li class="nav-item {{ Request::is('admin/customers/*') ? 'active' : '' }} {{ Request::is('admin/customers') ? 'active' : '' }}">
                     <a href="{{ route('customers.index') }}">
@@ -63,7 +62,7 @@
                 </li>
             @endif
             @if (auth()->user()->isDriver())
-                {
+
                 <li class="navigation-header"><span>Main</span></li>
                 <li class="nav-item {{ Request::is('driver/agreements/*') ? 'active' : '' }} {{ Request::is('driver/agreements') ? 'active' : '' }}">
                     <a href="{{ route('driver.agreements') }}">
@@ -94,7 +93,6 @@
                 </li>
             @endif
             @if (auth()->user()->isAdmin())
-                {
                 <li class="navigation-header"><span>Subscription</span></li>
                 <li class="nav-item {{ Request::is('admin/subscription/*') ? 'active' : '' }}">
                     <a href="{{ route('subscription.index') }}">
