@@ -1,5 +1,4 @@
 <?php
-// app/Http/Controllers/Backend/CarController.php
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
@@ -23,7 +22,7 @@ class CarController extends Controller
 
     public function __construct()
     {
-        $this->middleware('role:admin');
+        $this->middleware('role:admin|manager|user');
         view()->share('url', $this->url);
         view()->share('dir', $this->dir);
         view()->share('singular', Str::singular($this->name));

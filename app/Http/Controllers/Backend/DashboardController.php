@@ -23,7 +23,7 @@ class DashboardController extends Controller
 
     public function __construct()
     {
-        $this->middleware('role:admin|superuser|user');
+        $this->middleware('role:admin|superuser|user|manager');
         view()->share('dir', $this->dir);
     }
 

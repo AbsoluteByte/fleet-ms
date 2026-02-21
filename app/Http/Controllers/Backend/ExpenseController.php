@@ -18,7 +18,7 @@ class ExpenseController extends Controller
 
     public function __construct()
     {
-        $this->middleware('role:admin');
+        $this->middleware('role:admin|manager|user');
         view()->share('url', $this->url);
         view()->share('dir', $this->dir);
         view()->share('singular', Str::singular($this->name));
