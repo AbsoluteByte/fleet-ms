@@ -16,10 +16,10 @@ class AgreementController extends Controller
 {
     public function create()
     {
-        $companies = Company::all();
-        $drivers = Driver::all();
+        $companies = Company::get();
+        $drivers = Driver::get();
         $cars = Car::with('carModel')->get();
-        $insuranceProviders = InsuranceProvider::all();
+        $insuranceProviders = InsuranceProvider::get();
         $statuses = Status::where('type', 'agreement')->get();
 
         return view('frontend.agreements.create', compact(

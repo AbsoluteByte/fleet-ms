@@ -1,9 +1,8 @@
-{{-- resources/views/auth/register.blade.php --}}
 @extends('layouts.auth', ['title' => 'Register'])
 
 @section('content')
     <div class="col-lg-6 d-lg-block d-none text-center align-self-center pl-0 pr-3 py-0">
-        <img src="{{ asset('app-assets/images/pages/logo.png') }}" alt="branding logo">
+        <img src="{{ asset('app-assets/images/logo/app-logo.png') }}" alt="branding logo">
     </div>
     <div class="col-lg-6 col-12 p-0">
         <div class="card rounded-0 mb-0 p-2">
