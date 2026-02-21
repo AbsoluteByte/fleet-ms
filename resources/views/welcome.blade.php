@@ -554,7 +554,7 @@
 <nav class="navbar" id="navbar">
     <div class="nav-container">
         <div class="logo">
-            <i class="fas fa-car"></i> FleetMS
+            <img src="{{ asset('app-assets/images/logo/app-logo.png') }}" style="width: 50%;">
         </div>
         <ul class="nav-links">
             <li><a href="#features">Features</a></li>

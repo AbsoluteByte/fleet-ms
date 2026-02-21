@@ -112,9 +112,18 @@ class RoleController extends Controller
         $model->name = request('name', null);
         $model->save();
 
-        // Sync permissions for the role
-        $permissions = $request->input('permission');
-        $model->syncPermissions($permissions);
+        // First, remove all existing permissions
+        $model->permissions()->detach();
+
+        // Then assign new permissions one by one
+        $permissions = $request->input('permission', []);
+
+        foreach ($permissions as $permissionId) {
+            $permission = Permission::find($permissionId);
+            if ($permission) {
+                $model->givePermissionTo($permission);
+            }
+        }
 
         return redirect()->route($this->url . 'index')->with('success', Str::singular($this->name) . ' updated Successfully!');
     }
