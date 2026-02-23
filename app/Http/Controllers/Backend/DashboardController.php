@@ -29,7 +29,7 @@ class DashboardController extends Controller
 
     public function index()
     {
-        // ✅ Check if superuser - show special dashboard
+        // ✅ Check if superuser
         if (auth()->user()->isSuperUser()) {
             return view($this->dir . 'superUserDashboard');
         }
@@ -42,7 +42,7 @@ class DashboardController extends Controller
                 ->with('error', 'No active company found!');
         }
 
-        // ✅ Basic stats (tenant filtered)
+        // ✅ Basic stats with DYNAMIC GROWTH
         $totalCars = Car::where('tenant_id', $tenant->id)->count();
         $totalDrivers = Driver::where('tenant_id', $tenant->id)->count();
         $activeAgreements = Agreement::where('tenant_id', $tenant->id)
@@ -50,29 +50,53 @@ class DashboardController extends Controller
             ->count();
         $totalClaims = Claim::where('tenant_id', $tenant->id)->count();
 
-        // ✅ Payment notifications (tenant filtered)
-        $overdueCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->whereHas('agreement', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
-            })
-            ->where('payment_status', 'overdue')
-            ->orderBy('due_date')
-            ->get();
+        // ✅ DYNAMIC GROWTH CALCULATION - Last Month vs This Month
+        $lastMonthCars = Car::where('tenant_id', $tenant->id)
+            ->whereMonth('created_at', now()->subMonth()->month)
+            ->whereYear('created_at', now()->subMonth()->year)
+            ->count();
 
-        $upcomingCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->whereHas('agreement', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
-            })
-            ->where('payment_status', 'pending')
-            ->whereBetween('due_date', [now(), now()->addDays(7)])
-            ->orderBy('due_date')
-            ->get();
+        $lastMonthDrivers = Driver::where('tenant_id', $tenant->id)
+            ->whereMonth('created_at', now()->subMonth()->month)
+            ->whereYear('created_at', now()->subMonth()->year)
+            ->count();
 
-        // ✅ Get unified notifications for dashboard
+        $lastMonthRevenue = AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
+            $query->where('tenant_id', $tenant->id);
+        })
+            ->where('payment_status', 'paid')
+            ->whereMonth('payment_date', now()->subMonth()->month)
+            ->sum('amount_paid');
+
+        $lastMonthOutstanding = AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
+            $query->where('tenant_id', $tenant->id);
+        })
+            ->whereIn('payment_status', ['pending', 'overdue'])
+            ->whereMonth('created_at', now()->subMonth()->month)
+            ->sum('amount');
+
+        // Calculate growth percentages
+        $carsGrowth = $lastMonthCars > 0 ? round((($totalCars - $lastMonthCars) / $lastMonthCars) * 100, 1) : 0;
+        $driversGrowth = $lastMonthDrivers > 0 ? round((($totalDrivers - $lastMonthDrivers) / $lastMonthDrivers) * 100, 1) : 0;
+
+        // ✅ Get unified notifications
         $notificationData = $this->getUnifiedNotifications();
-        $taskBarNotifications = $notificationData['notifications']->take(6);
+        $allNotifications = $notificationData['notifications'];
 
-        // ✅ Financial summary (tenant filtered)
+        // ✅ SEPARATE PAYMENT NOTIFICATIONS
+        $paymentNotifications = $allNotifications->filter(function($notification) {
+            return in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
+        })->take(10);
+
+        // ✅ SEPARATE FLEET NOTIFICATIONS (prioritized by expiry)
+        $fleetNotifications = $allNotifications->filter(function($notification) {
+            return !in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
+        })->sortBy(function($notification) {
+            // Sort: Expired first (priority 1), then by created_at
+            return [$notification['priority'], $notification['created_at']];
+        })->take(10);
+
+        // ✅ Financial summary
         $monthlyRevenue = AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
             $query->where('tenant_id', $tenant->id);
         })
@@ -86,7 +110,11 @@ class DashboardController extends Controller
             ->whereIn('payment_status', ['pending', 'overdue'])
             ->sum('amount');
 
-        // ✅ Monthly trends (tenant filtered)
+        // Calculate revenue growth
+        $revenueGrowth = $lastMonthRevenue > 0 ? round((($monthlyRevenue - $lastMonthRevenue) / $lastMonthRevenue) * 100, 1) : 0;
+        $outstandingGrowth = $lastMonthOutstanding > 0 ? round((($totalOutstanding - $lastMonthOutstanding) / $lastMonthOutstanding) * 100, 1) : 0;
+
+        // ✅ Monthly trends
         $monthlyRevenueData = [];
         $monthlyExpenseData = [];
 
@@ -107,7 +135,7 @@ class DashboardController extends Controller
                 ->sum('amount');
         }
 
-        // ✅ Agreement status summary (tenant filtered)
+        // ✅ Agreement status summary
         $agreementStatusSummary = Agreement::with('status')
             ->where('tenant_id', $tenant->id)
             ->selectRaw('status_id, COUNT(*) as count')
@@ -121,7 +149,7 @@ class DashboardController extends Controller
                 ];
             });
 
-        // ✅ Recent activities (tenant filtered)
+        // ✅ Recent activities
         $recentClaims = Claim::with(['car', 'status'])
             ->where('tenant_id', $tenant->id)
             ->latest()
@@ -130,7 +158,8 @@ class DashboardController extends Controller
 
         return view($this->dir . 'index', compact(
             'totalCars', 'totalDrivers', 'activeAgreements', 'totalClaims',
-            'overdueCollections', 'upcomingCollections', 'taskBarNotifications',
+            'carsGrowth', 'driversGrowth', 'revenueGrowth', 'outstandingGrowth',
+            'paymentNotifications', 'fleetNotifications',
             'monthlyRevenue', 'totalOutstanding', 'monthlyRevenueData',
             'monthlyExpenseData', 'agreementStatusSummary', 'recentClaims'
         ));
@@ -570,21 +599,82 @@ class DashboardController extends Controller
         // If DataTables AJAX request
         if ($request->ajax()) {
             $data = $this->getUnifiedNotifications();
-            $notifications = $data['notifications'];
 
-            // Filter by type if requested
+            // ✅ Filter OUT payment notifications - ONLY FLEET NOTIFICATIONS
+            $fleetNotifications = $data['notifications']->filter(function($notification) {
+                return !in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
+            });
+
+            // ✅ Filter by type if requested
             if ($request->has('type') && $request->type) {
-                $notifications = $notifications->where('type', $request->type);
+                $fleetNotifications = $fleetNotifications->where('type', $request->type);
             }
 
-            return datatables()->of($notifications)->toJson();
+            // ✅ Sort by priority (expired first)
+            $fleetNotifications = $fleetNotifications->sortBy([
+                ['priority', 'asc'],
+                ['created_at', 'asc']
+            ]);
+
+            return datatables()->of($fleetNotifications)->toJson();
         }
 
-        // Regular page load
+        // ✅ Regular page load
         $data = $this->getUnifiedNotifications();
         $summary = $data['summary'];
 
         return view($this->dir . 'notifications', compact('summary'));
+    }
+    public function paymentsIndex(Request $request)
+    {
+        dd('dd');
+        // If DataTables AJAX request
+        if ($request->ajax()) {
+            $data = $this->getUnifiedNotifications();
+
+            // ✅ Filter ONLY payment notifications
+            $paymentNotifications = $data['notifications']->filter(function ($notification) {
+                return in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
+            });
+
+            // ✅ Filter by type if requested
+            if ($request->has('type') && $request->type) {
+                $paymentNotifications = $paymentNotifications->where('type', $request->type);
+            }
+
+            // ✅ Sort by priority (expired/overdue first)
+            $paymentNotifications = $paymentNotifications->sortBy([
+                ['priority', 'asc'],
+                ['created_at', 'asc']
+            ]);
+
+            // ✅ Transform for DataTable
+            $transformed = $paymentNotifications->map(function ($notification) {
+                $collectionId = explode('_', $notification['id'])[1] ?? null;
+                $amountRaw = isset($notification['amount']) ? str_replace(['£', ','], '', $notification['amount']) : 0;
+
+                return [
+                    'priority' => $notification['priority'],
+                    'driver_name' => $notification['simple_message'] ? explode(' - ', $notification['simple_message'])[0] : 'N/A',
+                    'vehicle' => $notification['vehicle'] ?? 'N/A',
+                    'amount' => $notification['amount'] ?? '£0.00',
+                    'amount_raw' => $amountRaw,
+                    'due_date' => $notification['created_at']->format('d M, Y'),
+                    'time_ago' => $notification['time_ago'],
+                    'action_url' => $notification['action_url'] ?? '#',
+                    'collection_id' => $collectionId,
+                    'color' => $notification['color']
+                ];
+            });
+
+            return datatables()->of($transformed)->toJson();
+        }
+
+        // ✅ Regular page load
+        $data = $this->getUnifiedNotifications();
+        $summary = $data['summary'];
+
+        return view($this->dir . 'payments', compact('summary'));
     }
 
     // ✅ Helper method: Calculate road tax expiry

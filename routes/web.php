@@ -19,6 +19,10 @@ Route::get('/agreement/create', [AgreementController::class, 'create'])->name('f
 Route::post('/agreement/store', [AgreementController::class, 'store'])->name('frontend.agreements.store');
 Route::get('/agreement/success', [AgreementController::class, 'success'])->name('frontend.agreements.success');
 
+Route::get('/sign/{token}', [App\Http\Controllers\SigningController::class, 'show'])->name('sign.show');
+Route::post('/sign/{token}', [App\Http\Controllers\SigningController::class, 'submit'])->name('sign.submit');
+Route::get('/sign/{token}/success', [App\Http\Controllers\SigningController::class, 'success'])->name('sign.success');
+
 // Webhook Route (Outside auth middleware)
 Route::post('stripe/webhook', [App\Http\Controllers\StripeWebhookController::class, 'handleWebhook'])
     ->name('stripe.webhook');
@@ -97,6 +101,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('counsels', App\Http\Controllers\Backend\CounselController::class);
     Route::resource('insurance-providers', App\Http\Controllers\Backend\InsuranceProviderController::class);
 
+    Route::get('settings', [App\Http\Controllers\Backend\SettingsController::class, 'index'])->name('settings.index');
+    Route::get('settings/{setting}/edit', [App\Http\Controllers\Backend\SettingsController::class, 'edit'])->name('settings.edit');
+    Route::put('settings/{setting}', [App\Http\Controllers\Backend\SettingsController::class, 'update'])->name('settings.update');
+
     // Expenses
     Route::resource('claims', App\Http\Controllers\Backend\ClaimController::class);
     Route::resource('penalties', App\Http\Controllers\Backend\PenaltyController::class);
@@ -126,12 +134,14 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('notifications', [App\Http\Controllers\Backend\DashboardController::class, 'notificationsIndex'])
         ->name('notifications.index');
 
+    Route::get('payments/notifications', [App\Http\Controllers\Backend\DashboardController::class, 'paymentsIndex'])
+        ->name('payments.notifications');
+
     // Collection payment routes
     Route::post('collections/{collection}/pay', [App\Http\Controllers\Backend\AgreementController::class, 'payCollection'])
         ->name('collections.pay');
 
 });
-
 
 Route::middleware(['auth', 'role:driver'])->prefix('driver')->name('driver.')->group(function () {
     Route::get('dashboard', [App\Http\Controllers\DriverDashboardController::class, 'index'])->name('dashboard');

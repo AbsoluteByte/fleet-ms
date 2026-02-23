@@ -27,110 +27,63 @@ class HelloSignService
             $fullPdfPath = public_path($pdfPath);
 
             if (!file_exists($fullPdfPath)) {
-                throw new \Exception("PDF file not found: " . $fullPdfPath);
+                throw new \Exception("PDF file not found");
             }
 
-            // ✅ Driver email (Signer)
             $driverEmail = $agreement->driver->email;
             $driverName = $agreement->driver->full_name;
-
-            // ✅ CC to logged in user
             $ccEmail = auth()->user()->email;
 
-            // Prepare multipart form data
             $multipart = [
-                [
-                    'name' => 'test_mode',
-                    'contents' => $this->testMode ? '1' : '0'
-                ],
-                [
-                    'name' => 'title',
-                    'contents' => "Vehicle Hire Agreement #{$agreement->id}"
-                ],
-                [
-                    'name' => 'subject',
-                    'contents' => "Please sign your Vehicle Hire Agreement"
-                ],
-                [
-                    'name' => 'message',
-                    'contents' => "Dear {$driverName},\n\nPlease review and sign the attached vehicle hire agreement for {$agreement->car->registration}.\n\nThank you,\n{$agreement->company->name}"
-                ],
-                // ✅ Driver as Signer
-                [
-                    'name' => 'signers[0][email_address]',
-                    'contents' => $driverEmail
-                ],
-                [
-                    'name' => 'signers[0][name]',
-                    'contents' => $driverName
-                ],
-                [
-                    'name' => 'signers[0][order]',
-                    'contents' => '0'
-                ],
+                ['name' => 'test_mode', 'contents' => $this->testMode ? '1' : '0'],
+                ['name' => 'title', 'contents' => "Vehicle Hire Agreement #{$agreement->id}"],
+                ['name' => 'subject', 'contents' => "Please sign your Vehicle Hire Agreement"],
+                ['name' => 'message', 'contents' => "Dear {$driverName},\n\nPlease review and sign the attached vehicle hire agreement for {$agreement->car->registration}.\n\nThank you,\n{$agreement->company->name}"],
+
+                // ✅ Driver as Signer with signature field position
+                ['name' => 'signers[0][email_address]', 'contents' => $driverEmail],
+                ['name' => 'signers[0][name]', 'contents' => $driverName],
+                ['name' => 'signers[0][order]', 'contents' => '0'],
+
                 // ✅ CC to Admin
-                [
-                    'name' => 'cc_email_addresses[]',
-                    'contents' => $ccEmail
-                ],
+                ['name' => 'cc_email_addresses[]', 'contents' => $ccEmail],
+
                 // ✅ Metadata
-                [
-                    'name' => 'metadata[agreement_id]',
-                    'contents' => (string)$agreement->id
-                ],
-                [
-                    'name' => 'metadata[vehicle]',
-                    'contents' => $agreement->car->registration
-                ],
+                ['name' => 'metadata[agreement_id]', 'contents' => (string)$agreement->id],
+
+                // ✅ SIGNATURE FIELD POSITIONING - Client section mein
+                ['name' => 'form_fields_per_document[0][0][type]', 'contents' => 'signature'],
+                ['name' => 'form_fields_per_document[0][0][name]', 'contents' => 'Client Signature'],
+                ['name' => 'form_fields_per_document[0][0][signer]', 'contents' => '0'], // Driver signs
+                ['name' => 'form_fields_per_document[0][0][x]', 'contents' => '60'], // X position (left to right)
+                ['name' => 'form_fields_per_document[0][0][y]', 'contents' => '650'], // Y position (top to bottom)
+                ['name' => 'form_fields_per_document[0][0][width]', 'contents' => '150'], // Width of signature box
+                ['name' => 'form_fields_per_document[0][0][height]', 'contents' => '40'], // Height of signature box
+                ['name' => 'form_fields_per_document[0][0][page]', 'contents' => '2'], // Page number (adjust based on your PDF)
+                ['name' => 'form_fields_per_document[0][0][required]', 'contents' => 'true'],
+
                 // ✅ PDF File
-                [
-                    'name' => 'file[0]',
-                    'contents' => fopen($fullPdfPath, 'r'),
-                    'filename' => basename($fullPdfPath),
-                ]
+                ['name' => 'file[0]', 'contents' => fopen($fullPdfPath, 'r'), 'filename' => basename($fullPdfPath)],
             ];
 
-            Log::info('Sending to HelloSign API', [
-                'test_mode' => $this->testMode,
-                'driver_email' => $driverEmail,
-                'cc_email' => $ccEmail
-            ]);
+            $client = new Client(['verify' => false, 'timeout' => 60]);
 
-            // Create Guzzle client
-            $client = new Client([
-                'verify' => false,
-                'timeout' => 60,
-            ]);
-
-            // Make API request
             $response = $client->post($this->baseUrl . '/signature_request/send', [
-                'auth' => [$this->apiKey, ''], // ✅ HTTP Basic Auth
+                'auth' => [$this->apiKey, ''],
                 'multipart' => $multipart
             ]);
 
             $responseData = json_decode($response->getBody()->getContents(), true);
 
-            Log::info('HelloSign Response:', $responseData);
-
             if ($response->getStatusCode() === 200) {
                 return [
                     'success' => true,
                     'request_id' => $responseData['signature_request']['signature_request_id'],
-                    'details_url' => $responseData['signature_request']['details_url'] ?? null,
                     'response' => $responseData
                 ];
             }
 
-            throw new \Exception('HelloSign API returned non-200 status');
-
-        } catch (\GuzzleHttp\Exception\RequestException $e) {
-            if ($e->hasResponse()) {
-                $errorResponse = json_decode($e->getResponse()->getBody()->getContents(), true);
-                $errorMsg = $errorResponse['error']['error_msg'] ?? $e->getMessage();
-                Log::error('HelloSign API Error: ' . $errorMsg);
-                throw new \Exception($errorMsg);
-            }
-            throw $e;
+            throw new \Exception('HelloSign API error');
 
         } catch (\Exception $e) {
             Log::error('HelloSign Error: ' . $e->getMessage());

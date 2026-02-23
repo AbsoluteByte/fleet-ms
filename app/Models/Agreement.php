@@ -225,4 +225,37 @@ class Agreement extends Model
         }
         return null;
     }
+
+    public function signatureTokens()
+    {
+        return $this->hasMany(AgreementSignatureToken::class);
+    }
+
+    /**
+     * Get tenant's settings
+     */
+    public function getSettings()
+    {
+        return Setting::getForTenant($this->tenant_id);
+    }
+
+    /**
+     * Get active signature token (for custom signing)
+     */
+    public function getActiveSignatureToken()
+    {
+        return $this->signatureTokens()
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->latest()
+            ->first();
+    }
+
+    /**
+     * Get latest signature token
+     */
+    public function getLatestSignatureToken()
+    {
+        return $this->signatureTokens()->latest()->first();
+    }
 }

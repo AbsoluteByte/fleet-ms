@@ -267,6 +267,12 @@
                         <span class="menu-title">Insurance Providers</span>
                     </a>
                 </li>
+                <li class="nav-item {{ Request::is('admin/settings*') ? 'active' : '' }}">
+                    <a href="{{ route('settings.index') }}" class="nav-link">
+                        <i class="fa fa-cog"></i>
+                        <span>Application Settings</span>
+                    </a>
+                </li>
             @endif
             <li class="nav-item"><a href="{{ route('logout') }}"><i
                         class="fa fa-power-off"></i><span class="menu-title">Logout</span></a>

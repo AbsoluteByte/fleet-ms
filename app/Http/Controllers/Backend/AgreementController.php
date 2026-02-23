@@ -8,7 +8,9 @@ use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
 use App\Models\Status;
-use App\Models\InsuranceProvider; // Add this
+use App\Models\InsuranceProvider;
+
+// Add this
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +19,7 @@ use PDF;
 use Carbon\Carbon;
 use App\Services\HelloSignService;
 use Illuminate\Support\Facades\File;
+
 class AgreementController extends Controller
 {
     protected $url = 'agreements.';
@@ -159,7 +162,7 @@ class AgreementController extends Controller
         }
         $agreement->load([
             'company', 'driver', 'car', 'status', 'insuranceProvider',
-            'collections' => function($query) {
+            'collections' => function ($query) {
                 $query->orderBy('due_date');
             }
         ]);
@@ -358,7 +361,7 @@ class AgreementController extends Controller
                 'currentDate' => Carbon::now()->format('d/m/Y'),
             ];
 
-            $pdf = PDF::loadView($this->dir.'.agreement_pdf', $data);
+            $pdf = PDF::loadView($this->dir . '.agreement_pdf', $data);
             $pdf->setPaper('A4', 'portrait');
 
             $filename = 'Agreement_' . $agreement->id . '_' . str_replace(' ', '_', $agreement->driver->full_name) . '.pdf';
@@ -371,7 +374,7 @@ class AgreementController extends Controller
     }
 
     /**
-     * ✅ Send agreement for e-signature
+     * ✅ MAIN: Send agreement for e-signature (Smart routing)
      */
     public function sendForESignature(Agreement $agreement)
     {
@@ -381,7 +384,7 @@ class AgreementController extends Controller
             abort(403, 'Unauthorized access');
         }
 
-        if ($agreement->hellosign_request_id) {
+        if ($agreement->hellosign_request_id || $agreement->hellosign_status === 'pending') {
             return redirect()->back()
                 ->with('warning', 'Agreement already sent for signature.');
         }
@@ -392,36 +395,67 @@ class AgreementController extends Controller
         }
 
         try {
-            // Generate PDF
-            $pdfPath = $this->generatePDFForESign($agreement);
+            // ✅ Get tenant's settings
+            $settings = $agreement->getSettings();
 
-            if (!$pdfPath) {
-                throw new \Exception('Failed to generate PDF');
+            // ✅ Route based on provider
+            if ($settings && $settings->esign_provider === 'hellosign') {
+                return $this->sendViaHelloSign($agreement);
+            } else {
+                return $this->sendViaCustomSigning($agreement);
             }
-
-            // Send to HelloSign
-            $helloSignService = new \App\Services\HelloSignService();
-            $result = $helloSignService->sendAgreementForSignature($agreement, $pdfPath);
-
-            if ($result['success']) {
-                $agreement->update([
-                    'hellosign_request_id' => $result['request_id'],
-                    'hellosign_status' => 'pending',
-                    'esign_sent_at' => now(),
-                ]);
-
-                return redirect()->route('agreements.show', $agreement)
-                    ->with('success', 'Agreement sent for e-signature successfully! Driver will receive an email from HelloSign.');
-            }
-
-            return redirect()->back()
-                ->with('error', 'Failed: ' . ($result['error'] ?? 'Unknown error'));
 
         } catch (\Exception $e) {
             \Log::error('E-Signature Error: ' . $e->getMessage());
             return redirect()->back()
                 ->with('error', 'Error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * ✅ Send via HelloSign
+     */
+    protected function sendViaHelloSign(Agreement $agreement)
+    {
+        $pdfPath = $this->generatePDFForESign($agreement);
+
+        if (!$pdfPath) {
+            throw new \Exception('Failed to generate PDF');
+        }
+
+        $helloSignService = new \App\Services\HelloSignService();
+        $result = $helloSignService->sendAgreementForSignature($agreement, $pdfPath);
+
+        if ($result['success']) {
+            $agreement->update([
+                'hellosign_request_id' => $result['request_id'],
+                'hellosign_status' => 'pending',
+                'esign_sent_at' => now(),
+            ]);
+
+            return redirect()->route('agreements.show', $agreement)
+                ->with('success', '✅ Agreement sent via HelloSign! Driver will receive email.');
+        }
+
+        return redirect()->back()
+            ->with('error', 'HelloSign Error: ' . ($result['error'] ?? 'Unknown error'));
+    }
+
+    /**
+     * ✅ Send via Custom Signing
+     */
+    protected function sendViaCustomSigning(Agreement $agreement)
+    {
+        $customSigningService = new \App\Services\CustomSigningService();
+        $result = $customSigningService->sendForSigning($agreement);
+
+        if ($result['success']) {
+            return redirect()->route('agreements.show', $agreement)
+                ->with('success', 'Agreement sent for signature! Driver will receive email with signing link.');
+        }
+
+        return redirect()->back()
+            ->with('error', 'Custom Signing Error: ' . ($result['error'] ?? 'Unknown error'));
     }
 
     /**
@@ -469,7 +503,7 @@ class AgreementController extends Controller
     }
 
     /**
-     * ✅ Check e-signature status - IMPROVED
+     * ✅ Check e-signature status (Works for both providers)
      */
     public function checkESignStatus(Agreement $agreement)
     {
@@ -479,6 +513,21 @@ class AgreementController extends Controller
             abort(403, 'Unauthorized access');
         }
 
+        $settings = $agreement->getSettings();
+
+        // ✅ Route based on provider
+        if ($settings && $settings->esign_provider === 'hellosign' && $agreement->hellosign_request_id) {
+            return $this->checkHelloSignStatus($agreement);
+        } else {
+            return $this->checkCustomSigningStatus($agreement);
+        }
+    }
+
+    /**
+     * ✅ Check HelloSign status
+     */
+    protected function checkHelloSignStatus(Agreement $agreement)
+    {
         if (!$agreement->hellosign_request_id) {
             return redirect()->back()
                 ->with('error', 'No signature request found.');
@@ -487,7 +536,7 @@ class AgreementController extends Controller
         try {
             $helloSignService = new \App\Services\HelloSignService();
 
-            \Log::info('Checking signature status', [
+            \Log::info('Checking HelloSign status', [
                 'agreement_id' => $agreement->id,
                 'request_id' => $agreement->hellosign_request_id
             ]);
@@ -496,7 +545,7 @@ class AgreementController extends Controller
 
             if (!$status['success']) {
                 return redirect()->back()
-                    ->with('error', 'Failed to check status: ' . $status['error']);
+                    ->with('error', 'Failed to check status: ' . ($status['error'] ?? 'Unknown error'));
             }
 
             // ✅ Update status
@@ -528,10 +577,10 @@ class AgreementController extends Controller
                     }
 
                     return redirect()->back()
-                        ->with('success', '✅ Agreement is fully signed! Signed document downloaded successfully. You can now view it below.');
+                        ->with('success', '✅ Agreement is fully signed! Signed document downloaded successfully.');
                 } else {
                     return redirect()->back()
-                        ->with('warning', 'Agreement is signed but failed to download PDF: ' . $download['error']);
+                        ->with('warning', 'Agreement is signed but failed to download PDF: ' . ($download['error'] ?? 'Unknown error'));
                 }
             }
 
@@ -552,7 +601,7 @@ class AgreementController extends Controller
                 ->with('info', 'Current Status: ' . ucfirst($status['status']));
 
         } catch (\Exception $e) {
-            \Log::error('Status Check Error: ' . $e->getMessage());
+            \Log::error('HelloSign Status Check Error: ' . $e->getMessage());
 
             return redirect()->back()
                 ->with('error', 'Error checking status: ' . $e->getMessage());
@@ -560,7 +609,33 @@ class AgreementController extends Controller
     }
 
     /**
-     * ✅ Resend signature reminder - IMPROVED
+     * ✅ Check Custom Signing status
+     */
+    protected function checkCustomSigningStatus(Agreement $agreement)
+    {
+        $token = $agreement->getLatestSignatureToken();
+
+        if (!$token) {
+            return redirect()->back()
+                ->with('error', 'No signing request found');
+        }
+
+        if ($token->isSigned()) {
+            return redirect()->back()
+                ->with('success', '✅ Agreement is signed! Document available below.');
+        }
+
+        if ($token->isExpired()) {
+            return redirect()->back()
+                ->with('warning', '⚠️ Signing link has expired. Please resend.');
+        }
+
+        return redirect()->back()
+            ->with('info', '⏳ Signature is pending. Waiting for driver to sign.');
+    }
+
+    /**
+     * ✅ Resend signature reminder
      */
     public function resendESignature(Agreement $agreement)
     {
@@ -570,15 +645,9 @@ class AgreementController extends Controller
             abort(403, 'Unauthorized access');
         }
 
-        if (!$agreement->hellosign_request_id) {
-            return redirect()->back()
-                ->with('error', 'No signature request found.');
-        }
-
-        // ✅ Check if already signed
         if ($agreement->hellosign_status === 'signed') {
             return redirect()->back()
-                ->with('warning', 'This agreement is already signed. Click "Check Status" to download the signed document.');
+                ->with('warning', 'This agreement is already signed.');
         }
 
         if ($agreement->hellosign_status !== 'pending') {
@@ -586,6 +655,27 @@ class AgreementController extends Controller
                 ->with('error', 'Cannot send reminder for this agreement.');
         }
 
+        try {
+            $settings = $agreement->getSettings();
+
+            // ✅ Route based on provider
+            if ($settings && $settings->esign_provider === 'hellosign' && $agreement->hellosign_request_id) {
+                return $this->resendHelloSignReminder($agreement);
+            } else {
+                return $this->resendCustomSigningLink($agreement);
+            }
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * ✅ Resend HelloSign reminder
+     */
+    protected function resendHelloSignReminder(Agreement $agreement)
+    {
         try {
             $helloSignService = new \App\Services\HelloSignService();
             $result = $helloSignService->sendReminder(
@@ -599,13 +689,36 @@ class AgreementController extends Controller
             }
 
             // ✅ Handle "already signed" error
-            if (strpos($result['error'], 'already signed') !== false) {
+            if (isset($result['error']) && strpos($result['error'], 'already signed') !== false) {
                 return redirect()->back()
                     ->with('info', 'Driver has already signed! Click "Check Status" button to download the signed document.');
             }
 
             return redirect()->back()
                 ->with('error', 'Failed to send reminder: ' . ($result['error'] ?? 'Unknown error'));
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * ✅ Resend Custom Signing link
+     */
+    protected function resendCustomSigningLink(Agreement $agreement)
+    {
+        try {
+            $customSigningService = new \App\Services\CustomSigningService();
+            $result = $customSigningService->resendSigningLink($agreement);
+
+            if ($result['success']) {
+                return redirect()->back()
+                    ->with('success', 'Signing link resent successfully!');
+            }
+
+            return redirect()->back()
+                ->with('error', 'Failed to resend: ' . ($result['error'] ?? 'Unknown error'));
 
         } catch (\Exception $e) {
             return redirect()->back()
@@ -679,7 +792,7 @@ class AgreementController extends Controller
                             'esign_completed_at' => now(),
                         ]);
 
-                        \Log::info('Agreement signed: ' . $agreement->id);
+                        \Log::info('Agreement signed via webhook: ' . $agreement->id);
                     }
                     break;
 
