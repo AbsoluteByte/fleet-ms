@@ -62,7 +62,6 @@
                 </li>
             @endif
             @if (auth()->user()->isDriver())
-
                 <li class="navigation-header"><span>Main</span></li>
                 <li class="nav-item {{ Request::is('driver/agreements/*') ? 'active' : '' }} {{ Request::is('driver/agreements') ? 'active' : '' }}">
                     <a href="{{ route('driver.agreements') }}">
@@ -104,84 +103,86 @@
                     </a>
                 </li>
             @endif
-            <li class="navigation-header"><span>Main</span></li>
-            <li class="nav-item {{ Request::is('admin/agreements/*') ? 'active' : '' }} {{ Request::is('admin/agreements') ? 'active' : '' }}">
-                <a href="{{ route('agreements.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-heart-handshake">
-                        <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"></path>
-                        <path
-                            d="M12 6l-3.293 3.293a1 1 0 0 0 0 1.414l.543 .543c.69 .69 1.81 .69 2.5 0l1 -1a3.182 3.182 0 0 1 4.5 0l2.25 2.25"></path>
-                        <path d="M12.5 15.5l2 2"></path>
-                        <path d="M15 13l2 2"></path>
-                    </svg>
-                    <span class="menu-title">Agreements</span>
-                </a>
-            </li>
-            <li class="nav-item {{ Request::is('admin/cars/*') ? 'active' : '' }} {{ Request::is('admin/cars') ? 'active' : '' }}">
-                <a href="{{ route('cars.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-car">
-                        <path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
-                        <path d="M17 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
-                        <path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"></path>
-                    </svg>
-                    <span class="menu-title">Fleet</span>
-                </a>
-            </li>
-            <li class="nav-item {{ Request::is('admin/drivers/*') ? 'active' : '' }} {{ Request::is('admin/drivers') ? 'active' : '' }}">
-                <a href="{{ route('drivers.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-steering-wheel">
-                        <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
-                        <path d="M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
-                        <path d="M12 14l0 7"></path>
-                        <path d="M10 12l-6.75 -2"></path>
-                        <path d="M14 12l6.75 -2"></path>
-                    </svg>
-                    <span class="menu-title">Drivers</span>
-                </a>
-            </li>
-            <li class="navigation-header"><span>Expenses</span></li>
-            <li class="nav-item {{ Request::is('admin/claims/*') ? 'active' : '' }} {{ Request::is('admin/claims') ? 'active' : '' }}">
-                <a href="{{ route('claims.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-file-pencil">
-                        <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
-                        <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path>
-                        <path d="M10 18l5 -5a1.414 1.414 0 0 0 -2 -2l-5 5v2h2z"></path>
-                    </svg>
-                    <span class="menu-title">Claims</span>
-                </a>
-            </li>
-            <li class="nav-item {{ Request::is('admin/penalties/*') ? 'active' : '' }} {{ Request::is('admin/penalties') ? 'active' : '' }}">
-                <a href="{{ route('penalties.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-circle-letter-p">
-                        <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
-                        <path d="M10 12h2a2 2 0 1 0 0 -4h-2v8"></path>
-                    </svg>
-                    <span class="menu-title">Penalties</span>
-                </a>
-            </li>
-            <li class="nav-item {{ Request::is('admin/expenses/*') ? 'active' : '' }} {{ Request::is('admin/expenses') ? 'active' : '' }}">
-                <a href="{{ route('expenses.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-coin-pound">
-                        <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
-                        <path d="M15 9a2 2 0 1 0 -4 0v5a2 2 0 0 1 -2 2h6"></path>
-                        <path d="M9 12h4"></path>
-                    </svg>
-                    <span class="menu-title">Expenses</span>
-                </a>
-            </li>
-
+            @if (auth()->user()->isAdmin() || auth()->user()->isUser())
+                <li class="navigation-header"><span>Main</span></li>
+                <li class="nav-item {{ Request::is('admin/agreements/*') ? 'active' : '' }} {{ Request::is('admin/agreements') ? 'active' : '' }}">
+                    <a href="{{ route('agreements.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-heart-handshake">
+                            <path
+                                d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"></path>
+                            <path
+                                d="M12 6l-3.293 3.293a1 1 0 0 0 0 1.414l.543 .543c.69 .69 1.81 .69 2.5 0l1 -1a3.182 3.182 0 0 1 4.5 0l2.25 2.25"></path>
+                            <path d="M12.5 15.5l2 2"></path>
+                            <path d="M15 13l2 2"></path>
+                        </svg>
+                        <span class="menu-title">Agreements</span>
+                    </a>
+                </li>
+                <li class="nav-item {{ Request::is('admin/cars/*') ? 'active' : '' }} {{ Request::is('admin/cars') ? 'active' : '' }}">
+                    <a href="{{ route('cars.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-car">
+                            <path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+                            <path d="M17 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+                            <path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"></path>
+                        </svg>
+                        <span class="menu-title">Fleet</span>
+                    </a>
+                </li>
+                <li class="nav-item {{ Request::is('admin/drivers/*') ? 'active' : '' }} {{ Request::is('admin/drivers') ? 'active' : '' }}">
+                    <a href="{{ route('drivers.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-steering-wheel">
+                            <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
+                            <path d="M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+                            <path d="M12 14l0 7"></path>
+                            <path d="M10 12l-6.75 -2"></path>
+                            <path d="M14 12l6.75 -2"></path>
+                        </svg>
+                        <span class="menu-title">Drivers</span>
+                    </a>
+                </li>
+                <li class="navigation-header"><span>Expenses</span></li>
+                <li class="nav-item {{ Request::is('admin/claims/*') ? 'active' : '' }} {{ Request::is('admin/claims') ? 'active' : '' }}">
+                    <a href="{{ route('claims.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-file-pencil">
+                            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
+                            <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path>
+                            <path d="M10 18l5 -5a1.414 1.414 0 0 0 -2 -2l-5 5v2h2z"></path>
+                        </svg>
+                        <span class="menu-title">Claims</span>
+                    </a>
+                </li>
+                <li class="nav-item {{ Request::is('admin/penalties/*') ? 'active' : '' }} {{ Request::is('admin/penalties') ? 'active' : '' }}">
+                    <a href="{{ route('penalties.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-circle-letter-p">
+                            <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
+                            <path d="M10 12h2a2 2 0 1 0 0 -4h-2v8"></path>
+                        </svg>
+                        <span class="menu-title">Penalties</span>
+                    </a>
+                </li>
+                <li class="nav-item {{ Request::is('admin/expenses/*') ? 'active' : '' }} {{ Request::is('admin/expenses') ? 'active' : '' }}">
+                    <a href="{{ route('expenses.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-coin-pound">
+                            <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
+                            <path d="M15 9a2 2 0 1 0 -4 0v5a2 2 0 0 1 -2 2h6"></path>
+                            <path d="M9 12h4"></path>
+                        </svg>
+                        <span class="menu-title">Expenses</span>
+                    </a>
+                </li>
+            @endif
             <li class="navigation-header"><span>Settings</span></li>
             @if (auth()->user()->isAdmin())
                 <li class="nav-item {{ Request::is('admin/payments/*') ? 'active' : '' }} {{ Request::is('admin/payments') ? 'active' : '' }}">
@@ -227,33 +228,35 @@
                     </a>
                 </li>
             @endif
-            <li class="nav-item {{ Request::is('admin/car-models/*') ? 'active' : '' }} {{ Request::is('admin/car-models') ? 'active' : '' }}">
-                <a href="{{ route('car-models.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-car-garage">
-                        <path d="M5 20a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"></path>
-                        <path d="M15 20a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"></path>
-                        <path d="M5 20h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"></path>
-                        <path d="M3 6l9 -4l9 4"></path>
-                    </svg>
-                    <span class="menu-title">Make/Model</span>
-                </a>
-            </li>
-            <li class="nav-item {{ Request::is('admin/counsels/*') ? 'active' : '' }} {{ Request::is('admin/counsels') ? 'active' : '' }}">
-                <a href="{{ route('counsels.index') }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                         stroke-linejoin="round" class="tabler-icon tabler-icon-file-barcode">
-                        <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
-                        <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path>
-                        <path d="M8 13h1v3h-1z"></path>
-                        <path d="M12 13v3"></path>
-                        <path d="M15 13h1v3h-1z"></path>
-                    </svg>
-                    <span class="menu-title">Councils</span>
-                </a>
-            </li>
+            @if (auth()->user()->isAdmin() || auth()->user()->isUser())
+                <li class="nav-item {{ Request::is('admin/car-models/*') ? 'active' : '' }} {{ Request::is('admin/car-models') ? 'active' : '' }}">
+                    <a href="{{ route('car-models.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-car-garage">
+                            <path d="M5 20a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"></path>
+                            <path d="M15 20a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"></path>
+                            <path d="M5 20h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"></path>
+                            <path d="M3 6l9 -4l9 4"></path>
+                        </svg>
+                        <span class="menu-title">Make/Model</span>
+                    </a>
+                </li>
+                <li class="nav-item {{ Request::is('admin/counsels/*') ? 'active' : '' }} {{ Request::is('admin/counsels') ? 'active' : '' }}">
+                    <a href="{{ route('counsels.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-file-barcode">
+                            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
+                            <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path>
+                            <path d="M8 13h1v3h-1z"></path>
+                            <path d="M12 13v3"></path>
+                            <path d="M15 13h1v3h-1z"></path>
+                        </svg>
+                        <span class="menu-title">Councils</span>
+                    </a>
+                </li>
+            @endif
             @if (auth()->user()->isAdmin())
                 <li class="nav-item {{ Request::is('admin/insurance-providers/*') ? 'active' : '' }} {{ Request::is('admin/insurance-providers') ? 'active' : '' }}">
                     <a href="{{ route('insurance-providers.index') }}">
