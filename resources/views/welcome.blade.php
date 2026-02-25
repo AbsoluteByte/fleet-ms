@@ -63,7 +63,7 @@
             align-items: center;
         }
 
-        .logo {
+        .logo img {
             width: auto;
             height: 46px;
         }
