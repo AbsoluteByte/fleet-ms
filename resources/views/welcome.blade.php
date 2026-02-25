@@ -21,11 +21,11 @@
         }
 
         :root {
-            --primary: #667eea;
-            --primary-dark: #5a67d8;
-            --secondary: #764ba2;
-            --accent: #f093fb;
-            --dark: #1a202c;
+            --primary: #55bcd7;
+            --primary-dark: #3f66aa;
+            --secondary: #3f66aa;
+            --accent: #1e0d3a;
+            --dark: #333333;
             --light: #f7fafc;
             --gray: #718096;
         }
@@ -64,11 +64,8 @@
         }
 
         .logo {
-            font-size: 1.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            width: auto;
+            height: 46px;
         }
 
         .nav-links {
@@ -131,7 +128,7 @@
             min-height: 100vh;
             display: flex;
             align-items: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4273b0 0%, #53b4d2 100%);
             position: relative;
             overflow: hidden;
             padding-top: 80px;
@@ -735,7 +732,7 @@
     <div class="testimonials-grid">
         <div class="testimonial-card fade-in-up">
             <div class="testimonial-content">
-                "FleetMS has transformed how we manage our 50+ vehicle fleet. The automated reminders alone have saved us thousands in penalties."
+                "FleetIQ has transformed how we manage our 50+ vehicle fleet. The automated reminders alone have saved us thousands in penalties."
             </div>
             <div class="testimonial-author">
                 <div class="author-avatar">JD</div>
@@ -787,7 +784,7 @@
 <footer class="footer">
     <div class="footer-container">
         <div class="footer-section">
-            <h3><i class="fas fa-car"></i> FleetMS</h3>
+            <h3><i class="fas fa-car"></i> FleetIQ</h3>
             <p>The complete fleet management solution for modern businesses.</p>
         </div>
 
