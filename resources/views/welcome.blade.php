@@ -552,12 +552,15 @@
 <nav class="navbar" id="navbar">
     <div class="nav-container">
         <div class="logo">
-            <img src="{{ asset('app-assets/images/logo/app-logo.png') }}" style="width: 50%;">
+            <img src="{{ asset('app-assets/images/logo/app-logo-o.png') }}" width="128px;">
         </div>
         <ul class="nav-links">
+            <li><a href="#aboutus">About Us</a></li>
             <li><a href="#features">Features</a></li>
+            <li><a href="#careers">Careers</a></li>
             <li><a href="#pricing">Pricing</a></li>
-            <li><a href="#testimonials">Testimonials</a></li>
+            <li><a href="#documentation">Documentation</a></li>
+            <li><a href="#help-centre">Help Centre</a></li>
         </ul>
         <div class="nav-buttons">
             <a href="{{ route('login') }}" class="btn btn-outline">Login</a>
@@ -784,7 +787,7 @@
 <footer class="footer">
     <div class="footer-container">
         <div class="footer-section">
-            <h3><i class="fas fa-car"></i> FleetIQ</h3>
+            <img src="{{ asset('app-assets/images/logo/app-logo.png') }}">
             <p>The complete fleet management solution for modern businesses.</p>
         </div>
 
