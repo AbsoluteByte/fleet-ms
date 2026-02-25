@@ -552,7 +552,7 @@
 <nav class="navbar" id="navbar">
     <div class="nav-container">
         <div class="logo">
-            <img src="{{ asset('app-assets/images/logo/app-logo-o.png') }}" width="128px;">
+            <img src="{{ asset('app-assets/images/logo/app-logo.png') }}">
         </div>
         <ul class="nav-links">
             <li><a href="#aboutus">About Us</a></li>
@@ -787,7 +787,7 @@
 <footer class="footer">
     <div class="footer-container">
         <div class="footer-section">
-            <img src="{{ asset('app-assets/images/logo/app-logo.png') }}">
+            <img src="{{ asset('app-assets/images/logo/app-logo.png') }}" width="128px;">
             <p>The complete fleet management solution for modern businesses.</p>
         </div>
 
