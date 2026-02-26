@@ -17,43 +17,46 @@
                     <!-- Enhanced Fleet Notification System -->
                     @if(auth()->user()->isAdmin() || auth()->user()->isUser())
 
-                    <li class="dropdown dropdown-notification nav-item">
-                        <a class="nav-link nav-link-label" href="#" data-toggle="dropdown" id="notificationBell">
-                            <i class="ficon feather icon-bell"></i>
-                            <span class="badge badge-pill badge-primary badge-up" id="notificationBadge" style="display: none;">0</span>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-media dropdown-menu-right" style="min-width: 350px;">
-                            <li class="dropdown-menu-header">
-                                <div class="dropdown-header m-0 p-2">
-                                    <h3 class="white" id="notificationCount">0 New</h3>
-                                    <span class="notification-title">Fleet Notifications</span>
-                                </div>
-                            </li>
-                            <li class="scrollable-container media-list" id="notificationsList">
-                                <!-- Dynamic notifications will be loaded here -->
-                                <div class="text-center p-3" id="loadingNotifications">
-                                    <i class="feather icon-loader spinning"></i>
-                                    <p class="mt-2 mb-0 text-muted">Loading notifications...</p>
-                                </div>
-                            </li>
-                            <li class="dropdown-menu-footer">
-                                <a class="dropdown-item p-1 text-center" href="{{ route('dashboard') }}">
-                                    View Dashboard
-                                </a>
-                            </li>
-                        </ul>
-                    </li>
+                        <li class="dropdown dropdown-notification nav-item">
+                            <a class="nav-link nav-link-label" href="#" data-toggle="dropdown" id="notificationBell">
+                                <i class="ficon feather icon-bell"></i>
+                                <span class="badge badge-pill badge-primary badge-up" id="notificationBadge"
+                                      style="display: none;">0</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-media dropdown-menu-right" style="min-width: 350px;">
+                                <li class="dropdown-menu-header">
+                                    <div class="dropdown-header m-0 p-2">
+                                        <h3 class="white" id="notificationCount">0 New</h3>
+                                        <span class="notification-title">Fleet Notifications</span>
+                                    </div>
+                                </li>
+                                <li class="scrollable-container media-list" id="notificationsList">
+                                    <!-- Dynamic notifications will be loaded here -->
+                                    <div class="text-center p-3" id="loadingNotifications">
+                                        <i class="feather icon-loader spinning"></i>
+                                        <p class="mt-2 mb-0 text-muted">Loading notifications...</p>
+                                    </div>
+                                </li>
+                                <li class="dropdown-menu-footer">
+                                    <a class="dropdown-item p-1 text-center" href="{{ route('dashboard') }}">
+                                        View Dashboard
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
                     @endif
                     <!-- User Dropdown (unchanged) -->
                     <li class="dropdown dropdown-user nav-item">
                         <a class="dropdown-toggle nav-link dropdown-user-link"
                            href="#" data-toggle="dropdown">
                             <div class="user-nav d-sm-flex">
-                                <span class="user-name text-bold-600 header-text-align">{{ ucwords(auth()->user()->name) }}</span>
+                                <span
+                                    class="user-name text-bold-600 header-text-align">{{ ucwords(auth()->user()->name) }}</span>
                             </div>
                             <span>
                                 @if (auth()->user()->profile_image)
-                                    <img class="round" src="{{ asset('uploads/users/' . auth()->user()->profile_image) }}"
+                                    <img class="round"
+                                         src="{{ asset('uploads/users/' . auth()->user()->profile_image) }}"
                                          alt="{{ auth()->user()->profile_image }}" height="40" width="40">
                                 @else
                                     <img class="round" src="{{ asset('uploads/users/default.png') }}"
@@ -62,9 +65,11 @@
                             </span>
                         </a>
                         <div class="dropdown-menu dropdown-menu-right">
-                            <a class="dropdown-item" href="{{ route('subscription.index') }}">
-                                <i class="fa fa-crown"></i> My Subscription
-                            </a>
+                            @if (auth()->user()->isAdmin())
+                                <a class="dropdown-item" href="{{ route('subscription.index') }}">
+                                    <i class="fa fa-bell"></i> My Subscription
+                                </a>
+                            @endif
                             <a class="dropdown-item" href="{{ route('profile') }}">
                                 <i class="feather icon-user"></i> Setting
                             </a>
@@ -314,7 +319,7 @@
     let fleetNotificationManager;
 
     // Initialize when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         fleetNotificationManager = new FleetNotificationManager();
     });
 
