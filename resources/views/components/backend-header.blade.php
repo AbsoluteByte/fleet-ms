@@ -62,6 +62,9 @@
                             </span>
                         </a>
                         <div class="dropdown-menu dropdown-menu-right">
+                            <a class="dropdown-item" href="{{ route('subscription.index') }}">
+                                <i class="fa fa-crown"></i> My Subscription
+                            </a>
                             <a class="dropdown-item" href="{{ route('profile') }}">
                                 <i class="feather icon-user"></i> Setting
                             </a>

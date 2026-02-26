@@ -91,7 +91,7 @@
                     </a>
                 </li>
             @endif
-            @if (auth()->user()->isAdmin())
+            {{--@if (auth()->user()->isAdmin())
                 <li class="navigation-header"><span>Subscription</span></li>
                 <li class="nav-item {{ Request::is('admin/subscription/*') ? 'active' : '' }}">
                     <a href="{{ route('subscription.index') }}">
@@ -102,7 +102,7 @@
                         @endif
                     </a>
                 </li>
-            @endif
+            @endif--}}
             @if (auth()->user()->isAdmin() || auth()->user()->isUser())
                 <li class="navigation-header"><span>Main</span></li>
                 <li class="nav-item {{ Request::is('admin/agreements/*') ? 'active' : '' }} {{ Request::is('admin/agreements') ? 'active' : '' }}">
@@ -277,9 +277,9 @@
                     </a>
                 </li>
             @endif
-            <li class="nav-item"><a href="{{ route('logout') }}"><i
+            {{--<li class="nav-item"><a href="{{ route('logout') }}"><i
                         class="fa fa-power-off"></i><span class="menu-title">Logout</span></a>
-            </li>
+            </li>--}}
 
         </ul>
     </div>
