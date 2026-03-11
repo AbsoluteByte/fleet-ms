@@ -134,7 +134,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('notifications', [App\Http\Controllers\Backend\DashboardController::class, 'notificationsIndex'])
         ->name('notifications.index');
 
-    Route::get('payments/notifications', [App\Http\Controllers\Backend\DashboardController::class, 'paymentsIndex'])
+    Route::get('payments-notifications', [App\Http\Controllers\Backend\DashboardController::class, 'paymentsIndex'])
         ->name('payments.notifications');
 
     // Collection payment routes

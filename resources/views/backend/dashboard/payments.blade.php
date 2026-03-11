@@ -127,7 +127,6 @@
     <div class="card">
         <div class="card-header">
             <h4 class="card-title">Payment Notifications</h4>
-            <p class="text-muted mb-0">Priority sorted: Expired/Overdue first</p>
         </div>
         <div class="card-content">
             <div class="card-body">
@@ -232,6 +231,7 @@
 
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
     <script>
         let paymentsTable;
         let currentFilter = '';

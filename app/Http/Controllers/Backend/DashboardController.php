@@ -627,7 +627,6 @@ class DashboardController extends Controller
     }
     public function paymentsIndex(Request $request)
     {
-        dd('dd');
         // If DataTables AJAX request
         if ($request->ajax()) {
             $data = $this->getUnifiedNotifications();
