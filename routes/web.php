@@ -22,7 +22,7 @@ Route::get('/agreement/success', [AgreementController::class, 'success'])->name(
 Route::get('/sign/{token}', [App\Http\Controllers\SigningController::class, 'show'])->name('sign.show');
 Route::post('/sign/{token}', [App\Http\Controllers\SigningController::class, 'submit'])->name('sign.submit');
 Route::get('/sign/{token}/success', [App\Http\Controllers\SigningController::class, 'success'])->name('sign.success');
-
+Route::get('/sign/{token}/preview', [App\Http\Controllers\SigningController::class, 'preview'])->name('sign.preview');
 // Webhook Route (Outside auth middleware)
 Route::post('stripe/webhook', [App\Http\Controllers\StripeWebhookController::class, 'handleWebhook'])
     ->name('stripe.webhook');
