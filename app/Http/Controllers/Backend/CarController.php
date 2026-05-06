@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
@@ -6,9 +7,7 @@ use App\Models\Car;
 use App\Models\CarModel;
 use App\Models\CarMot;
 use App\Models\CarPhv;
-use App\Models\CarReservation;
 use App\Models\CarRoadTax;
-use App\Models\CarService;
 use App\Models\Company;
 use App\Models\Counsel;
 use App\Models\InsuranceProvider;
@@ -23,7 +22,9 @@ use Illuminate\Support\Str;
 class CarController extends Controller
 {
     protected $url = 'cars.';
+
     protected $dir = 'backend.cars.';
+
     protected $name = 'Cars';
 
     public function __construct()
@@ -40,7 +41,7 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
@@ -58,7 +59,7 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir . 'index', compact('cars'));
+        return view($this->dir.'index', compact('cars'));
     }
 
     // ✅ Updated Create
@@ -66,12 +67,12 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
 
-        $model = new Car();
+        $model = new Car;
 
         // ✅ Filter by tenant
         $companies = Company::where('tenant_id', $tenant->id)->get();
@@ -80,7 +81,7 @@ class CarController extends Controller
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'insurance')->get();
 
-        return view($this->dir . 'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
+        return view($this->dir.'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
     }
 
     // ✅ Updated Store
@@ -88,7 +89,7 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -101,8 +102,8 @@ class CarController extends Controller
             'color' => 'required|string',
             'vin' => 'required|string',
             'v5_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'manufacture_year' => 'required|integer|min:1900|max:' . date('Y'),
-            'registration_year' => 'required|integer|min:1900|max:' . date('Y'),
+            'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
+            'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
@@ -115,7 +116,6 @@ class CarController extends Controller
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'fleet_status' => 'nullable|in:available_for_rent,damaged,written_off,stolen,for_sale,sold,reserved',
             'available_from_date' => 'nullable|date',
             'service_date' => 'nullable|date',
             'service_mileage' => 'nullable|integer|min:0',
@@ -167,7 +167,7 @@ class CarController extends Controller
                     $validated['v5_document'] = $this->uploadFile($request->file('v5_document'), 'uploads/cars');
                 }
 
-                $carData = $this->carMassAssignmentFromValidated($validated, $request);
+                $carData = $this->carMassAssignmentFromValidated($validated, $request, null);
                 $carData = $this->mergeLogBookCarData($request, $carData, null);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['createdBy'] = Auth::id();
@@ -249,13 +249,13 @@ class CarController extends Controller
                 return $car;
             });
 
-            return redirect()->route($this->url . 'index')
+            return redirect()->route($this->url.'index')
                 ->with('success', 'Car added successfully.');
 
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Error creating car: ' . $e->getMessage());
+                ->with('error', 'Error creating car: '.$e->getMessage());
         }
     }
 
@@ -269,9 +269,26 @@ class CarController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
 
-        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'logBookAppliedBy', 'services.createdBy', 'reservations.createdBy', 'agreements']);
+        $car->load([
+            'company',
+            'carModel',
+            'mots',
+            'roadTaxes',
+            'phvs.counsel',
+            'phvs.phvAppliedBy',
+            'insurances.insuranceProvider',
+            'insurances.status',
+            'logBookAppliedBy',
+            'services.createdBy',
+            'reservations.createdBy',
+            'agreements',
+            'statusHistories.changedBy',
+            'statusHistories.reservation',
+            'statusHistories.vehicleSwap',
+        ]);
         $this->sortCarHistoryRelations($car);
-        return view($this->dir . 'show', compact('car'));
+
+        return view($this->dir.'show', compact('car'));
     }
 
     // ✅ Updated Edit
@@ -279,7 +296,7 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -296,7 +313,7 @@ class CarController extends Controller
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'insurance')->get();
 
-        return view($this->dir . 'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
+        return view($this->dir.'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
     }
 
     // ✅ Updated Update
@@ -304,7 +321,7 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -316,12 +333,12 @@ class CarController extends Controller
         $rules = [
             'company_id' => 'required|exists:companies,id',
             'car_model_id' => 'required|exists:car_models,id',
-            'registration' => 'required|string|unique:cars,registration,' . $car->id,
+            'registration' => 'required|string|unique:cars,registration,'.$car->id,
             'color' => 'required|string',
             'vin' => 'required|string',
             'v5_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'manufacture_year' => 'required|integer|min:1900|max:' . date('Y'),
-            'registration_year' => 'required|integer|min:1900|max:' . date('Y'),
+            'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
+            'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
@@ -334,7 +351,6 @@ class CarController extends Controller
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'fleet_status' => 'nullable|in:available_for_rent,damaged,written_off,stolen,for_sale,sold,reserved',
             'available_from_date' => 'nullable|date',
             'service_date' => 'nullable|date',
             'service_mileage' => 'nullable|integer|min:0',
@@ -396,7 +412,7 @@ class CarController extends Controller
                     }
                 }
 
-                $carData = $this->carMassAssignmentFromValidated($validated, $request);
+                $carData = $this->carMassAssignmentFromValidated($validated, $request, $car);
                 $carData = $this->mergeLogBookCarData($request, $carData, $car);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['updatedBy'] = Auth::id();
@@ -569,13 +585,13 @@ class CarController extends Controller
             });
 
             return redirect()
-                ->route($this->url . 'edit', $updatedCar)
+                ->route($this->url.'edit', $updatedCar)
                 ->with('success', 'Car updated successfully.');
 
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Error updating car: ' . $e->getMessage());
+                ->with('error', 'Error updating car: '.$e->getMessage());
         }
     }
 
@@ -598,16 +614,25 @@ class CarController extends Controller
                 $car->phvs()->delete();
                 $car->insurances()->delete();
                 $car->services()->delete();
-                $car->reservations()->delete();
+                $car->loadMissing(['reservations', 'vehicleSwapsAsOld', 'vehicleSwapsAsNew']);
+                foreach ($car->vehicleSwapsAsOld as $swap) {
+                    $swap->delete();
+                }
+                foreach ($car->vehicleSwapsAsNew as $swap) {
+                    $swap->delete();
+                }
+                foreach ($car->reservations as $reservation) {
+                    $reservation->delete();
+                }
                 $car->delete();
             });
 
-            return redirect()->route($this->url . 'index')
+            return redirect()->route($this->url.'index')
                 ->with('success', 'Car deleted successfully.');
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error deleting car: ' . $e->getMessage());
+                ->with('error', 'Error deleting car: '.$e->getMessage());
         }
     }
 
@@ -751,7 +776,7 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir . 'status-report', [
+        return view($this->dir.'status-report', [
             'cars' => $cars,
             'status' => $status,
             'statusLabel' => $statuses[$status],
@@ -769,7 +794,7 @@ class CarController extends Controller
             ->filter(fn (Car $car) => $car->isAvailableForRent())
             ->groupBy(fn (Car $car) => $car->latestPhvCounselName() ?: 'No PHV Council');
 
-        return view($this->dir . 'available-by-phv', compact('cars'));
+        return view($this->dir.'available-by-phv', compact('cars'));
     }
 
     public function awaitingPhv()
@@ -783,7 +808,7 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir . 'status-report', [
+        return view($this->dir.'status-report', [
             'cars' => $cars,
             'status' => 'awaiting_phv',
             'statusLabel' => 'Awaiting PHV',
@@ -816,14 +841,16 @@ class CarController extends Controller
 
     /**
      * Only pass real car columns to create/update (not nested mots/phvs/insurance keys from validate()).
+     * Fleet status is not editable on the car form: new cars default to available_for_rent; updates keep the DB value
+     * (changed only via Car Status wizard, reservations, swaps, etc.).
      */
-    private function carMassAssignmentFromValidated(array $validated, Request $request): array
+    private function carMassAssignmentFromValidated(array $validated, Request $request, ?Car $forUpdate = null): array
     {
         $keys = [
             'company_id', 'car_model_id', 'registration', 'color', 'vin', 'v5_document',
             'manufacture_year', 'registration_year', 'purchase_date', 'purchase_price',
             'purchase_type', 'seller_name', 'seller_notes', 'damaged_notes',
-            'phv_status', 'phv_applied_date', 'fleet_status', 'available_from_date',
+            'phv_status', 'phv_applied_date', 'available_from_date',
         ];
 
         $data = array_intersect_key($validated, array_flip($keys));
@@ -840,7 +867,10 @@ class CarController extends Controller
             $data['damaged_notes'] = $request->string('damaged_notes')->value();
         }
 
-        $data['fleet_status'] = $data['fleet_status'] ?? 'available_for_rent';
+        if ($forUpdate === null) {
+            $data['fleet_status'] = 'available_for_rent';
+        }
+
         if (($data['available_from_date'] ?? '') === '') {
             $data['available_from_date'] = null;
         }
@@ -952,6 +982,7 @@ class CarController extends Controller
             if ($activeReservation) {
                 $activeReservation->update(['status' => 'cancelled']);
             }
+
             return;
         }
 
@@ -962,6 +993,7 @@ class CarController extends Controller
             if ($car->fleet_status === 'reserved') {
                 $car->update(['fleet_status' => 'available_for_rent']);
             }
+
             return;
         }
 
@@ -1060,14 +1092,14 @@ class CarController extends Controller
             $dims = getimagesize($file);
             $width = $dims[0];
             $height = $dims[1];
-            $name = time() . '-' . uniqid() . '-' . $width . '-' . $height . '.' . $file->extension();
+            $name = time().'-'.uniqid().'-'.$width.'-'.$height.'.'.$file->extension();
         } else {
-            $name = time() . '-' . uniqid() . '.' . $file->extension();
+            $name = time().'-'.uniqid().'.'.$file->extension();
         }
 
         $path = public_path($directory);
 
-        if (!file_exists($path)) {
+        if (! file_exists($path)) {
             mkdir($path, 0755, true);
         }
 
@@ -1081,7 +1113,7 @@ class CarController extends Controller
     private function deleteFile($filename, $directory)
     {
         if ($filename) {
-            $filePath = public_path($directory . '/' . $filename);
+            $filePath = public_path($directory.'/'.$filename);
             if (File::exists($filePath)) {
                 File::delete($filePath);
             }
@@ -1098,6 +1130,7 @@ class CarController extends Controller
             'for_sale' => 'For sale',
             'sold' => 'Sold',
             'reserved' => 'Reserved',
+            'vehicle_swap' => 'Vehicle swap',
         ];
     }
 
@@ -1107,13 +1140,13 @@ class CarController extends Controller
         abort_unless($tenant && $car->tenant_id === $tenant->id, 403);
         abort_unless($filename, 404);
 
-        $path = public_path($directory . '/' . $filename);
+        $path = public_path($directory.'/'.$filename);
         abort_unless(File::exists($path), 404);
 
         $extension = pathinfo($filename, PATHINFO_EXTENSION);
         $registration = preg_replace('/[^A-Za-z0-9]/', '', $car->registration);
 
-        return response()->download($path, $registration . '-' . $type . '.' . $extension);
+        return response()->download($path, $registration.'-'.$type.'.'.$extension);
     }
 
     /**
@@ -1125,7 +1158,7 @@ class CarController extends Controller
         abort_unless($tenant && $car->tenant_id === $tenant->id, 403);
         abort_unless($filename, 404);
 
-        $path = public_path($directory . '/' . $filename);
+        $path = public_path($directory.'/'.$filename);
         abort_unless(File::exists($path), 404);
 
         return response()->file($path);
@@ -1134,33 +1167,33 @@ class CarController extends Controller
     private function deleteCarFiles($car)
     {
         $filesToDelete = [
-            $car->v5_document ? public_path('uploads/cars/' . $car->v5_document) : null,
+            $car->v5_document ? public_path('uploads/cars/'.$car->v5_document) : null,
         ];
         foreach ($car->oldLogBookFileNames() as $lbName) {
-            $filesToDelete[] = public_path('uploads/cars/log_book/' . $lbName);
+            $filesToDelete[] = public_path('uploads/cars/log_book/'.$lbName);
         }
 
         foreach ($car->mots as $mot) {
             if ($mot->document) {
-                $filesToDelete[] = public_path('uploads/cars/mot_documents/' . $mot->document);
+                $filesToDelete[] = public_path('uploads/cars/mot_documents/'.$mot->document);
             }
         }
 
         foreach ($car->phvs as $phv) {
             if ($phv->document) {
-                $filesToDelete[] = public_path('uploads/cars/phv_documents/' . $phv->document);
+                $filesToDelete[] = public_path('uploads/cars/phv_documents/'.$phv->document);
             }
         }
 
         foreach ($car->insurances as $insurance) {
             if ($insurance->insurance_document) {
-                $filesToDelete[] = public_path('uploads/cars/insurance_documents/' . $insurance->insurance_document);
+                $filesToDelete[] = public_path('uploads/cars/insurance_documents/'.$insurance->insurance_document);
             }
         }
 
         foreach ($car->services as $service) {
             if ($service->document) {
-                $filesToDelete[] = public_path('uploads/cars/service_documents/' . $service->document);
+                $filesToDelete[] = public_path('uploads/cars/service_documents/'.$service->document);
             }
         }
 

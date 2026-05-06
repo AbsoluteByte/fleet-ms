@@ -2,7 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\CarReservation;
+use App\Models\VehicleSwap;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -18,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Route::model('reservation', CarReservation::class);
+        Route::model('vehicle_swap', VehicleSwap::class);
     }
 }

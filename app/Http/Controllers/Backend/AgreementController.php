@@ -7,23 +7,23 @@ use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
-use App\Models\Status;
 use App\Models\InsuranceProvider;
-
+use App\Models\Status;
 // Add this
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use PDF;
-use Carbon\Carbon;
-use App\Services\HelloSignService;
-use Illuminate\Support\Facades\File;
 
 class AgreementController extends Controller
 {
     protected $url = 'agreements.';
+
     protected $dir = 'backend.agreements.';
+
     protected $name = 'Agreements';
 
     public function __construct()
@@ -39,7 +39,7 @@ class AgreementController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
@@ -47,14 +47,14 @@ class AgreementController extends Controller
             ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
             ->get();
 
-        return view($this->dir . 'index', compact('agreements'));
+        return view($this->dir.'index', compact('agreements'));
     }
 
     public function create()
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -62,17 +62,17 @@ class AgreementController extends Controller
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
         $cars = Car::where('tenant_id', $tenant->id)->get();
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get(); // Add this
-        $model = new Agreement();
+        $model = new Agreement;
         $statuses = Status::where('type', 'agreement')->get();
 
-        return view($this->dir . 'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
     }
 
     public function store(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -116,7 +116,7 @@ class AgreementController extends Controller
                 // Handle file upload for insurance proof document
                 if ($request->hasFile('own_insurance_proof_document')) {
                     $file = $request->file('own_insurance_proof_document');
-                    $filename = time() . '_' . $file->getClientOriginalName();
+                    $filename = time().'_'.$file->getClientOriginalName();
                     $file->move(public_path('uploads/insurance_documents'), $filename);
                     $validated['own_insurance_proof_document'] = $filename;
                 }
@@ -153,7 +153,7 @@ class AgreementController extends Controller
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Error creating agreement: ' . $e->getMessage());
+                ->with('error', 'Error creating agreement: '.$e->getMessage());
         }
     }
 
@@ -169,20 +169,20 @@ class AgreementController extends Controller
             'company', 'driver', 'car', 'status', 'insuranceProvider', 'terminationRecordedBy',
             'collections' => function ($query) {
                 $query->orderBy('due_date');
-            }
+            },
         ]);
 
         // Update overdue collections
         $agreement->updateOverdueCollections();
 
-        return view($this->dir . 'show', compact('agreement'));
+        return view($this->dir.'show', compact('agreement'));
     }
 
     public function edit(Agreement $agreement)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -193,14 +193,14 @@ class AgreementController extends Controller
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get(); // Add this
         $statuses = Status::where('type', 'agreement')->get();
 
-        return view($this->dir . 'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
+        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
     }
 
     public function update(Request $request, Agreement $agreement)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -247,14 +247,14 @@ class AgreementController extends Controller
                 if ($request->hasFile('own_insurance_proof_document')) {
                     // Delete old file if exists
                     if ($agreement->own_insurance_proof_document) {
-                        $oldFilePath = public_path('uploads/insurance_documents/' . $agreement->own_insurance_proof_document);
+                        $oldFilePath = public_path('uploads/insurance_documents/'.$agreement->own_insurance_proof_document);
                         if (file_exists($oldFilePath)) {
                             unlink($oldFilePath);
                         }
                     }
 
                     $file = $request->file('own_insurance_proof_document');
-                    $filename = time() . '_' . $file->getClientOriginalName();
+                    $filename = time().'_'.$file->getClientOriginalName();
                     $file->move(public_path('uploads/insurance_documents'), $filename);
                     $validated['own_insurance_proof_document'] = $filename;
                 }
@@ -296,7 +296,7 @@ class AgreementController extends Controller
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Error updating agreement: ' . $e->getMessage());
+                ->with('error', 'Error updating agreement: '.$e->getMessage());
         }
     }
 
@@ -312,7 +312,7 @@ class AgreementController extends Controller
             DB::transaction(function () use ($agreement) {
                 // Delete insurance document if exists
                 if ($agreement->own_insurance_proof_document) {
-                    $filePath = public_path('uploads/insurance_documents/' . $agreement->own_insurance_proof_document);
+                    $filePath = public_path('uploads/insurance_documents/'.$agreement->own_insurance_proof_document);
                     if (file_exists($filePath)) {
                         unlink($filePath);
                     }
@@ -329,7 +329,7 @@ class AgreementController extends Controller
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error deleting agreement: ' . $e->getMessage());
+                ->with('error', 'Error deleting agreement: '.$e->getMessage());
         }
     }
 
@@ -368,9 +368,9 @@ class AgreementController extends Controller
         $collection = $agreement->collections()->findOrFail($collectionId);
 
         $validated = $request->validate([
-            'amount_paid' => 'required|numeric|min:0|max:' . $collection->remaining_amount,
+            'amount_paid' => 'required|numeric|min:0|max:'.$collection->remaining_amount,
             'payment_date' => 'required|date',
-            'notes' => 'nullable|string'
+            'notes' => 'nullable|string',
         ]);
 
         try {
@@ -382,7 +382,7 @@ class AgreementController extends Controller
 
             return redirect()->back()->with('success', 'Payment recorded successfully.');
         } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Error recording payment: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error recording payment: '.$e->getMessage());
         }
     }
 
@@ -390,7 +390,7 @@ class AgreementController extends Controller
     {
         try {
             $agreement->load([
-                'company', 'driver', 'car', 'car.carModel', 'status', 'insuranceProvider'
+                'company', 'driver', 'car', 'car.carModel', 'status', 'insuranceProvider',
             ]);
 
             $data = [
@@ -401,15 +401,15 @@ class AgreementController extends Controller
                 'currentDate' => Carbon::now()->format('d/m/Y'),
             ];
 
-            $pdf = PDF::loadView($this->dir . '.agreement_pdf', $data);
+            $pdf = PDF::loadView($this->dir.'.agreement_pdf', $data);
             $pdf->setPaper('A4', 'portrait');
 
-            $filename = 'Agreement_' . $agreement->id . '_' . str_replace(' ', '_', $agreement->driver->full_name) . '.pdf';
+            $filename = 'Agreement_'.$agreement->id.'_'.str_replace(' ', '_', $agreement->driver->full_name).'.pdf';
 
             return $pdf->download($filename);
 
         } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Failed to generate PDF: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate PDF: '.$e->getMessage());
         }
     }
 
@@ -429,7 +429,7 @@ class AgreementController extends Controller
                 ->with('warning', 'Agreement already sent for signature.');
         }
 
-        if (!$agreement->driver || !$agreement->driver->email) {
+        if (! $agreement->driver || ! $agreement->driver->email) {
             return redirect()->back()
                 ->with('error', 'Driver email is required for e-signature.');
         }
@@ -446,9 +446,10 @@ class AgreementController extends Controller
             }
 
         } catch (\Exception $e) {
-            \Log::error('E-Signature Error: ' . $e->getMessage());
+            \Log::error('E-Signature Error: '.$e->getMessage());
+
             return redirect()->back()
-                ->with('error', 'Error: ' . $e->getMessage());
+                ->with('error', 'Error: '.$e->getMessage());
         }
     }
 
@@ -459,11 +460,11 @@ class AgreementController extends Controller
     {
         $pdfPath = $this->generatePDFForESign($agreement);
 
-        if (!$pdfPath) {
+        if (! $pdfPath) {
             throw new \Exception('Failed to generate PDF');
         }
 
-        $helloSignService = new \App\Services\HelloSignService();
+        $helloSignService = new \App\Services\HelloSignService;
         $result = $helloSignService->sendAgreementForSignature($agreement, $pdfPath);
 
         if ($result['success']) {
@@ -478,7 +479,7 @@ class AgreementController extends Controller
         }
 
         return redirect()->back()
-            ->with('error', 'HelloSign Error: ' . ($result['error'] ?? 'Unknown error'));
+            ->with('error', 'HelloSign Error: '.($result['error'] ?? 'Unknown error'));
     }
 
     /**
@@ -486,7 +487,7 @@ class AgreementController extends Controller
      */
     protected function sendViaCustomSigning(Agreement $agreement)
     {
-        $customSigningService = new \App\Services\CustomSigningService();
+        $customSigningService = new \App\Services\CustomSigningService;
         $result = $customSigningService->sendForSigning($agreement);
 
         if ($result['success']) {
@@ -495,7 +496,7 @@ class AgreementController extends Controller
         }
 
         return redirect()->back()
-            ->with('error', 'Custom Signing Error: ' . ($result['error'] ?? 'Unknown error'));
+            ->with('error', 'Custom Signing Error: '.($result['error'] ?? 'Unknown error'));
     }
 
     /**
@@ -519,7 +520,7 @@ class AgreementController extends Controller
 
             // Create directory
             $directory = public_path('uploads/agreements/temp');
-            if (!file_exists($directory)) {
+            if (! file_exists($directory)) {
                 \File::makeDirectory($directory, 0755, true, true);
             }
 
@@ -535,9 +536,9 @@ class AgreementController extends Controller
             }
 
             throw new \Exception('PDF file not created');
-
         } catch (\Exception $e) {
-            \Log::error('PDF Generation Error: ' . $e->getMessage());
+            \Log::error('PDF Generation Error: '.$e->getMessage());
+
             return false;
         }
     }
@@ -568,34 +569,34 @@ class AgreementController extends Controller
      */
     protected function checkHelloSignStatus(Agreement $agreement)
     {
-        if (!$agreement->hellosign_request_id) {
+        if (! $agreement->hellosign_request_id) {
             return redirect()->back()
                 ->with('error', 'No signature request found.');
         }
 
         try {
-            $helloSignService = new \App\Services\HelloSignService();
+            $helloSignService = new \App\Services\HelloSignService;
 
             \Log::info('Checking HelloSign status', [
                 'agreement_id' => $agreement->id,
-                'request_id' => $agreement->hellosign_request_id
+                'request_id' => $agreement->hellosign_request_id,
             ]);
 
             $status = $helloSignService->getSignatureStatus($agreement->hellosign_request_id);
 
-            if (!$status['success']) {
+            if (! $status['success']) {
                 return redirect()->back()
-                    ->with('error', 'Failed to check status: ' . ($status['error'] ?? 'Unknown error'));
+                    ->with('error', 'Failed to check status: '.($status['error'] ?? 'Unknown error'));
             }
 
             // ✅ Update status
             $agreement->update(['hellosign_status' => $status['status']]);
 
             // ✅ If complete and no document yet, download it
-            if ($status['is_complete'] && !$agreement->esign_document_path) {
+            if ($status['is_complete'] && ! $agreement->esign_document_path) {
 
                 \Log::info('Document is complete, downloading...', [
-                    'agreement_id' => $agreement->id
+                    'agreement_id' => $agreement->id,
                 ]);
 
                 $download = $helloSignService->downloadSignedPDF(
@@ -620,7 +621,7 @@ class AgreementController extends Controller
                         ->with('success', '✅ Agreement is fully signed! Signed document downloaded successfully.');
                 } else {
                     return redirect()->back()
-                        ->with('warning', 'Agreement is signed but failed to download PDF: ' . ($download['error'] ?? 'Unknown error'));
+                        ->with('warning', 'Agreement is signed but failed to download PDF: '.($download['error'] ?? 'Unknown error'));
                 }
             }
 
@@ -638,13 +639,13 @@ class AgreementController extends Controller
 
             // ✅ Other status
             return redirect()->back()
-                ->with('info', 'Current Status: ' . ucfirst($status['status']));
+                ->with('info', 'Current Status: '.ucfirst($status['status']));
 
         } catch (\Exception $e) {
-            \Log::error('HelloSign Status Check Error: ' . $e->getMessage());
+            \Log::error('HelloSign Status Check Error: '.$e->getMessage());
 
             return redirect()->back()
-                ->with('error', 'Error checking status: ' . $e->getMessage());
+                ->with('error', 'Error checking status: '.$e->getMessage());
         }
     }
 
@@ -655,7 +656,7 @@ class AgreementController extends Controller
     {
         $token = $agreement->getLatestSignatureToken();
 
-        if (!$token) {
+        if (! $token) {
             return redirect()->back()
                 ->with('error', 'No signing request found');
         }
@@ -707,7 +708,7 @@ class AgreementController extends Controller
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error: ' . $e->getMessage());
+                ->with('error', 'Error: '.$e->getMessage());
         }
     }
 
@@ -717,7 +718,7 @@ class AgreementController extends Controller
     protected function resendHelloSignReminder(Agreement $agreement)
     {
         try {
-            $helloSignService = new \App\Services\HelloSignService();
+            $helloSignService = new \App\Services\HelloSignService;
             $result = $helloSignService->sendReminder(
                 $agreement->hellosign_request_id,
                 $agreement->driver->email
@@ -735,11 +736,11 @@ class AgreementController extends Controller
             }
 
             return redirect()->back()
-                ->with('error', 'Failed to send reminder: ' . ($result['error'] ?? 'Unknown error'));
+                ->with('error', 'Failed to send reminder: '.($result['error'] ?? 'Unknown error'));
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error: ' . $e->getMessage());
+                ->with('error', 'Error: '.$e->getMessage());
         }
     }
 
@@ -749,7 +750,7 @@ class AgreementController extends Controller
     protected function resendCustomSigningLink(Agreement $agreement)
     {
         try {
-            $customSigningService = new \App\Services\CustomSigningService();
+            $customSigningService = new \App\Services\CustomSigningService;
             $result = $customSigningService->resendSigningLink($agreement);
 
             if ($result['success']) {
@@ -758,11 +759,11 @@ class AgreementController extends Controller
             }
 
             return redirect()->back()
-                ->with('error', 'Failed to resend: ' . ($result['error'] ?? 'Unknown error'));
+                ->with('error', 'Failed to resend: '.($result['error'] ?? 'Unknown error'));
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error: ' . $e->getMessage());
+                ->with('error', 'Error: '.$e->getMessage());
         }
     }
 
@@ -777,19 +778,19 @@ class AgreementController extends Controller
             abort(403, 'Unauthorized access');
         }
 
-        if (!$agreement->esign_document_path) {
+        if (! $agreement->esign_document_path) {
             abort(404, 'Signed document not found');
         }
 
         $fullPath = public_path($agreement->esign_document_path);
 
-        if (!file_exists($fullPath)) {
+        if (! file_exists($fullPath)) {
             abort(404, 'Document file not found');
         }
 
         return response()->file($fullPath, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="signed_agreement_' . $agreement->id . '.pdf"'
+            'Content-Disposition' => 'inline; filename="signed_agreement_'.$agreement->id.'.pdf"',
         ]);
     }
 
@@ -806,14 +807,15 @@ class AgreementController extends Controller
             $eventType = $event['event']['event_type'] ?? null;
             $requestId = $event['signature_request']['signature_request_id'] ?? null;
 
-            if (!$requestId) {
+            if (! $requestId) {
                 return response()->json(['error' => 'Invalid webhook data'], 400);
             }
 
             $agreement = Agreement::where('hellosign_request_id', $requestId)->first();
 
-            if (!$agreement) {
-                \Log::error('Agreement not found for HelloSign request: ' . $requestId);
+            if (! $agreement) {
+                \Log::error('Agreement not found for HelloSign request: '.$requestId);
+
                 return response()->json(['error' => 'Agreement not found'], 404);
             }
 
@@ -822,7 +824,7 @@ class AgreementController extends Controller
                 case 'signature_request_signed':
                 case 'signature_request_all_signed':
                     // Download signed PDF
-                    $helloSignService = new \App\Services\HelloSignService();
+                    $helloSignService = new \App\Services\HelloSignService;
                     $download = $helloSignService->downloadSignedPDF($requestId, $agreement->id);
 
                     if ($download['success']) {
@@ -832,27 +834,27 @@ class AgreementController extends Controller
                             'esign_completed_at' => now(),
                         ]);
 
-                        \Log::info('Agreement signed via webhook: ' . $agreement->id);
+                        \Log::info('Agreement signed via webhook: '.$agreement->id);
                     }
                     break;
 
                 case 'signature_request_declined':
                     $agreement->update(['hellosign_status' => 'declined']);
-                    \Log::info('Agreement declined: ' . $agreement->id);
+                    \Log::info('Agreement declined: '.$agreement->id);
                     break;
 
                 case 'signature_request_canceled':
                     $agreement->update(['hellosign_status' => 'cancelled']);
-                    \Log::info('Agreement cancelled: ' . $agreement->id);
+                    \Log::info('Agreement cancelled: '.$agreement->id);
                     break;
             }
 
             return response()->json(['success' => true]);
 
         } catch (\Exception $e) {
-            \Log::error('Webhook Error: ' . $e->getMessage());
+            \Log::error('Webhook Error: '.$e->getMessage());
+
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-
 }

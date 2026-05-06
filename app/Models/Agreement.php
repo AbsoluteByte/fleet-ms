@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Carbon\Carbon;
 
 class Agreement extends Model
 {
@@ -107,7 +106,7 @@ class Agreement extends Model
 
     public function generateCollections()
     {
-        if (!$this->auto_schedule_collections) {
+        if (! $this->auto_schedule_collections) {
             return;
         }
 
@@ -144,7 +143,7 @@ class Agreement extends Model
                 'amount' => $this->agreed_rent,
                 'payment_status' => 'pending',
                 'is_auto_generated' => true,
-                'notes' => "Auto-generated collection #$collectionNumber"
+                'notes' => "Auto-generated collection #$collectionNumber",
             ]);
 
             $currentDate = $nextDate;
@@ -159,7 +158,7 @@ class Agreement extends Model
             'next_collection_date' => $this->collections()
                 ->where('payment_status', 'pending')
                 ->orderBy('due_date')
-                ->first()?->due_date
+                ->first()?->due_date,
         ]);
     }
 
@@ -190,10 +189,10 @@ class Agreement extends Model
      */
     public function canSendForESignature()
     {
-        return !$this->hellosign_request_id &&
+        return ! $this->hellosign_request_id &&
             $this->driver &&
             $this->driver->email &&
-            !empty($this->driver->email);
+            ! empty($this->driver->email);
     }
 
     /**
@@ -220,9 +219,10 @@ class Agreement extends Model
      */
     public function getEsignStatusTextAttribute()
     {
-        if (!$this->hellosign_status) {
+        if (! $this->hellosign_status) {
             return 'Not Sent';
         }
+
         return ucfirst($this->hellosign_status);
     }
 
@@ -234,6 +234,7 @@ class Agreement extends Model
         if ($this->esign_document_path && file_exists(public_path($this->esign_document_path))) {
             return asset($this->esign_document_path);
         }
+
         return null;
     }
 

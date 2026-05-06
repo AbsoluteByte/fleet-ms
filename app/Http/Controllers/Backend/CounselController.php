@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
@@ -10,7 +11,9 @@ use Illuminate\Support\Str;
 class CounselController extends Controller
 {
     protected $url = 'counsels.';
+
     protected $dir = 'backend.counsels.';
+
     protected $name = 'Councils';
 
     public function __construct()
@@ -26,17 +29,19 @@ class CounselController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
         $counsels = Counsel::where('tenant_id', $tenant->id)->get();
+
         return view($this->dir.'index', compact('counsels'));
     }
 
     public function create()
     {
-        $model = new Counsel();
+        $model = new Counsel;
+
         return view($this->dir.'create', compact('model'));
     }
 
@@ -58,11 +63,12 @@ class CounselController extends Controller
     public function edit($id)
     {
         $tenant = Auth::user()->currentTenant();
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
         $model = Counsel::where('tenant_id', $tenant->id)->findOrFail($id);
+
         return view($this->dir.'edit', compact('model'));
     }
 
@@ -70,7 +76,7 @@ class CounselController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -80,7 +86,7 @@ class CounselController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:counsels,name,' . $counsel->id,
+            'name' => 'required|string|max:255|unique:counsels,name,'.$counsel->id,
         ]);
         $validated['tenant_id'] = $tenant->id;
         $validated['updatedBy'] = Auth::id();

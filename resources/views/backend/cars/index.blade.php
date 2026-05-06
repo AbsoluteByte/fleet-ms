@@ -117,7 +117,16 @@
         $filterModels = $cars->map(fn ($car) => $car->carModel->name ?? null)->filter()->unique()->sort()->values();
         $filterColors = $cars->pluck('color')->filter()->unique()->sort()->values();
         $filterCouncils = $cars->map(fn ($car) => $car->latestPhvCounselName())->filter()->unique()->sort()->values();
-        $filterStatuses = ['Available For Rent', 'Damaged', 'Written Off', 'Stolen', 'For Sale', 'Sold', 'Reserved'];
+        $filterStatuses = [
+            'Available For Rent',
+            'Reserved',
+            'Vehicle Swap',
+            'Damaged',
+            'Written Off',
+            'Stolen',
+            'For Sale',
+            'Sold',
+        ];
     @endphp
     <div class="cars-filter-backdrop" id="carsFilterBackdrop"></div>
     <aside class="cars-filter-panel" id="carsFilterPanel" aria-hidden="true">

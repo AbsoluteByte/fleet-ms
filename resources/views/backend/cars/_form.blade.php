@@ -183,7 +183,11 @@
     </div>
 
     {{-- Seller Name --}}
+    @php
+        $fleetStatus = isset($model) && $model->id ? ($model->fleet_status ?? 'available_for_rent') : 'available_for_rent';
+    @endphp
     <div class="col-md-6">
+        <input type="hidden" id="car_current_fleet_status" value="{{ $fleetStatus }}" autocomplete="off">
         <div class="form-group">
             <label for="seller_name">Seller Name</label>
             <input type="text" name="seller_name" id="seller_name"
@@ -191,27 +195,6 @@
                    value="{{ old('seller_name') ?? (isset($model) && $model->id ? $model->seller_name : '') }}"
                    placeholder="e.g. John Smith (optional)">
             @error('seller_name')
-            <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
-        </div>
-    </div>
-
-    @php
-        $fleetStatus = old('fleet_status', isset($model) && $model->id ? ($model->fleet_status ?? 'available_for_rent') : 'available_for_rent');
-    @endphp
-    <div class="col-md-6">
-        <div class="form-group">
-            <label for="fleet_status">Fleet Status</label>
-            <select name="fleet_status" id="fleet_status" class="form-control @error('fleet_status') is-invalid @enderror">
-                <option value="available_for_rent" {{ $fleetStatus === 'available_for_rent' ? 'selected' : '' }}>Available for rent</option>
-                <option value="damaged" {{ $fleetStatus === 'damaged' ? 'selected' : '' }}>Damaged</option>
-                <option value="written_off" {{ $fleetStatus === 'written_off' ? 'selected' : '' }}>Written off</option>
-                <option value="stolen" {{ $fleetStatus === 'stolen' ? 'selected' : '' }}>Stolen</option>
-                <option value="for_sale" {{ $fleetStatus === 'for_sale' ? 'selected' : '' }}>For sale</option>
-                <option value="sold" {{ $fleetStatus === 'sold' ? 'selected' : '' }}>Sold</option>
-                <option value="reserved" {{ $fleetStatus === 'reserved' ? 'selected' : '' }}>Reserved</option>
-            </select>
-            @error('fleet_status')
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
         </div>
@@ -1825,7 +1808,7 @@
             const section = document.getElementById('reservation-section');
             const reservationDate = document.getElementById('reservation_date');
             if (!cb || !section) return;
-            if (document.getElementById('fleet_status')?.value === 'damaged') {
+            if (document.getElementById('car_current_fleet_status')?.value === 'damaged') {
                 cb.checked = false;
                 section.style.display = 'none';
                 return;
@@ -1837,7 +1820,7 @@
         }
 
         function toggleDamagedStatusSections() {
-            const isDamaged = document.getElementById('fleet_status')?.value === 'damaged';
+            const isDamaged = document.getElementById('car_current_fleet_status')?.value === 'damaged';
             const damagedNotes = document.getElementById('damaged-notes-wrapper');
             const reservationCard = document.getElementById('reservation-card-wrapper');
             const reserveCheckbox = document.getElementById('reserve_car');
@@ -1997,7 +1980,6 @@
             }
             document.getElementById('log_book_applied').addEventListener('change', applyLogBookV5Rules);
             document.getElementById('reserve_car').addEventListener('change', toggleReservationSection);
-            document.getElementById('fleet_status').addEventListener('change', toggleDamagedStatusSections);
             document.getElementById('phv_status').addEventListener('change', togglePhvStatusFields);
         });
 

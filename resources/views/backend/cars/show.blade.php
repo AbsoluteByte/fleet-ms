@@ -79,6 +79,71 @@
                                 <strong>Available From:</strong>
                                 <p class="mb-0">{{ $car->available_from_date ? $car->available_from_date->format('d M, Y') : 'Now' }}</p>
                             </div>
+
+                            @if($car->statusHistories->isNotEmpty())
+                                @php
+                                    $historyStep2Statuses = ['reserved', 'vehicle_swap', 'damaged', 'written_off', 'stolen', 'for_sale', 'sold'];
+                                    $historyTotalCount = $car->statusHistories->count();
+                                    $historyExtraCount = max(0, $historyTotalCount - 2);
+                                @endphp
+                                <div class="col-12 mb-4">
+                                    <h4 class="border-bottom pb-2 mb-3 mt-2">Fleet status history</h4>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered">
+                                            <thead class="thead-light">
+                                            <tr>
+                                                <th>When</th>
+                                                <th>Change</th>
+                                                <th>By</th>
+                                                <th>Details</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach($car->statusHistories as $entry)
+                                                @php
+                                                    $historyShowDetailsBtn = in_array($entry->new_status, $historyStep2Statuses, true);
+                                                    $historyRowExtra = $loop->iteration > 2;
+                                                @endphp
+                                                <tr class="{{ $historyRowExtra ? 'fleet-status-history-row-extra d-none' : '' }}">
+                                                    <td class="text-nowrap">{{ $entry->created_at?->format('d/m/Y H:i') }}</td>
+                                                    <td>
+                                                        {{ ucwords(str_replace('_', ' ', $entry->previous_status ?? '—')) }}
+                                                        <span class="text-muted">→</span>
+                                                        <strong>{{ ucwords(str_replace('_', ' ', $entry->new_status)) }}</strong>
+                                                    </td>
+                                                    <td>{{ $entry->changedBy->name ?? '—' }}</td>
+                                                    <td>
+                                                        @if($historyShowDetailsBtn)
+                                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                    data-toggle="modal"
+                                                                    data-target="#carStatusHistoryModal{{ $entry->id }}">
+                                                                View details
+                                                            </button>
+                                                        @else
+                                                            <span class="text-muted">—</span>
+                                                        @endif
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    @if($historyExtraCount > 0)
+                                        <p class="mb-0 mt-2 text-center">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    id="fleetStatusHistoryToggle"
+                                                    data-expanded="0"
+                                                    data-label-expand="Show full history ({{ $historyExtraCount }} more)"
+                                                    data-label-collapse="Show latest only">
+                                                Show full history ({{ $historyExtraCount }} more)
+                                            </button>
+                                        </p>
+                                    @endif
+                                    @foreach($car->statusHistories as $entry)
+                                        @include('backend.cars.partials.status_history_detail_modal', ['entry' => $entry])
+                                    @endforeach
+                                </div>
+                            @endif
                             @if($car->seller_notes)
                                 <div class="col-12 mb-3">
                                     <strong>Seller Notes:</strong>
@@ -660,5 +725,21 @@
 
 @section('js')
     <script>
+        $(document).ready(function () {
+            const $histBtn = $('#fleetStatusHistoryToggle');
+            if (!$histBtn.length) {
+                return;
+            }
+            $histBtn.on('click', function () {
+                const expanded = $histBtn.attr('data-expanded') === '1';
+                if (expanded) {
+                    $('.fleet-status-history-row-extra').addClass('d-none');
+                    $histBtn.attr('data-expanded', '0').text($histBtn.attr('data-label-expand'));
+                } else {
+                    $('.fleet-status-history-row-extra').removeClass('d-none');
+                    $histBtn.attr('data-expanded', '1').text($histBtn.attr('data-label-collapse'));
+                }
+            });
+        });
     </script>
 @endsection

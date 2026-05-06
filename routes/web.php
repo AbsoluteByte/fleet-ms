@@ -45,7 +45,6 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::put('update-profile', [App\Http\Controllers\Backend\ProfileController::class, 'update'])->name('update-profile');
     Route::put('change-password', [App\Http\Controllers\Backend\ProfileController::class, 'change_password'])->name('change-password');
 
-
     Route::resource('customers', App\Http\Controllers\Backend\CustomerController::class);
     Route::post('customers/{id}/suspend', [App\Http\Controllers\Backend\CustomerController::class, 'suspend'])->name('customers.suspend');
     Route::post('customers/{id}/activate', [App\Http\Controllers\Backend\CustomerController::class, 'activate'])->name('customers.activate');
@@ -87,6 +86,11 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::delete('cars/{car}/road-taxes/{car_road_tax}', [App\Http\Controllers\Backend\CarController::class, 'destroyRoadTax'])->name('cars.road-taxes.destroy');
     Route::delete('cars/{car}/phvs/{car_phv}', [App\Http\Controllers\Backend\CarController::class, 'destroyPhv'])->name('cars.phvs.destroy');
     Route::resource('cars', App\Http\Controllers\Backend\CarController::class);
+    Route::get('car-status', [App\Http\Controllers\Backend\CarStatusController::class, 'create'])->name('car-status.create');
+    Route::post('car-status', [App\Http\Controllers\Backend\CarStatusController::class, 'store'])->name('car-status.store');
+
+    Route::resource('reservations', App\Http\Controllers\Backend\ReservationController::class)->except(['show']);
+    Route::resource('vehicle-swaps', App\Http\Controllers\Backend\VehicleSwapController::class)->except(['show']);
     Route::resource('drivers', App\Http\Controllers\Backend\DriverController::class);
 
     Route::post('drivers/{driver}/invite', [App\Http\Controllers\Backend\DriverController::class, 'invite'])->name('drivers.invite');
@@ -133,6 +137,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     Route::post('agreements/{agreement}/regenerate-collections', function (\App\Models\Agreement $agreement) {
         $agreement->generateCollections();
+
         return response()->json(['success' => true]);
     })->name('agreements.regenerate-collections');
 

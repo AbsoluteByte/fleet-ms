@@ -120,8 +120,8 @@
                         <span class="menu-title">Agreements</span>
                     </a>
                 </li>
-                <li class="nav-item {{ Request::is('admin/cars/*') ? 'active' : '' }} {{ Request::is('admin/cars') ? 'active' : '' }}">
-                    <a href="{{ route('cars.index') }}">
+                <li class="nav-item {{ Request::is('admin/cars*') || Request::is('admin/car-status*') || Request::is('admin/reservations*') || Request::is('admin/vehicle-swaps*') ? 'sidebar-group-active' : '' }}">
+                    <a href="#">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
                              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
                              stroke-linejoin="round" class="tabler-icon tabler-icon-car">
@@ -131,6 +131,28 @@
                         </svg>
                         <span class="menu-title">Fleet</span>
                     </a>
+                    <ul class="menu-content">
+                        <li class="{{ Request::is('admin/cars*') ? 'active' : '' }}">
+                            <a href="{{ route('cars.index') }}">
+                                <span class="menu-title">Cars</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/car-status*') ? 'active' : '' }}">
+                            <a href="{{ route('car-status.create') }}">
+                                <span class="menu-title">Car Status</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/reservations*') ? 'active' : '' }}">
+                            <a href="{{ route('reservations.index') }}">
+                                <span class="menu-title">Reservations</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/vehicle-swaps*') ? 'active' : '' }}">
+                            <a href="{{ route('vehicle-swaps.index') }}">
+                                <span class="menu-title">Vehicle Swaps</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
                 <li class="nav-item {{ Request::is('admin/cars/reports/available-by-phv') ? 'active' : '' }}">
                     <a href="{{ route('cars.reports.available-by-phv') }}">

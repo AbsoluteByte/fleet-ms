@@ -1,5 +1,7 @@
 <?php
+
 // app/Models/Car.php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +12,7 @@ class Car extends Model
     use HasFactory;
 
     protected $fillable = [
-        'tenant_id','company_id', 'car_model_id', 'registration', 'color',
+        'tenant_id', 'company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
         'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
         'seller_notes', 'damaged_notes', 'phv_status', 'phv_applied_date', 'phv_applied_by',
@@ -110,6 +112,21 @@ class Car extends Model
         return $this->hasMany(CarReservation::class);
     }
 
+    public function vehicleSwapsAsOld()
+    {
+        return $this->hasMany(VehicleSwap::class, 'old_car_id');
+    }
+
+    public function vehicleSwapsAsNew()
+    {
+        return $this->hasMany(VehicleSwap::class, 'swapped_with_car_id');
+    }
+
+    public function statusHistories()
+    {
+        return $this->hasMany(CarStatusHistory::class)->orderByDesc('created_at')->orderByDesc('id');
+    }
+
     /**
      * @return list<string>
      */
@@ -135,6 +152,7 @@ class Car extends Model
     public function scopeForCurrentTenant($query)
     {
         $tenant = auth()->user()->currentTenant();
+
         return $query->where('tenant_id', $tenant->id ?? 0);
     }
 
@@ -207,7 +225,7 @@ class Car extends Model
             return false;
         }
 
-        if (in_array($this->fleet_status, ['damaged', 'written_off', 'stolen', 'for_sale', 'sold', 'reserved'], true)) {
+        if (in_array($this->fleet_status, ['damaged', 'written_off', 'stolen', 'for_sale', 'sold', 'reserved', 'vehicle_swap'], true)) {
             return false;
         }
 
