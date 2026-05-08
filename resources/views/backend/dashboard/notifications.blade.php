@@ -232,6 +232,7 @@
                             <th>TITLE</th>
                             <th>MESSAGE</th>
                             <th>VEHICLE/DRIVER</th>
+                            <th>EXPIRY STATUS</th>
                             {{-- Must match hidden sort_key column in DataTables (column count) --}}
                             <th class="d-none"></th>
                             <th>ACTIONS</th>
@@ -339,6 +340,21 @@
                         }
                     },
                     {
+                        data: 'time_ago',
+                        render: function(data, type, row) {
+                            if (row.type === 'insurance_applied') {
+                                return '-';
+                            }
+                            let colorClass = 'success';
+                            if (row.priority === 1) colorClass = 'danger';
+                            else if (row.priority === 2) colorClass = 'warning';
+
+                            return `<span class="badge badge-light-${colorClass}">
+                        <i class="feather icon-clock"></i> ${data}
+                    </span>`;
+                        }
+                    },
+                    {
                         data: 'sort_key',
                         visible: false,
                         searchable: false
@@ -360,7 +376,7 @@
                         }
                     }
                 ],
-                order: [[4, 'asc']], // Chronological expiry (server order; column is Unix timestamp)
+                order: [[5, 'asc']], // Chronological expiry (server order; column is Unix timestamp)
                 pageLength: 25,
                 language: {
                     search: "_INPUT_",
