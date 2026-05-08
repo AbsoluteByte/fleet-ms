@@ -531,7 +531,9 @@
 
                         <!-- Insurance Information -->
                         @php
-                            $insurancesSorted = $car->insurances;
+                            $insurancesSorted = $car->insurances
+                                ->sortByDesc(fn ($insurance) => [optional($insurance->created_at)->timestamp ?? 0, $insurance->id])
+                                ->values();
                             $latestInsurance = $insurancesSorted->count() > 0 ? $insurancesSorted->first() : null;
                             $olderInsurances = $insurancesSorted->count() > 1 ? $insurancesSorted->slice(1) : collect();
                         @endphp
@@ -560,14 +562,18 @@
                                             <tbody>
                                                 <tr>
                                                     <td>{{ $latestInsurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
-                                                    <td>{{ $latestInsurance->start_date->format('d M, Y') }}</td>
-                                                    <td>{{ $latestInsurance->expiry_date->format('d M, Y') }}</td>
+                                                    <td>{{ $latestInsurance->start_date ? $latestInsurance->start_date->format('d M, Y') : '—' }}</td>
+                                                    <td>{{ $latestInsurance->expiry_date ? $latestInsurance->expiry_date->format('d M, Y') : '—' }}</td>
                                                     <td>{{ $latestInsurance->canceled_date ? $latestInsurance->canceled_date->format('d M, Y') : '—' }}</td>
-                                                    <td>{{ $latestInsurance->notify_before_expiry }} days</td>
+                                                    <td>{{ $latestInsurance->notify_before_expiry ? $latestInsurance->notify_before_expiry.' days' : '—' }}</td>
                                                     <td>
-                                                        <span class="badge badge-{{ $latestInsurance->status && $latestInsurance->status->name == 'Active' ? 'success' : 'warning' }}">
-                                                            {{ $latestInsurance->status->name ?? 'N/A' }}
-                                                        </span>
+                                                        @php
+                                                            $latestInsuranceStatus = strtolower(trim((string) optional($latestInsurance->status)->name));
+                                                            $latestInsuranceBadgeClass = $latestInsuranceStatus === 'active'
+                                                                ? 'success'
+                                                                : ($latestInsuranceStatus === 'applied' ? 'warning' : 'secondary');
+                                                        @endphp
+                                                        <span class="badge badge-{{ $latestInsuranceBadgeClass }}">{{ $latestInsurance->status->name ?? 'N/A' }}</span>
                                                     </td>
                                                     <td>
                                                         @if($latestInsurance->insurance_document)
@@ -617,8 +623,8 @@
                                                     @if($insuranceStatusName !== 'applied')
                                                     <tr>
                                                         <td>{{ $insurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
-                                                        <td>{{ $insurance->start_date->format('d M, Y') }}</td>
-                                                        <td>{{ $insurance->expiry_date->format('d M, Y') }}</td>
+                                                        <td>{{ $insurance->start_date ? $insurance->start_date->format('d M, Y') : '—' }}</td>
+                                                        <td>{{ $insurance->expiry_date ? $insurance->expiry_date->format('d M, Y') : '—' }}</td>
                                                         <td>{{ $insurance->canceled_date ? $insurance->canceled_date->format('d M, Y') : '—' }}</td>
                                                         <td>
                                                             @if($insurance->insurance_document)

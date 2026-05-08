@@ -376,7 +376,7 @@ class CarController extends Controller
 
         $latestInsuranceBeforeUpdate = $car->insurances()
             ->with('status')
-            ->orderByDesc('expiry_date')
+            ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->first();
         $this->ensureInsuranceAppliedStatus();
@@ -474,10 +474,11 @@ class CarController extends Controller
         }
 
         $validated = $request->validate($rules);
+        $currentInsuranceStatusName = strtolower(trim((string) optional(optional($latestInsuranceBeforeUpdate)->status)->name));
         if (
             $request->has('has_insurance')
             && $latestInsuranceBeforeUpdate
-            && (int) $latestInsuranceBeforeUpdate->status_id === $this->insuranceStatusIdByName('Active')
+            && $currentInsuranceStatusName === 'active'
             && (int) $validated['insurance_status_id'] === $this->insuranceStatusIdByName('Applied')
         ) {
             throw ValidationException::withMessages([
@@ -489,7 +490,7 @@ class CarController extends Controller
             && in_array((int) $validated['insurance_status_id'], $this->insuranceCancelledStatusIds(), true)
             && (
                 ! $latestInsuranceBeforeUpdate
-                || (int) $latestInsuranceBeforeUpdate->status_id !== $this->insuranceStatusIdByName('Active')
+                || $currentInsuranceStatusName !== 'active'
             )
         ) {
             throw ValidationException::withMessages([

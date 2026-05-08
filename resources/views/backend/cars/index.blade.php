@@ -40,7 +40,7 @@
                                         @php
                                             $carStatusLabel = ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent'));
                                             $latestInsurance = $car->insurances
-                                                ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->expiry_date)->timestamp ?? 0, $i->id])
+                                                ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->created_at)->timestamp ?? 0, $i->id])
                                                 ->first();
                                             $latestInsuranceStatusName = trim((string) optional(optional($latestInsurance)->status)->name);
                                             $insuranceStatusLabel = strcasecmp($latestInsuranceStatusName, 'Applied') === 0
@@ -299,6 +299,32 @@
 
         #carsFilterClose {
             padding: 0.3rem 0.7rem;
+        }
+
+        .insurance-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+
+        .insurance-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            display: inline-block;
+        }
+
+        .insurance-status-dot--active {
+            background: #28c76f;
+        }
+
+        .insurance-status-dot--pending {
+            background: #ff9f43;
+        }
+
+        .insurance-status-dot--inactive {
+            background: #6c757d;
         }
     </style>
 @endsection
