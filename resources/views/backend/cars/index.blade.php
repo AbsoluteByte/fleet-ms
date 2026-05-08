@@ -324,7 +324,7 @@
         }
 
         .insurance-status-dot--inactive {
-            background: #6c757d;
+            background: #ea5455;
         }
     </style>
 @endsection
