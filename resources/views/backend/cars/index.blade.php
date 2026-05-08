@@ -45,7 +45,7 @@
                                             $latestInsuranceStatusName = trim((string) optional(optional($latestInsurance)->status)->name);
                                             $insuranceStatusLabel = strcasecmp($latestInsuranceStatusName, 'Applied') === 0
                                                 ? 'Applied'
-                                                : ($car->isInsuranceCurrentlyActive() ? 'Active' : 'Inactive');
+                                                : (strcasecmp($latestInsuranceStatusName, 'Active') === 0 ? 'Active' : 'Inactive');
                                             $phvCounselLabel = $car->latestPhvCounselName() ?? '—';
                                         @endphp
                                         <tr
