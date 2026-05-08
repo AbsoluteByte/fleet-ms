@@ -10,12 +10,14 @@ class CarInsurance extends Model
 
     protected $fillable = [
         'tenant_id', 'car_id', 'insurance_provider_id', 'start_date',
-        'expiry_date', 'insurance_document', 'notify_before_expiry', 'status_id'
+        'expiry_date', 'applied_date', 'canceled_date', 'insurance_document', 'notify_before_expiry', 'status_id'
     ];
 
     protected $casts = [
         'start_date' => 'date',
-        'expiry_date' => 'date'
+        'expiry_date' => 'date',
+        'applied_date' => 'date',
+        'canceled_date' => 'date',
     ];
 
     public function car()

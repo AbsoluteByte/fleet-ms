@@ -14,6 +14,8 @@ use App\Models\InsuranceProvider;
 use App\Models\Status;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -79,6 +81,7 @@ class CarController extends Controller
         $carModels = CarModel::where('tenant_id', $tenant->id)->get();
         $counsels = Counsel::where('tenant_id', $tenant->id)->get();
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
+        $this->ensureInsuranceAppliedStatus();
         $statuses = Status::where('type', 'insurance')->get();
 
         return view($this->dir.'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
@@ -93,6 +96,7 @@ class CarController extends Controller
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
+        $this->ensureInsuranceAppliedStatus();
 
         // Build validation rules dynamically
         $rules = [
@@ -149,13 +153,45 @@ class CarController extends Controller
         ];
 
         if ($request->has('has_insurance')) {
+            $activeInsuranceStatusId = $this->insuranceStatusIdByName('Active');
+            $appliedInsuranceStatusId = $this->insuranceStatusIdByName('Applied');
+            $cancelledInsuranceStatusIds = $this->insuranceCancelledStatusIds();
             $rules = array_merge($rules, [
                 'insurance_provider_id' => 'required|exists:insurance_providers,id',
-                'insurance_start_date' => 'required|date',
-                'insurance_expiry_date' => 'required|date',
-                'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-                'insurance_notify_before_expiry' => 'required|integer|min:1',
+                'insurance_start_date' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $activeInsuranceStatusId),
+                    'nullable',
+                    'date',
+                ],
+                'insurance_expiry_date' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $activeInsuranceStatusId),
+                    'nullable',
+                    'date',
+                ],
+                'insurance_document' => [
+                    Rule::requiredIf(fn () => in_array((int) $request->input('insurance_status_id'), $cancelledInsuranceStatusIds, true)),
+                    'nullable',
+                    'file',
+                    'mimes:pdf,jpg,jpeg,png',
+                    'max:10240',
+                ],
+                'insurance_notify_before_expiry' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $activeInsuranceStatusId),
+                    'nullable',
+                    'integer',
+                    'min:1',
+                ],
                 'insurance_status_id' => 'required|exists:statuses,id',
+                'insurance_applied_date' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $appliedInsuranceStatusId),
+                    'nullable',
+                    'date',
+                ],
+                'insurance_canceled_date' => [
+                    Rule::requiredIf(fn () => in_array((int) $request->input('insurance_status_id'), $cancelledInsuranceStatusIds, true)),
+                    'nullable',
+                    'date',
+                ],
             ]);
         }
 
@@ -227,12 +263,19 @@ class CarController extends Controller
 
                 // Store Insurance
                 if ($request->has('has_insurance')) {
+                    $selectedInsuranceStatusId = (int) $validated['insurance_status_id'];
+                    $isAppliedInsuranceStatus = $selectedInsuranceStatusId === $this->insuranceStatusIdByName('Applied');
+                    $isCancelledInsuranceStatus = in_array($selectedInsuranceStatusId, $this->insuranceCancelledStatusIds(), true);
+                    $appliedDate = $validated['insurance_applied_date'] ?? null;
+                    $canceledDate = $validated['insurance_canceled_date'] ?? null;
                     $insuranceData = [
                         'tenant_id' => $tenant->id,
                         'insurance_provider_id' => $validated['insurance_provider_id'],
-                        'start_date' => $validated['insurance_start_date'],
-                        'expiry_date' => $validated['insurance_expiry_date'],
-                        'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
+                        'start_date' => $isAppliedInsuranceStatus ? null : ($isCancelledInsuranceStatus ? null : $validated['insurance_start_date']),
+                        'expiry_date' => $isAppliedInsuranceStatus ? null : ($isCancelledInsuranceStatus ? null : $validated['insurance_expiry_date']),
+                        'applied_date' => $isAppliedInsuranceStatus ? $appliedDate : null,
+                        'canceled_date' => $isCancelledInsuranceStatus ? $canceledDate : null,
+                        'notify_before_expiry' => ($isAppliedInsuranceStatus || $isCancelledInsuranceStatus) ? null : $validated['insurance_notify_before_expiry'],
                         'status_id' => $validated['insurance_status_id'],
                     ];
 
@@ -311,6 +354,7 @@ class CarController extends Controller
         $carModels = CarModel::where('tenant_id', $tenant->id)->get();
         $counsels = Counsel::where('tenant_id', $tenant->id)->get();
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
+        $this->ensureInsuranceAppliedStatus();
         $statuses = Status::where('type', 'insurance')->get();
 
         return view($this->dir.'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
@@ -329,6 +373,13 @@ class CarController extends Controller
         if ($car->tenant_id !== $tenant->id) {
             abort(403, 'Unauthorized access to this car.');
         }
+
+        $latestInsuranceBeforeUpdate = $car->insurances()
+            ->with('status')
+            ->orderByDesc('expiry_date')
+            ->orderByDesc('id')
+            ->first();
+        $this->ensureInsuranceAppliedStatus();
 
         $rules = [
             'company_id' => 'required|exists:companies,id',
@@ -386,17 +437,77 @@ class CarController extends Controller
         ];
 
         if ($request->has('has_insurance')) {
+            $activeInsuranceStatusId = $this->insuranceStatusIdByName('Active');
+            $appliedInsuranceStatusId = $this->insuranceStatusIdByName('Applied');
+            $cancelledInsuranceStatusIds = $this->insuranceCancelledStatusIds();
             $rules = array_merge($rules, [
                 'insurance_provider_id' => 'required|exists:insurance_providers,id',
-                'insurance_start_date' => 'required|date',
-                'insurance_expiry_date' => 'required|date',
+                'insurance_start_date' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $activeInsuranceStatusId),
+                    'nullable',
+                    'date',
+                ],
+                'insurance_expiry_date' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $activeInsuranceStatusId),
+                    'nullable',
+                    'date',
+                ],
                 'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-                'insurance_notify_before_expiry' => 'required|integer|min:1',
+                'insurance_notify_before_expiry' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $activeInsuranceStatusId),
+                    'nullable',
+                    'integer',
+                    'min:1',
+                ],
                 'insurance_status_id' => 'required|exists:statuses,id',
+                'insurance_applied_date' => [
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === $appliedInsuranceStatusId),
+                    'nullable',
+                    'date',
+                ],
+                'insurance_canceled_date' => [
+                    Rule::requiredIf(fn () => in_array((int) $request->input('insurance_status_id'), $cancelledInsuranceStatusIds, true)),
+                    'nullable',
+                    'date',
+                ],
             ]);
         }
 
         $validated = $request->validate($rules);
+        if (
+            $request->has('has_insurance')
+            && $latestInsuranceBeforeUpdate
+            && (int) $latestInsuranceBeforeUpdate->status_id === $this->insuranceStatusIdByName('Active')
+            && (int) $validated['insurance_status_id'] === $this->insuranceStatusIdByName('Applied')
+        ) {
+            throw ValidationException::withMessages([
+                'insurance_status_id' => 'Applied status is not allowed when current insurance status is Active.',
+            ]);
+        }
+        if (
+            $request->has('has_insurance')
+            && in_array((int) $validated['insurance_status_id'], $this->insuranceCancelledStatusIds(), true)
+            && (
+                ! $latestInsuranceBeforeUpdate
+                || (int) $latestInsuranceBeforeUpdate->status_id !== $this->insuranceStatusIdByName('Active')
+            )
+        ) {
+            throw ValidationException::withMessages([
+                'insurance_status_id' => 'Canceled status is only allowed when current insurance status is Active.',
+            ]);
+        }
+        if ($request->has('has_insurance') && in_array((int) $validated['insurance_status_id'], $this->insuranceCancelledStatusIds(), true)) {
+            $latestInsuranceWithDocument = $car->insurances()
+                ->whereNotNull('insurance_document')
+                ->orderByDesc('expiry_date')
+                ->orderByDesc('id')
+                ->first();
+            if (! $request->hasFile('insurance_document') && ! $latestInsuranceWithDocument) {
+                throw ValidationException::withMessages([
+                    'insurance_document' => 'Insurance document is required before insurance cancelation.',
+                ]);
+            }
+        }
 
         try {
             $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant) {
@@ -535,50 +646,69 @@ class CarController extends Controller
                 $this->syncReservation($request, $car, $tenant);
 
                 // ==================== Update Insurance ====================
-                $latestInsurance = $car->insurances->first();
+                $latestInsurance = $car->insurances
+                    ->sortByDesc(fn ($insurance) => [optional($insurance->created_at)->timestamp ?? 0, $insurance->id])
+                    ->first();
 
                 if ($request->has('has_insurance')) {
+                    $selectedInsuranceStatusId = (int) $validated['insurance_status_id'];
+                    $isAppliedInsuranceStatus = $selectedInsuranceStatusId === $this->insuranceStatusIdByName('Applied');
+                    $isCancelledInsuranceStatus = in_array($selectedInsuranceStatusId, $this->insuranceCancelledStatusIds(), true);
+                    $appliedDate = $validated['insurance_applied_date'] ?? null;
+                    $canceledDate = $validated['insurance_canceled_date'] ?? null;
+                    $carriedStartDate = $latestInsurance && $latestInsurance->start_date
+                        ? $latestInsurance->start_date->format('Y-m-d')
+                        : null;
+                    $carriedExpiryDate = $latestInsurance && $latestInsurance->expiry_date
+                        ? $latestInsurance->expiry_date->format('Y-m-d')
+                        : null;
+                    $startDate = $isAppliedInsuranceStatus
+                        ? null
+                        : ($isCancelledInsuranceStatus ? $carriedStartDate : $validated['insurance_start_date']);
+                    $expiryDate = $isCancelledInsuranceStatus
+                        ? $carriedExpiryDate
+                        : ($isAppliedInsuranceStatus ? null : $validated['insurance_expiry_date']);
                     $insuranceData = [
                         'tenant_id' => $tenant->id,
                         'insurance_provider_id' => $validated['insurance_provider_id'],
-                        'start_date' => $validated['insurance_start_date'],
-                        'expiry_date' => $validated['insurance_expiry_date'],
-                        'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
+                        'start_date' => $startDate,
+                        'expiry_date' => $expiryDate,
+                        'applied_date' => $isAppliedInsuranceStatus
+                            ? $appliedDate
+                            : ($latestInsurance ? $latestInsurance->applied_date?->format('Y-m-d') : null),
+                        'canceled_date' => $isCancelledInsuranceStatus ? $canceledDate : null,
+                        'notify_before_expiry' => ($isAppliedInsuranceStatus || $isCancelledInsuranceStatus) ? null : $validated['insurance_notify_before_expiry'],
                         'status_id' => $validated['insurance_status_id'],
                     ];
 
-                    $newStart = Carbon::parse($validated['insurance_start_date'])->startOfDay();
-                    $newExpiry = Carbon::parse($validated['insurance_expiry_date'])->startOfDay();
-                    $periodChanged = ! $latestInsurance
-                        || ! $latestInsurance->start_date->copy()->startOfDay()->equalTo($newStart)
-                        || ! $latestInsurance->expiry_date->copy()->startOfDay()->equalTo($newExpiry);
+                    $latestStatusName = strtolower(trim((string) optional(optional($latestInsurance)->status)->name));
+                    $isLatestClosedCycle = in_array($latestStatusName, ['cancelled', 'canceled'], true);
+                    $startingNewCycle = $latestInsurance
+                        && $isLatestClosedCycle
+                        && ! $isCancelledInsuranceStatus;
+                    $updatingSameCycleRow = $latestInsurance && ! $startingNewCycle;
 
                     if ($request->hasFile('insurance_document')) {
                         $insuranceData['insurance_document'] = $this->uploadFile(
                             $request->file('insurance_document'),
                             'uploads/cars/insurance_documents'
                         );
-                        if (! $periodChanged && $latestInsurance && $latestInsurance->insurance_document) {
+                        if ($updatingSameCycleRow && $latestInsurance->insurance_document) {
                             $this->deleteFile($latestInsurance->insurance_document, 'uploads/cars/insurance_documents');
                         }
-                    } elseif ($latestInsurance && $latestInsurance->insurance_document) {
+                    } elseif (! $startingNewCycle && $latestInsurance && $latestInsurance->insurance_document) {
                         $insuranceData['insurance_document'] = $latestInsurance->insurance_document;
                     }
 
-                    if ($periodChanged) {
+                    if (! $latestInsurance || $startingNewCycle) {
                         $car->insurances()->create($insuranceData);
-                    } elseif ($latestInsurance) {
-                        $latestInsurance->update($insuranceData);
                     } else {
-                        $car->insurances()->create($insuranceData);
+                        // Keep one row per insurance lifecycle; mutate the current row through status changes.
+                        $latestInsurance->update($insuranceData);
                     }
                 } else {
-                    foreach ($car->insurances as $insuranceRow) {
-                        if ($insuranceRow->insurance_document) {
-                            $this->deleteFile($insuranceRow->insurance_document, 'uploads/cars/insurance_documents');
-                        }
-                    }
-                    $car->insurances()->delete();
+                    // Keep historical insurance records when insurance section is unchecked.
+                    // New insurance can be added later by re-checking the checkbox.
                 }
 
                 return $car;
@@ -829,14 +959,14 @@ class CarController extends Controller
     {
         $record = CarMot::where('car_id', $car->id)->where('id', $car_mot)->firstOrFail();
 
-        return $this->downloadCarFile($car, 'uploads/cars/mot_documents', $record->document, 'mot');
+        return $this->viewCarFileInline($car, 'uploads/cars/mot_documents', $record->document);
     }
 
     public function downloadPhv(Car $car, int $car_phv)
     {
         $record = CarPhv::where('car_id', $car->id)->where('id', $car_phv)->firstOrFail();
 
-        return $this->downloadCarFile($car, 'uploads/cars/phv_documents', $record->document, 'phv');
+        return $this->viewCarFileInline($car, 'uploads/cars/phv_documents', $record->document);
     }
 
     /**
@@ -1202,5 +1332,41 @@ class CarController extends Controller
                 File::delete($filePath);
             }
         }
+    }
+
+    private function ensureInsuranceAppliedStatus(): void
+    {
+        Status::firstOrCreate(
+            ['type' => 'insurance', 'name' => 'Applied'],
+            ['color' => '#17a2b8']
+        );
+    }
+
+    private function insuranceStatusIdByName(string $statusName): int
+    {
+        $status = Status::firstOrCreate(
+            ['type' => 'insurance', 'name' => $statusName],
+            ['color' => $statusName === 'Applied' ? '#17a2b8' : '#28a745']
+        );
+
+        return (int) $status->id;
+    }
+
+    /**
+     * Support both "Cancelled" and "Canceled" naming.
+     *
+     * @return int[]
+     */
+    private function insuranceCancelledStatusIds(): array
+    {
+        $statuses = Status::where('type', 'insurance')
+            ->whereIn('name', ['Cancelled', 'Canceled'])
+            ->get();
+
+        if ($statuses->isEmpty()) {
+            return [(int) $this->insuranceStatusIdByName('Cancelled')];
+        }
+
+        return $statuses->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
 }

@@ -29,6 +29,7 @@ class StatusSeeder extends Seeder
 
             // Insurance statuses
             ['name' => 'Active', 'type' => 'insurance', 'color' => '#28a745'],
+            ['name' => 'Applied', 'type' => 'insurance', 'color' => '#17a2b8'],
             ['name' => 'Expired', 'type' => 'insurance', 'color' => '#dc3545'],
             ['name' => 'Pending Renewal', 'type' => 'insurance', 'color' => '#ffc107'],
             ['name' => 'Cancelled', 'type' => 'insurance', 'color' => '#6c757d'],

@@ -39,7 +39,13 @@
                                     @forelse($cars as $car)
                                         @php
                                             $carStatusLabel = ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent'));
-                                            $insuranceStatusLabel = $car->isInsuranceCurrentlyActive() ? 'Active' : 'Inactive';
+                                            $latestInsurance = $car->insurances
+                                                ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->expiry_date)->timestamp ?? 0, $i->id])
+                                                ->first();
+                                            $latestInsuranceStatusName = trim((string) optional(optional($latestInsurance)->status)->name);
+                                            $insuranceStatusLabel = strcasecmp($latestInsuranceStatusName, 'Applied') === 0
+                                                ? 'Applied'
+                                                : ($car->isInsuranceCurrentlyActive() ? 'Active' : 'Inactive');
                                             $phvCounselLabel = $car->latestPhvCounselName() ?? '—';
                                         @endphp
                                         <tr
@@ -65,6 +71,11 @@
                                                     <span class="insurance-status">
                                                         <span class="insurance-status-dot insurance-status-dot--active" aria-hidden="true"></span>
                                                         <span class="insurance-status-label">Active</span>
+                                                    </span>
+                                                @elseif($insuranceStatusLabel === 'Applied')
+                                                    <span class="insurance-status">
+                                                        <span class="insurance-status-dot insurance-status-dot--pending" aria-hidden="true"></span>
+                                                        <span class="insurance-status-label">Applied</span>
                                                     </span>
                                                 @else
                                                     <span class="insurance-status">
@@ -162,6 +173,7 @@
                 <select id="carsFilterInsurance" class="form-control cars-advanced-filter" data-filter-key="insuranceStatus">
                     <option value="">All Insurance Statuses</option>
                     <option value="Active">Active</option>
+                    <option value="Applied">Applied</option>
                     <option value="Inactive">Inactive</option>
                 </select>
             </div>

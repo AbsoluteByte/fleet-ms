@@ -37,6 +37,23 @@
 
     {{-- Summary Cards - FLEET NOTIFICATIONS ONLY (NO PAYMENTS) --}}
     <div class="row">
+        {{-- Insurance Applied --}}
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card text-center cursor-pointer" onclick="filterNotifications('insurance_applied')">
+                <div class="card-content">
+                    <div class="card-body py-1">
+                        <div class="avatar bg-rgba-warning p-50 m-0 mb-1">
+                            <div class="avatar-content">
+                                <i class="feather icon-clock text-warning font-large-1"></i>
+                            </div>
+                        </div>
+                        <h2 class="text-bold-700">{{ $summary['insurance_applied'] }}</h2>
+                        <p class="mb-0 font-small-3">Insurance Applied</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         {{-- Expiring Insurance --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card text-center cursor-pointer" onclick="filterNotifications('insurance_expiry')">
@@ -149,8 +166,14 @@
                         <a class="nav-link active" href="javascript:void(0)" onclick="filterNotifications('')">
                             All Fleet
                             <span class="badge badge-pill badge-light ml-50">
-                                {{ $summary['expiring_insurance'] + $summary['expiring_phv'] + $summary['expiring_mot'] + $summary['expiring_road_tax'] + $summary['expiring_driver_licenses'] + $summary['expiring_phd_licenses'] }}
+                                {{ $summary['insurance_applied'] + $summary['expiring_insurance'] + $summary['expiring_phv'] + $summary['expiring_mot'] + $summary['expiring_road_tax'] + $summary['expiring_driver_licenses'] + $summary['expiring_phd_licenses'] }}
                             </span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('insurance_applied')">
+                            Insurance Applied
+                            <span class="badge badge-pill badge-warning ml-50">{{ $summary['insurance_applied'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -271,6 +294,7 @@
                         data: 'type',
                         render: function(data, type, row) {
                             const iconMap = {
+                                'insurance_applied': 'icon-clock text-warning',
                                 'insurance_expiry': 'icon-shield text-primary',
                                 'phv_expiry': 'icon-award text-secondary',
                                 'mot_expiry': 'icon-tool text-warning',

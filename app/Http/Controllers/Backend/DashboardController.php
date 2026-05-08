@@ -180,6 +180,7 @@ class DashboardController extends Controller
                     'overdue_payments' => 0,
                     'due_today' => 0,
                     'due_this_week' => 0,
+                    'insurance_applied' => 0,
                     'expiring_insurance' => 0,
                     'expiring_phv' => 0,
                     'expiring_mot' => 0,
@@ -293,17 +294,49 @@ class DashboardController extends Controller
         }
 
         // ==================== 4. INSURANCE POLICIES (latest policy per car only) ====================
-        $insuranceRows = CarInsurance::with(['car'])
+        $insuranceRows = CarInsurance::with(['car', 'status'])
             ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
                 $query->where('tenant_id', $tenant->id)
                     ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
             })
             ->get();
-        $expiringInsurance = $this->latestInsurancePerCar($insuranceRows)
+        $activeInsuranceStatusId = (int) optional(\App\Models\Status::where('type', 'insurance')->where('name', 'Active')->first())->id;
+        $latestInsuranceRows = $this->latestInsurancePerCar($insuranceRows);
+        $appliedInsurance = $latestInsuranceRows
             ->filter(function ($policy) {
+                return strcasecmp((string) optional($policy->status)->name, 'Applied') === 0;
+            })
+            ->values();
+        foreach ($appliedInsurance as $policy) {
+            $appliedDate = $policy->applied_date ?? $policy->start_date;
+            $appliedOn = $appliedDate ? $appliedDate->format('d M, Y') : 'N/A';
+            $notifications->push([
+                'id' => 'insurance_applied_'.$policy->id,
+                'type' => 'insurance_applied',
+                'priority' => 4,
+                'title' => 'Insurance Applied',
+                'message' => $policy->car->registration.' - Applied on '.$appliedOn,
+                'simple_message' => $policy->car->registration.' - Applied on '.$appliedOn,
+                'vehicle' => $policy->car->registration,
+                'time_ago' => $appliedDate ? $appliedDate->diffForHumans() : 'Pending',
+                'action_url' => route('cars.edit', $policy->car_id),
+                'icon' => 'icon-shield',
+                'color' => 'warning',
+                'bg_color' => 'rgba(245, 158, 11, 0.1)',
+                'border_color' => '#f59e0b',
+                'created_at' => $appliedDate ?? $policy->updated_at,
+                'sort_key' => ($appliedDate ?? $policy->updated_at)->timestamp,
+            ]);
+        }
+
+        $expiringInsurance = $latestInsuranceRows
+            ->filter(function ($policy) use ($activeInsuranceStatusId) {
+                if (! $activeInsuranceStatusId || (int) $policy->status_id !== $activeInsuranceStatusId) {
+                    return false;
+                }
                 $days = (int) ($policy->notify_before_expiry ?? 0);
 
-                return $policy->expiry_date <= now()->addDays($days);
+                return $policy->expiry_date && $policy->expiry_date <= now()->addDays($days);
             })
             ->sortBy('expiry_date')
             ->values();
@@ -691,6 +724,7 @@ class DashboardController extends Controller
             'overdue_payments' => $overdueCollections->count(),
             'due_today' => $dueTodayCollections->count(),
             'due_this_week' => $dueThisWeekCollections->count(),
+            'insurance_applied' => $appliedInsurance->count(),
             'expiring_insurance' => $expiringInsurance->count(),
             'expiring_phv' => $expiringPhvs->count(),
             'expiring_mot' => $expiringMots->count(),
@@ -836,7 +870,7 @@ class DashboardController extends Controller
     {
         return $policies->groupBy('car_id')->map(function ($group) {
             return $group->sortByDesc(function ($p) {
-                return [optional($p->expiry_date)->timestamp ?? 0, $p->id];
+                return [optional($p->created_at)->timestamp ?? 0, $p->id];
             })->first();
         })->values();
     }

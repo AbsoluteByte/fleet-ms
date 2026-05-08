@@ -75,11 +75,6 @@
                                 <strong>Fleet Status:</strong>
                                 <p class="mb-0">{{ ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent')) }}</p>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <strong>Available From:</strong>
-                                <p class="mb-0">{{ $car->available_from_date ? $car->available_from_date->format('d M, Y') : 'Now' }}</p>
-                            </div>
-
                             @if($car->statusHistories->isNotEmpty())
                                 @php
                                     $historyStep2Statuses = ['reserved', 'vehicle_swap', 'damaged', 'written_off', 'stolen', 'for_sale', 'sold'];
@@ -281,7 +276,7 @@
                                                     <td>
                                                         @if($latestMot->document)
                                                             <a href="{{ route('cars.mots.download', [$car, $latestMot->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-file"></i> Download
+                                                                <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
                                                             <span class="text-muted">No Document</span>
@@ -325,7 +320,7 @@
                                                         <td>{{ $mot->term }}</td>
                                                         <td>
                                                             @if($mot->document)
-                                                                <a href="{{ route('cars.mots.download', [$car, $mot->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
+                                                                <a href="{{ route('cars.mots.download', [$car, $mot->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -463,7 +458,7 @@
                                                     <td>
                                                         @if($latestPhv->document)
                                                             <a href="{{ route('cars.phvs.download', [$car, $latestPhv->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-file"></i> Download
+                                                                <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
                                                             <span class="text-muted">No Document</span>
@@ -518,7 +513,7 @@
                                                         </td>
                                                         <td>
                                                             @if($phv->document)
-                                                                <a href="{{ route('cars.phvs.download', [$car, $phv->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
+                                                                <a href="{{ route('cars.phvs.download', [$car, $phv->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -556,6 +551,7 @@
                                                 <th>Provider</th>
                                                 <th>Start Date</th>
                                                 <th>Expiry Date</th>
+                                                <th>Canceled Date</th>
                                                 <th>Notify Before</th>
                                                 <th>Status</th>
                                                 <th>Document</th>
@@ -566,6 +562,7 @@
                                                     <td>{{ $latestInsurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
                                                     <td>{{ $latestInsurance->start_date->format('d M, Y') }}</td>
                                                     <td>{{ $latestInsurance->expiry_date->format('d M, Y') }}</td>
+                                                    <td>{{ $latestInsurance->canceled_date ? $latestInsurance->canceled_date->format('d M, Y') : '—' }}</td>
                                                     <td>{{ $latestInsurance->notify_before_expiry }} days</td>
                                                     <td>
                                                         <span class="badge badge-{{ $latestInsurance->status && $latestInsurance->status->name == 'Active' ? 'success' : 'warning' }}">
@@ -608,19 +605,21 @@
                                                         <th>Provider</th>
                                                         <th>Start</th>
                                                         <th>Expiry</th>
-                                                        <th>Notify</th>
-                                                        <th>Status</th>
+                                                        <th>Canceled</th>
                                                         <th>Document</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     @foreach($olderInsurances as $insurance)
+                                                    @php
+                                                        $insuranceStatusName = strtolower(trim((string) optional($insurance->status)->name));
+                                                    @endphp
+                                                    @if($insuranceStatusName !== 'applied')
                                                     <tr>
                                                         <td>{{ $insurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
                                                         <td>{{ $insurance->start_date->format('d M, Y') }}</td>
                                                         <td>{{ $insurance->expiry_date->format('d M, Y') }}</td>
-                                                        <td>{{ $insurance->notify_before_expiry }} days</td>
-                                                        <td>{{ $insurance->status->name ?? 'N/A' }}</td>
+                                                        <td>{{ $insurance->canceled_date ? $insurance->canceled_date->format('d M, Y') : '—' }}</td>
                                                         <td>
                                                             @if($insurance->insurance_document)
                                                                 <a href="{{ asset('uploads/cars/insurance_documents/' . $insurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
@@ -629,6 +628,7 @@
                                                             @endif
                                                         </td>
                                                     </tr>
+                                                    @endif
                                                     @endforeach
                                                 </tbody>
                                             </table>

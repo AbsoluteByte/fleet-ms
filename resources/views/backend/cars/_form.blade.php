@@ -200,18 +200,6 @@
         </div>
     </div>
 
-    <div class="col-md-6">
-        <div class="form-group">
-            <label for="available_from_date">Available From</label>
-            <input type="date" name="available_from_date" id="available_from_date"
-                class="form-control @error('available_from_date') is-invalid @enderror"
-                value="{{ old('available_from_date') ?? (isset($model) && $model->id && $model->available_from_date ? $model->available_from_date->format('Y-m-d') : '') }}">
-            @error('available_from_date')
-            <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
-        </div>
-    </div>
-
     <div class="col-12">
         <div class="form-group">
             <label for="seller_notes">Seller Notes</label>
@@ -242,19 +230,7 @@
                 : '';
         }
     @endphp
-    <div class="col-md-6" id="phv-status-wrapper" style="display: {{ $showPhvStatusControls ? 'block' : 'none' }};">
-        <div class="form-group">
-            <label for="phv_status">PHV Status</label>
-            <select name="phv_status" id="phv_status" class="form-control @error('phv_status') is-invalid @enderror">
-                <option value="need_to_apply" {{ $phvStatus === 'need_to_apply' ? 'selected' : '' }}>Need to Apply</option>
-                <option value="applied" {{ $phvStatus === 'applied' ? 'selected' : '' }}>Applied</option>
-                <option value="phv_active" {{ $phvStatus === 'phv_active' ? 'selected' : '' }}>PHV Active</option>
-            </select>
-            @error('phv_status')
-            <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
-        </div>
-    </div>
+    <input type="hidden" name="phv_status" id="phv_status" value="{{ $phvStatus }}">
 
     <div class="col-md-6" id="phv-applied-date-wrapper" style="display: {{ $showPhvStatusControls && $phvStatus === 'applied' ? 'block' : 'none' }};">
         <div class="form-group">
@@ -456,7 +432,7 @@
                                     @if((is_object($mot) && $mot->document) || (isset($mot['document']) && $mot['document']))
                                         <small class="text-muted">Current:
                                             @if(isset($model) && $model->id && is_object($mot) && isset($mot->id))
-                                                <a href="{{ route('cars.mots.download', [$model, $mot->id]) }}" target="_blank">Download</a>
+                                                <a href="{{ route('cars.mots.download', [$model, $mot->id]) }}" target="_blank">View</a>
                                             @else
                                                 <a href="{{ asset('uploads/cars/mot_documents/' . (is_object($mot) ? $mot->document : $mot['document'])) }}" target="_blank">View</a>
                                             @endif
@@ -532,7 +508,7 @@
                                 <td>{{ $motH->term }}</td>
                                 <td>
                                     @if($motH->document)
-                                        <a href="{{ route('cars.mots.download', [$model, $motH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
+                                        <a href="{{ route('cars.mots.download', [$model, $motH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
@@ -1042,7 +1018,7 @@
                                     @if((is_object($phv) && $phv->document) || (isset($phv['document']) && $phv['document']))
                                         <small class="text-muted">Current:
                                             @if(isset($model) && $model->id && is_object($phv) && isset($phv->id))
-                                                <a href="{{ route('cars.phvs.download', [$model, $phv->id]) }}" target="_blank">Download</a>
+                                                <a href="{{ route('cars.phvs.download', [$model, $phv->id]) }}" target="_blank">View</a>
                                             @else
                                                 <a href="{{ asset('uploads/cars/phv_documents/' . (is_object($phv) ? $phv->document : $phv['document'])) }}" target="_blank">View</a>
                                             @endif
@@ -1133,7 +1109,7 @@
                                 </td>
                                 <td>
                                     @if($phvH->document)
-                                        <a href="{{ route('cars.phvs.download', [$model, $phvH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
+                                        <a href="{{ route('cars.phvs.download', [$model, $phvH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
@@ -1158,11 +1134,26 @@
     $latestInsuranceForForm = null;
     $olderInsurancesForModal = collect();
     $showInsuranceViewAll = false;
+    $latestInsuranceStatusName = null;
     if (isset($model) && $model->id && $model->insurances->isNotEmpty()) {
-        $olderInsurancesForModal = $model->insurances->count() > 1 ? $model->insurances->slice(1)->values() : collect();
+        $sortedInsurances = $model->insurances
+            ->sortByDesc(fn ($insurance) => [optional($insurance->created_at)->timestamp ?? 0, $insurance->id])
+            ->values();
+        $latestInsuranceStatusName = strtolower(trim((string) optional(optional($sortedInsurances->first())->status)->name));
+        if (in_array($latestInsuranceStatusName, ['cancelled', 'canceled'], true)) {
+            $olderInsurancesForModal = $sortedInsurances;
+            $latestInsuranceForForm = null;
+        } else {
+            $olderInsurancesForModal = $sortedInsurances->count() > 1 ? $sortedInsurances->slice(1)->values() : collect();
+            $latestInsuranceForForm = $sortedInsurances->first();
+        }
         $showInsuranceViewAll = $olderInsurancesForModal->isNotEmpty();
-        $latestInsuranceForForm = $model->insurances->first();
     }
+    $defaultHasInsurance = isset($model) && $model->id
+        ? (isset($latestInsuranceForForm) && $latestInsuranceForForm !== null)
+        : false;
+    $hasInsuranceChecked = (bool) old('has_insurance', $defaultHasInsurance);
+    $hasExistingInsuranceDocument = (bool) ($latestInsuranceForForm && $latestInsuranceForForm->insurance_document);
 @endphp
 
 {{-- Insurance Information Section - OPTIONAL --}}
@@ -1177,7 +1168,7 @@
                         </h5>
                         <div class="form-check mb-0">
                             <input type="checkbox" class="form-check-input" id="has_insurance" name="has_insurance"
-                                {{ (old('has_insurance') ?? (isset($model) && $model->id && $model->insurances->count() > 0)) ? 'checked' : '' }}>
+                                {{ $hasInsuranceChecked ? 'checked' : '' }}>
                             <label class="form-check-label" for="has_insurance">
                                 <strong>Add Insurance</strong>
                             </label>
@@ -1218,11 +1209,16 @@
                             <label for="insurance_status_id">Status</label>
                             <select name="insurance_status_id" id="insurance_status_id" class="form-control @error('insurance_status_id') is-invalid @enderror">
                                 <option value="">Select Status</option>
-                                @foreach($statuses as $status)
-                                    <option value="{{ $status->id }}"
-                                        {{ (old('insurance_status_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->status_id : '')) == $status->id ? 'selected' : '' }}>
-                                        {{ $status->name }}
-                                    </option>
+                                @foreach($statuses->sortByDesc(fn($status) => strtolower($status->name) === 'applied') as $status)
+                                    @if(!in_array(strtolower($status->name), ['expired', 'pending renewal']))
+                                        <option value="{{ $status->id }}"
+                                            data-status-name="{{ strtolower($status->name) }}"
+                                            {{ strtolower($status->name) === 'applied' && $latestInsuranceStatusName === 'active' ? 'disabled' : '' }}
+                                            {{ in_array(strtolower($status->name), ['cancelled', 'canceled'], true) && $latestInsuranceStatusName !== 'active' ? 'disabled' : '' }}
+                                            {{ (old('insurance_status_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->status_id : '')) == $status->id ? 'selected' : '' }}>
+                                            {{ $status->name }}
+                                        </option>
+                                    @endif
                                 @endforeach
                             </select>
                             @error('insurance_status_id')
@@ -1231,36 +1227,60 @@
                         </div>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-6" id="insurance-applied-date-wrapper" style="display: none;">
+                        <div class="form-group">
+                            <label for="insurance_applied_date">Date Applied</label>
+                            <input type="date" name="insurance_applied_date" id="insurance_applied_date"
+                                   class="form-control @error('insurance_applied_date') is-invalid @enderror"
+                                   value="{{ old('insurance_applied_date') ?? ($latestInsuranceForForm && optional($latestInsuranceForForm->status)->name === 'Applied' && $latestInsuranceForForm->applied_date ? $latestInsuranceForForm->applied_date->format('Y-m-d') : '') }}">
+                            @error('insurance_applied_date')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div class="col-md-6" id="insurance-cancelled-date-wrapper" style="display: none;">
+                        <div class="form-group">
+                            <label for="insurance_canceled_date">Canceled Date</label>
+                            <input type="date" name="insurance_canceled_date" id="insurance_canceled_date"
+                                   class="form-control @error('insurance_canceled_date') is-invalid @enderror"
+                                   value="{{ old('insurance_canceled_date') }}">
+                            @error('insurance_canceled_date')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div class="col-md-6" id="insurance-start-date-wrapper">
                         <div class="form-group">
                             <label for="insurance_start_date">Start Date</label>
                             <input type="date" name="insurance_start_date" id="insurance_start_date"
                                    class="form-control @error('insurance_start_date') is-invalid @enderror"
-                                   value="{{ old('insurance_start_date') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->start_date->format('Y-m-d') : '') }}">
+                                   value="{{ old('insurance_start_date') ?? ($latestInsuranceForForm && $latestInsuranceForForm->start_date ? $latestInsuranceForForm->start_date->format('Y-m-d') : '') }}">
                             @error('insurance_start_date')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-6" id="insurance-expiry-date-wrapper">
                         <div class="form-group">
                             <label for="insurance_expiry_date">Expiry Date</label>
                             <input type="date" name="insurance_expiry_date" id="insurance_expiry_date"
                                    class="form-control @error('insurance_expiry_date') is-invalid @enderror"
-                                   value="{{ old('insurance_expiry_date') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->expiry_date->format('Y-m-d') : '') }}">
+                                   value="{{ old('insurance_expiry_date') ?? ($latestInsuranceForForm && $latestInsuranceForForm->expiry_date ? $latestInsuranceForForm->expiry_date->format('Y-m-d') : '') }}">
                             @error('insurance_expiry_date')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-6" id="insurance-notify-before-expiry-wrapper">
                         <div class="form-group">
                             <label for="insurance_notify_before_expiry">Notify Before Expiry (days)</label>
                             <input type="number" name="insurance_notify_before_expiry" id="insurance_notify_before_expiry"
                                    class="form-control @error('insurance_notify_before_expiry') is-invalid @enderror"
-                                   value="{{ old('insurance_notify_before_expiry') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->notify_before_expiry : '30') }}"
+                                   value="{{ old('insurance_notify_before_expiry') ?? ($latestInsuranceForForm && $latestInsuranceForForm->notify_before_expiry ? $latestInsuranceForForm->notify_before_expiry : '30') }}"
                                    min="1">
                             @error('insurance_notify_before_expiry')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -1268,7 +1288,7 @@
                         </div>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-6" id="insurance-document-wrapper">
                         <div class="form-group">
                             <label for="insurance_document">Insurance Document</label>
                             <input type="file" name="insurance_document" id="insurance_document"
@@ -1306,19 +1326,21 @@
                                 <th>Provider</th>
                                 <th>Start</th>
                                 <th>Expiry</th>
-                                <th>Status</th>
-                                <th>Notify (days)</th>
+                                <th>Canceled Date</th>
                                 <th>Document</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($olderInsurancesForModal as $insuranceH)
+                            @php
+                                $insuranceStatusName = strtolower(trim((string) optional($insuranceH->status)->name));
+                            @endphp
+                            @if($insuranceStatusName !== 'applied')
                             <tr>
                                 <td>{{ $insuranceH->insuranceProvider->provider_name ?? '—' }}</td>
                                 <td>{{ $insuranceH->start_date->format('d M, Y') }}</td>
                                 <td>{{ $insuranceH->expiry_date->format('d M, Y') }}</td>
-                                <td>{{ $insuranceH->status->name ?? '—' }}</td>
-                                <td>{{ $insuranceH->notify_before_expiry }}</td>
+                                <td>{{ ($insuranceH->status && in_array(strtolower($insuranceH->status->name), ['cancelled', 'canceled'], true) && $insuranceH->canceled_date) ? $insuranceH->canceled_date->format('d M, Y') : '—' }}</td>
                                 <td>
                                     @if($insuranceH->insurance_document)
                                         <a href="{{ asset('uploads/cars/insurance_documents/' . $insuranceH->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
@@ -1327,6 +1349,7 @@
                                     @endif
                                 </td>
                             </tr>
+                            @endif
                             @endforeach
                         </tbody>
                     </table>
@@ -1733,6 +1756,7 @@
         @endif
 
         const todayYmd = new Date().toISOString().slice(0, 10);
+        const hasExistingInsuranceDocument = @json($hasExistingInsuranceDocument);
 
         function shouldHideLogBookForV5() {
             const el = document.getElementById('v5_document');
@@ -1936,21 +1960,98 @@
         function toggleInsuranceSection() {
             const hasInsuranceCheckbox = document.getElementById('has_insurance');
             const insuranceSection = document.getElementById('insurance-section');
+            const insuranceProvider = document.getElementById('insurance_provider_id');
+            const insuranceStatus = document.getElementById('insurance_status_id');
+            const insuranceStart = document.getElementById('insurance_start_date');
+            const insuranceExpiry = document.getElementById('insurance_expiry_date');
+            const insuranceNotify = document.getElementById('insurance_notify_before_expiry');
+            const insuranceAppliedDate = document.getElementById('insurance_applied_date');
 
             if (hasInsuranceCheckbox.checked) {
                 insuranceSection.style.display = 'block';
-                document.getElementById('insurance_provider_id').setAttribute('required', 'required');
-                document.getElementById('insurance_start_date').setAttribute('required', 'required');
-                document.getElementById('insurance_expiry_date').setAttribute('required', 'required');
-                document.getElementById('insurance_notify_before_expiry').setAttribute('required', 'required');
-                document.getElementById('insurance_status_id').setAttribute('required', 'required');
+                insuranceProvider.setAttribute('required', 'required');
+                insuranceStatus.setAttribute('required', 'required');
             } else {
                 insuranceSection.style.display = 'none';
-                document.getElementById('insurance_provider_id').removeAttribute('required');
-                document.getElementById('insurance_start_date').removeAttribute('required');
-                document.getElementById('insurance_expiry_date').removeAttribute('required');
-                document.getElementById('insurance_notify_before_expiry').removeAttribute('required');
-                document.getElementById('insurance_status_id').removeAttribute('required');
+                insuranceProvider.removeAttribute('required');
+                insuranceStatus.removeAttribute('required');
+                insuranceStart.removeAttribute('required');
+                insuranceExpiry.removeAttribute('required');
+                insuranceNotify.removeAttribute('required');
+                insuranceAppliedDate.removeAttribute('required');
+            }
+
+            toggleInsuranceStatusFields();
+        }
+
+        function toggleInsuranceStatusFields() {
+            const hasInsuranceCheckbox = document.getElementById('has_insurance');
+            const insuranceStatusSelect = document.getElementById('insurance_status_id');
+            const selectedOption = insuranceStatusSelect ? insuranceStatusSelect.options[insuranceStatusSelect.selectedIndex] : null;
+            const selectedStatusName = (selectedOption && selectedOption.dataset.statusName ? selectedOption.dataset.statusName : '').trim().toLowerCase();
+            const isApplied = selectedStatusName === 'applied';
+            const isCancelled = selectedStatusName === 'cancelled' || selectedStatusName === 'canceled';
+
+            const appliedDateWrapper = document.getElementById('insurance-applied-date-wrapper');
+            const cancelledDateWrapper = document.getElementById('insurance-cancelled-date-wrapper');
+            const startDateWrapper = document.getElementById('insurance-start-date-wrapper');
+            const expiryDateWrapper = document.getElementById('insurance-expiry-date-wrapper');
+            const notifyWrapper = document.getElementById('insurance-notify-before-expiry-wrapper');
+            const documentWrapper = document.getElementById('insurance-document-wrapper');
+
+            const insuranceStart = document.getElementById('insurance_start_date');
+            const insuranceExpiry = document.getElementById('insurance_expiry_date');
+            const insuranceNotify = document.getElementById('insurance_notify_before_expiry');
+            const insuranceAppliedDate = document.getElementById('insurance_applied_date');
+            const insuranceCanceledDate = document.getElementById('insurance_canceled_date');
+            const insuranceDocument = document.getElementById('insurance_document');
+
+            const showInsuranceFields = hasInsuranceCheckbox && hasInsuranceCheckbox.checked;
+            if (!showInsuranceFields) {
+                appliedDateWrapper.style.display = 'none';
+                cancelledDateWrapper.style.display = 'none';
+                startDateWrapper.style.display = 'none';
+                expiryDateWrapper.style.display = 'none';
+                notifyWrapper.style.display = 'none';
+                documentWrapper.style.display = 'none';
+                insuranceStart.removeAttribute('required');
+                insuranceExpiry.removeAttribute('required');
+                insuranceNotify.removeAttribute('required');
+                insuranceAppliedDate.removeAttribute('required');
+                insuranceCanceledDate.removeAttribute('required');
+                insuranceDocument.removeAttribute('required');
+                return;
+            }
+
+            appliedDateWrapper.style.display = isApplied ? 'block' : 'none';
+            cancelledDateWrapper.style.display = isCancelled ? 'block' : 'none';
+            startDateWrapper.style.display = (isApplied || isCancelled) ? 'none' : 'block';
+            expiryDateWrapper.style.display = (isApplied || isCancelled) ? 'none' : 'block';
+            notifyWrapper.style.display = (isApplied || isCancelled) ? 'none' : 'block';
+            const shouldShowDocumentField = !isApplied && !(isCancelled && hasExistingInsuranceDocument);
+            documentWrapper.style.display = shouldShowDocumentField ? 'block' : 'none';
+
+            if (isApplied) {
+                insuranceAppliedDate.setAttribute('required', 'required');
+                insuranceStart.removeAttribute('required');
+                insuranceExpiry.removeAttribute('required');
+                insuranceNotify.removeAttribute('required');
+                insuranceCanceledDate.removeAttribute('required');
+                insuranceDocument.removeAttribute('required');
+            } else if (isCancelled) {
+                insuranceAppliedDate.removeAttribute('required');
+                insuranceStart.removeAttribute('required');
+                insuranceExpiry.removeAttribute('required');
+                insuranceNotify.removeAttribute('required');
+                insuranceCanceledDate.setAttribute('required', 'required');
+                insuranceDocument.removeAttribute('required');
+            } else {
+                insuranceAppliedDate.removeAttribute('required');
+                insuranceCanceledDate.removeAttribute('required');
+                insuranceStart.setAttribute('required', 'required');
+                insuranceExpiry.setAttribute('required', 'required');
+                insuranceNotify.setAttribute('required', 'required');
+                insuranceDocument.removeAttribute('required');
             }
         }
 
@@ -1974,6 +2075,7 @@
 
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
             document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
+            document.getElementById('insurance_status_id').addEventListener('change', toggleInsuranceStatusFields);
             const v5DocInput = document.getElementById('v5_document');
             if (v5DocInput) {
                 v5DocInput.addEventListener('change', applyLogBookV5Rules);
