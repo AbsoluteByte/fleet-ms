@@ -120,7 +120,7 @@
                         <span class="menu-title">Agreements</span>
                     </a>
                 </li>
-                <li class="nav-item {{ Request::is('admin/cars*') || Request::is('admin/car-status*') || Request::is('admin/reservations*') || Request::is('admin/vehicle-swaps*') ? 'sidebar-group-active' : '' }}">
+                <li class="nav-item {{ Request::is('admin/cars*') || Request::is('admin/car-status*') || Request::is('admin/car-services*') || Request::is('admin/reservations*') || Request::is('admin/vehicle-swaps*') ? 'sidebar-group-active' : '' }}">
                     <a href="#">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
                              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -150,6 +150,11 @@
                         <li class="{{ Request::is('admin/vehicle-swaps*') ? 'active' : '' }}">
                             <a href="{{ route('vehicle-swaps.index') }}">
                                 <span class="menu-title">Vehicle Swaps</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/car-services*') ? 'active' : '' }}">
+                            <a href="{{ route('car-services.index') }}">
+                                <span class="menu-title">Service</span>
                             </a>
                         </li>
                     </ul>

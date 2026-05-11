@@ -682,6 +682,11 @@
             <div class="modal-body">
                 <p class="mb-0 text-body">Are you sure you want to apply SORN for this car?</p>
                 <p class="small text-muted mt-1 mb-0">If you continue, FleetIQ will record this vehicle as off the road. You can open <strong>GOV.UK</strong> from the confirmation message afterwards if you still need to complete the statutory notification there.</p>
+                <div class="form-group mt-2 mb-0">
+                    <label for="apply_sorn_proof" class="d-block">SORN proof (optional)</label>
+                    <input type="file" name="sorn_proof" id="apply_sorn_proof" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png">
+                    <span class="form-text text-muted small">Upload a supporting document (PDF or image, max 10MB).</span>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
@@ -730,6 +735,7 @@
                 </div>
                 <div class="modal-body">
                     <p class="mb-0 text-body" id="sornDetailsModalBodyLine" style="line-height: 1.65;"></p>
+                    <p class="mb-0 mt-2 d-none" id="sornDetailsModalProofLine"><a href="#" id="sornDetailsModalProofLink" target="_blank" rel="noopener noreferrer">View SORN proof</a></p>
                 </div>
                 <div class="modal-footer flex-wrap">
                     <button type="button" class="btn btn-outline-danger mr-auto mb-1 mb-sm-0" id="sornDetailsEndSornBtn">End SORN</button>
@@ -797,6 +803,11 @@
                         .
                     @endif
                 </p>
+                @if($model->sorn_document)
+                    <p class="mb-0 mt-2">
+                        <a href="{{ asset('uploads/cars/sorn_documents/'.$model->sorn_document) }}" target="_blank" rel="noopener noreferrer">View SORN proof</a>
+                    </p>
+                @endif
             </div>
             <div class="modal-footer flex-wrap">
                 <button type="button" class="btn btn-outline-danger mr-auto mb-1 mb-sm-0" id="sornDetailsEndSornBtn">End SORN</button>
@@ -1361,59 +1372,9 @@
 @endif
 
 @php
-    $latestServiceForForm = isset($model) && $model->id ? $model->latestService() : null;
     $activeReservationForForm = isset($model) && $model->id ? $model->activeReservation() : null;
     $reserveCarChecked = old('reserve_car', $activeReservationForForm ? 1 : 0);
 @endphp
-
-{{-- Service Information --}}
-<div class="row mt-1">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0"><i class="fa fa-wrench"></i> Service Information</h5>
-            </div>
-            <div class="card-body">
-                @if($latestServiceForForm)
-                    <div class="alert alert-info">
-                        Latest service: {{ $latestServiceForForm->service_date->format('d M, Y') }}.
-                        Next service due: {{ $latestServiceForForm->service_date->copy()->addMonths(3)->format('d M, Y') }}.
-                    </div>
-                @endif
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label for="service_date">New Service Date</label>
-                            <input type="date" name="service_date" id="service_date" class="form-control @error('service_date') is-invalid @enderror" value="{{ old('service_date') }}">
-                            @error('service_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label for="service_mileage">Mileage</label>
-                            <input type="number" name="service_mileage" id="service_mileage" class="form-control @error('service_mileage') is-invalid @enderror" value="{{ old('service_mileage') }}" min="0">
-                            @error('service_mileage')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label for="service_document">Service Document</label>
-                            <input type="file" name="service_document" id="service_document" class="form-control @error('service_document') is-invalid @enderror" accept=".pdf,.jpg,.jpeg,.png">
-                            @error('service_document')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <div class="form-group mb-0">
-                            <label for="service_notes">Service Notes</label>
-                            <textarea name="service_notes" id="service_notes" rows="2" class="form-control @error('service_notes') is-invalid @enderror">{{ old('service_notes') }}</textarea>
-                            @error('service_notes')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 {{-- Reservation Information --}}
 <div class="row mt-1" id="reservation-card-wrapper">
@@ -1643,7 +1604,7 @@
                 }
             }
 
-            function mountSornModalsAfterApply(byName, atFormatted) {
+            function mountSornModalsAfterApply(byName, atFormatted, proofUrl) {
                 if (document.getElementById('sornDetailsModal')) {
                     return;
                 }
@@ -1655,6 +1616,12 @@
                 var p = frag.querySelector('#sornDetailsModalBodyLine');
                 if (p) {
                     p.innerHTML = buildSornDetailsBodyHtml(byName, atFormatted);
+                }
+                var proofLine = frag.querySelector('#sornDetailsModalProofLine');
+                var proofLink = frag.querySelector('#sornDetailsModalProofLink');
+                if (proofLine && proofLink && proofUrl) {
+                    proofLink.href = proofUrl;
+                    proofLine.classList.remove('d-none');
                 }
                 document.body.appendChild(frag);
             }
@@ -1705,19 +1672,29 @@
                         overlay.classList.remove('d-none');
                         overlay.classList.add('d-flex');
                     }
+                    var fd = new FormData();
+                    fd.append('_token', csrfToken);
+                    var proofInput = document.getElementById('apply_sorn_proof');
+                    if (proofInput && proofInput.files && proofInput.files.length) {
+                        fd.append('sorn_proof', proofInput.files[0]);
+                    }
                     fetch(applySornUrl, {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': csrfToken,
                             'Accept': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest',
-                            'Content-Type': 'application/json',
                         },
                         credentials: 'same-origin',
+                        body: fd,
                     }).then(function (r) {
                         return r.json().then(function (data) {
                             if (!r.ok) {
-                                throw new Error((data && data.message) || 'Request failed');
+                                var msg = (data && data.message) || 'Request failed';
+                                if (data && data.errors && data.errors.sorn_proof) {
+                                    msg = data.errors.sorn_proof.join(' ');
+                                }
+                                throw new Error(msg);
                             }
                             return data;
                         });
@@ -1729,7 +1706,7 @@
                         if (!(data.ok && data.gov_sorn_url)) {
                             throw new Error();
                         }
-                        mountSornModalsAfterApply(data.sorn_applied_by_name, data.sorn_applied_at_formatted);
+                        mountSornModalsAfterApply(data.sorn_applied_by_name, data.sorn_applied_at_formatted, data.sorn_proof_url || null);
                         removeApplySornModal();
                         promoteSornToolbarButton();
                         attachFleetiqEndSornHandlers();

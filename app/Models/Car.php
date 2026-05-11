@@ -18,7 +18,7 @@ class Car extends Model
         'seller_notes', 'damaged_notes', 'phv_status', 'phv_applied_date', 'phv_applied_by',
         'log_book_applied', 'log_book_applied_date', 'old_log_book',
         'log_book_applied_by',
-        'sorn_applied', 'sorn_applied_at', 'sorn_applied_by',
+        'sorn_applied', 'sorn_applied_at', 'sorn_applied_by', 'sorn_document',
         'fleet_status', 'available_from_date',
         'createdBy', 'updatedBy',
     ];

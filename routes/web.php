@@ -73,6 +73,9 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     // Main Features
     Route::resource('companies', App\Http\Controllers\Backend\CompanyController::class);
+    Route::get('car-services', [App\Http\Controllers\Backend\CarServicePageController::class, 'index'])->name('car-services.index');
+    Route::post('car-services', [App\Http\Controllers\Backend\CarServicePageController::class, 'store'])->name('car-services.store');
+
     Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
     Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');
     Route::get('cars/reports/awaiting-phv', [App\Http\Controllers\Backend\CarController::class, 'awaitingPhv'])->name('cars.reports.awaiting-phv');

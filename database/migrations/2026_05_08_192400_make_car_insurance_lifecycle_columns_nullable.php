@@ -19,4 +19,3 @@ return new class extends Migration
         DB::statement('ALTER TABLE car_insurances MODIFY notify_before_expiry INT NOT NULL');
     }
 };
-

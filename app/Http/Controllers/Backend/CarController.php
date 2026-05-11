@@ -14,12 +14,12 @@ use App\Models\InsuranceProvider;
 use App\Models\Status;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CarController extends Controller
 {
@@ -121,10 +121,6 @@ class CarController extends Controller
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'available_from_date' => 'nullable|date',
-            'service_date' => 'nullable|date',
-            'service_mileage' => 'nullable|integer|min:0',
-            'service_notes' => 'nullable|string',
-            'service_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'reserve_car' => 'nullable|boolean',
             'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
             'reservation_customer_phone' => 'nullable|string|max:50',
@@ -258,7 +254,6 @@ class CarController extends Controller
                 }
 
                 $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
-                $this->storeServiceIfPresent($request, $car, $tenant);
                 $this->syncReservation($request, $car, $tenant);
 
                 // Store Insurance
@@ -403,10 +398,6 @@ class CarController extends Controller
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'available_from_date' => 'nullable|date',
-            'service_date' => 'nullable|date',
-            'service_mileage' => 'nullable|integer|min:0',
-            'service_notes' => 'nullable|string',
-            'service_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'reserve_car' => 'nullable|boolean',
             'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
             'reservation_customer_phone' => 'nullable|string|max:50',
@@ -592,6 +583,9 @@ class CarController extends Controller
                     }
                 }
 
+                $car->refresh();
+                $this->syncSornAfterRoadTaxesSaved($car);
+
                 // ==================== Update PHVs ====================
                 $existingPhvs = $car->phvs->keyBy('id');
                 $processedPhvIds = [];
@@ -643,7 +637,6 @@ class CarController extends Controller
                 }
 
                 $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
-                $this->storeServiceIfPresent($request, $car, $tenant);
                 $this->syncReservation($request, $car, $tenant);
 
                 // ==================== Update Insurance ====================
@@ -801,7 +794,7 @@ class CarController extends Controller
         $car->setRelation('insurances', $insurances);
     }
 
-    public function applySorn(Car $car)
+    public function applySorn(Request $request, Car $car)
     {
         $tenant = Auth::user()->currentTenant();
         if (! $tenant || $car->tenant_id !== $tenant->id) {
@@ -814,18 +807,35 @@ class CarController extends Controller
             ], 422);
         }
 
-        $car->update([
+        $request->validate([
+            'sorn_proof' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        $data = [
             'sorn_applied' => true,
             'sorn_applied_at' => now(),
             'sorn_applied_by' => Auth::id(),
             'updatedBy' => Auth::id(),
-        ]);
+        ];
+
+        if ($request->hasFile('sorn_proof')) {
+            $data['sorn_document'] = $this->uploadFile(
+                $request->file('sorn_proof'),
+                'uploads/cars/sorn_documents'
+            );
+        }
+
+        $car->update($data);
+        $car->refresh();
 
         return response()->json([
             'ok' => true,
             'gov_sorn_url' => 'https://www.gov.uk/make-a-sorn',
             'sorn_applied_by_name' => Auth::user()?->name,
-            'sorn_applied_at_formatted' => now()->format('d M Y').' at '.now()->format('h:i A'),
+            'sorn_applied_at_formatted' => $car->sorn_applied_at?->format('d M Y').' at '.$car->sorn_applied_at?->format('h:i A'),
+            'sorn_proof_url' => $car->sorn_document
+                ? asset('uploads/cars/sorn_documents/'.$car->sorn_document)
+                : null,
         ]);
     }
 
@@ -842,12 +852,7 @@ class CarController extends Controller
             ], 422);
         }
 
-        $car->update([
-            'sorn_applied' => false,
-            'sorn_applied_at' => null,
-            'sorn_applied_by' => null,
-            'updatedBy' => Auth::id(),
-        ]);
+        $this->clearSornState($car);
 
         return response()->json(['ok' => true]);
     }
@@ -1078,33 +1083,6 @@ class CarController extends Controller
         ]);
     }
 
-    private function storeServiceIfPresent(Request $request, Car $car, $tenant): void
-    {
-        if (! $request->filled('service_date')) {
-            return;
-        }
-
-        $serviceData = [
-            'tenant_id' => $tenant->id,
-            'service_date' => $request->input('service_date'),
-            'mileage' => $request->input('service_mileage'),
-            'notes' => $request->input('service_notes'),
-            'created_by' => Auth::id(),
-        ];
-
-        if ($request->hasFile('service_document')) {
-            $serviceData['document'] = $this->uploadFile($request->file('service_document'), 'uploads/cars/service_documents');
-        }
-
-        $alreadyExists = $car->services()
-            ->whereDate('service_date', $serviceData['service_date'])
-            ->exists();
-
-        if (! $alreadyExists) {
-            $car->services()->create($serviceData);
-        }
-    }
-
     private function syncReservation(Request $request, Car $car, $tenant): void
     {
         $activeReservation = $car->reservations()->where('status', 'active')->latest()->first();
@@ -1295,6 +1273,68 @@ class CarController extends Controller
         return response()->file($path);
     }
 
+    /**
+     * Remove SORN flags, proof file on disk, and null related columns.
+     */
+    private function clearSornState(Car $car): void
+    {
+        if ($car->sorn_document) {
+            $this->deleteFile($car->sorn_document, 'uploads/cars/sorn_documents');
+        }
+
+        $car->update([
+            'sorn_applied' => false,
+            'sorn_applied_at' => null,
+            'sorn_applied_by' => null,
+            'sorn_document' => null,
+            'updatedBy' => Auth::id(),
+        ]);
+    }
+
+    /**
+     * When road tax is renewed (latest period starts on or after SORN was applied), clear SORN automatically.
+     */
+    private function syncSornAfterRoadTaxesSaved(Car $car): void
+    {
+        if (! $car->sorn_applied) {
+            return;
+        }
+
+        $sornAt = $car->sorn_applied_at;
+        if (! $sornAt) {
+            return;
+        }
+
+        $car->load('roadTaxes');
+        $latest = $car->roadTaxes
+            ->sortByDesc(fn ($rt) => [optional($rt->start_date)->timestamp ?? 0, $rt->id])
+            ->first();
+
+        if (! $latest || ! $latest->start_date) {
+            return;
+        }
+
+        $row = [
+            'start_date' => $latest->start_date->format('Y-m-d'),
+            'term' => $latest->term,
+            'amount' => (string) $latest->amount,
+        ];
+
+        if (! $this->historyRowHasValues($row, ['start_date', 'term', 'amount'])) {
+            return;
+        }
+
+        if ((float) $latest->amount <= 0) {
+            return;
+        }
+
+        if ($latest->start_date->copy()->startOfDay()->lt($sornAt->copy()->startOfDay())) {
+            return;
+        }
+
+        $this->clearSornState($car);
+    }
+
     private function deleteCarFiles($car)
     {
         $filesToDelete = [
@@ -1326,6 +1366,10 @@ class CarController extends Controller
             if ($service->document) {
                 $filesToDelete[] = public_path('uploads/cars/service_documents/'.$service->document);
             }
+        }
+
+        if ($car->sorn_document) {
+            $filesToDelete[] = public_path('uploads/cars/sorn_documents/'.$car->sorn_document);
         }
 
         foreach (array_filter($filesToDelete) as $filePath) {
