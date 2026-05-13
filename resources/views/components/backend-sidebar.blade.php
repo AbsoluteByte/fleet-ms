@@ -120,6 +120,12 @@
                         <span class="menu-title">Agreements</span>
                     </a>
                 </li>
+                <li class="nav-item {{ Request::is('admin/phvl*') ? 'active' : '' }}">
+                    <a href="{{ route('phvl.index') }}">
+                        <i class="fa fa-clipboard"></i>
+                        <span class="menu-title">PHVL</span>
+                    </a>
+                </li>
                 <li class="nav-item {{ Request::is('admin/cars*') || Request::is('admin/car-status*') || Request::is('admin/car-services*') || Request::is('admin/reservations*') || Request::is('admin/vehicle-swaps*') ? 'sidebar-group-active' : '' }}">
                     <a href="#">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"

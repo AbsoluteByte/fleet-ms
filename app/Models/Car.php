@@ -97,6 +97,11 @@ class Car extends Model
         return $this->hasMany(CarPhv::class);
     }
 
+    public function phvlProgress()
+    {
+        return $this->hasOne(CarPhvlProgress::class);
+    }
+
     public function insurances()
     {
         return $this->hasMany(CarInsurance::class);

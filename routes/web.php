@@ -76,6 +76,12 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('car-services', [App\Http\Controllers\Backend\CarServicePageController::class, 'index'])->name('car-services.index');
     Route::post('car-services', [App\Http\Controllers\Backend\CarServicePageController::class, 'store'])->name('car-services.store');
 
+    Route::get('phvl', [App\Http\Controllers\Backend\PhvlController::class, 'index'])->name('phvl.index');
+    Route::get('phvl/data', [App\Http\Controllers\Backend\PhvlController::class, 'data'])->name('phvl.data');
+    Route::patch('phvl/progress/{car}', [App\Http\Controllers\Backend\PhvlController::class, 'updateProgress'])->name('phvl.update-progress');
+    Route::post('phvl/{car}/complete-pass', [App\Http\Controllers\Backend\PhvlController::class, 'completePass'])->name('phvl.complete-pass');
+    Route::post('phvl/{car}/add-mot', [App\Http\Controllers\Backend\PhvlController::class, 'addMot'])->name('phvl.add-mot');
+
     Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
     Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');
     Route::get('cars/reports/awaiting-phv', [App\Http\Controllers\Backend\CarController::class, 'awaitingPhv'])->name('cars.reports.awaiting-phv');

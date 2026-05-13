@@ -1,0 +1,527 @@
+@extends('layouts.admin', ['title' => 'PHVL'])
+
+@section('css')
+    <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
+    <style>
+        #phvlTable.table {
+            min-width: 1500px;
+        }
+
+        #phvlTable.table thead th,
+        #phvlTable.table tbody td {
+            vertical-align: middle;
+            padding: 0.45rem 0.65rem;
+            font-size: 0.8125rem;
+        }
+
+        #phvlTable.table thead th {
+            white-space: nowrap;
+        }
+
+        #phvlTable.table th:nth-child(1),
+        #phvlTable.table td:nth-child(1)  { min-width: 120px; }
+        #phvlTable.table th:nth-child(2),
+        #phvlTable.table td:nth-child(2)  { min-width: 115px; }
+        #phvlTable.table th:nth-child(3),
+        #phvlTable.table td:nth-child(3)  { min-width: 130px; }
+        #phvlTable.table th:nth-child(4),
+        #phvlTable.table td:nth-child(4)  { min-width: 130px; }
+        #phvlTable.table th:nth-child(5),
+        #phvlTable.table td:nth-child(5)  { min-width: 120px; }
+        #phvlTable.table th:nth-child(6),
+        #phvlTable.table td:nth-child(6)  { min-width: 90px; }
+        #phvlTable.table th:nth-child(7),
+        #phvlTable.table td:nth-child(7)  { min-width: 90px; }
+        #phvlTable.table th:nth-child(8),
+        #phvlTable.table td:nth-child(8)  { min-width: 100px; }
+        #phvlTable.table th:nth-child(9),
+        #phvlTable.table td:nth-child(9)  { min-width: 110px; }
+        #phvlTable.table th:nth-child(10),
+        #phvlTable.table td:nth-child(10) { min-width: 100px; }
+        #phvlTable.table th:nth-child(11),
+        #phvlTable.table td:nth-child(11) { min-width: 130px; }
+        #phvlTable.table th:nth-child(12),
+        #phvlTable.table td:nth-child(12) { min-width: 140px; }
+        #phvlTable.table th:nth-child(13),
+        #phvlTable.table td:nth-child(13) { min-width: 160px; }
+
+        #phvlTable_wrapper .dataTables_filter input {
+            margin-left: 0.5rem;
+        }
+
+        .phvl-actions-cell {
+            white-space: nowrap;
+        }
+
+        .phvl-status-btn,
+        .phvl-result-btn {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.55rem;
+            line-height: 1.4;
+        }
+
+        #phvlTable .insurance-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        #phvlTable .insurance-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            display: inline-block;
+        }
+
+        #phvlTable .insurance-status-dot--inactive {
+            background: #ea5455;
+        }
+
+        .gap-1 { gap: 0.35rem; }
+    </style>
+@endsection
+
+@section('content')
+    <section id="basic-datatable">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex align-items-center py-75">
+                        <h4 class="card-title mb-0 mr-2">PHVL</h4>
+                        <div class="d-flex align-items-center">
+                            <label class="mb-0 mr-50 small text-muted" for="phvl-type-filter">Show</label>
+                            <select id="phvl-type-filter" class="custom-select custom-select-sm" style="width:auto;">
+                                <option value="all">All</option>
+                                <option value="need_to_apply">Need to apply</option>
+                                <option value="renewal">Renewal</option>
+                            </select>
+                        </div>
+                    </div>
+                    <hr class="my-0">
+                    <div class="card-body px-1 pt-1 pb-0">
+                        @include('alerts')
+                        <div class="table-responsive">
+                            <table id="phvlTable" class="table table-bordered table-striped w-100">
+                                <thead>
+                                <tr>
+                                    <th>Make &amp; Model</th>
+                                    <th>Car Registration</th>
+                                    <th>Company Name</th>
+                                    <th>Council</th>
+                                    <th>Expiry Detail</th>
+                                    <th>MOT days old</th>
+                                    <th>MOT Status</th>
+                                    <th>MOT Date</th>
+                                    <th>Application Status</th>
+                                    <th>Applied date</th>
+                                    <th>Appointment Confirmation</th>
+                                    <th>Appointment Date &amp; Time</th>
+                                    <th>PHVL Status</th>
+                                </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {{-- Shared field popup --}}
+    <div class="modal fade" id="phvlFieldModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-75">
+                    <h5 class="modal-title" id="phvlFieldModalTitle">Update</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body" id="phvl-field-body"></div>
+                <div class="modal-footer py-75">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="phvl-field-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- PHVL Result popup (Pass / Fail / —) --}}
+    <div class="modal fade" id="phvlResultModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-75">
+                    <h5 class="modal-title">PHVL Status</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="phvl-result-car-id" value="">
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select class="form-control" id="phvl-result-select">
+                            <option value="">—</option>
+                            <option value="pass">Pass</option>
+                            <option value="fail">Fail</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-0 d-none" id="phvl-result-notes-group">
+                        <label for="phvl-result-notes">Fail notes</label>
+                        <textarea id="phvl-result-notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-75">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="phvl-result-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Add PHV modal --}}
+    <div class="modal fade" id="phvlAddPhvModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-75">
+                    <h5 class="modal-title">Add PHV details</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <form id="phvlAddPhvForm" enctype="multipart/form-data">
+                    @csrf
+                    <input type="hidden" id="phvl-add-phv-car-id" value="">
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Council</label>
+                                    <select class="form-control" id="phvl_phv_counsel_id" name="counsel_id" required>
+                                        <option value="">— Select —</option>
+                                        @foreach($counsels as $c)
+                                            <option value="{{ $c->id }}">{{ $c->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Amount</label>
+                                    <input type="number" step="0.01" min="0" class="form-control" name="amount" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Start date</label>
+                                    <input type="date" class="form-control" name="start_date" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Expiry date</label>
+                                    <input type="date" class="form-control" name="expiry_date" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Notify (days before expiry)</label>
+                                    <input type="number" min="1" class="form-control" name="notify_before_expiry" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Document</label>
+                                    <input type="file" class="form-control-file" name="document" accept=".pdf,.jpg,.jpeg,.png">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer py-75">
+                        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success btn-sm">Save PHV</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {{-- Fail notes modal --}}
+    <div class="modal fade" id="phvlFailNotesModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-75">
+                    <h5 class="modal-title">PHVL fail notes</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="phvl-fail-notes-car-id" value="">
+                    <div class="form-group mb-0">
+                        <label>Notes</label>
+                        <textarea id="phvl-fail-notes-text" class="form-control" rows="4"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-75">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="phvl-fail-notes-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+@endsection
+
+@section('js')
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script>
+        (function () {
+            var csrfToken = document.querySelector('meta[name="csrf-token"]');
+            csrfToken = csrfToken ? csrfToken.getAttribute('content') : '';
+
+            var phvlProgressBase = @json(url('/admin/phvl/progress'));
+            var phvlBase = @json(url('/admin/phvl'));
+
+            function progressUrl(carId) { return phvlProgressBase + '/' + carId; }
+            function completePassUrl(carId) { return phvlBase + '/' + carId + '/complete-pass'; }
+            function addMotUrl(carId) { return phvlBase + '/' + carId + '/add-mot'; }
+
+            function patchProgress(carId, body) {
+                return fetch(progressUrl(carId), {
+                    method: 'PATCH',
+                    headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(body)
+                }).then(function (r) {
+                    return r.json().then(function (d) { if (!r.ok) throw new Error((d && d.message) || 'Save failed'); return d; });
+                });
+            }
+
+            var $modal = window.jQuery;
+
+            // ==================== DataTable ====================
+            var table = $('#phvlTable').DataTable({
+                processing: true,
+                serverSide: false,
+                ajax: {
+                    url: @json(route('phvl.data')),
+                    dataSrc: 'data',
+                    data: function (d) { d.type = document.getElementById('phvl-type-filter').value; }
+                },
+                columns: [
+                    { data: 'make_model' },
+                    { data: 'registration' },
+                    { data: 'company' },
+                    { data: 'council' },
+                    { data: 'expiry_detail', orderData: [13] },
+                    { data: 'mot_days_old', orderable: false },
+                    { data: 'mot_status', orderable: false },
+                    { data: 'mot_date' },
+                    { data: 'application_status', orderable: false },
+                    { data: 'applied_date', orderable: false },
+                    { data: 'appointment_confirmation', orderable: false },
+                    { data: 'appointment_at', orderable: false },
+                    { data: 'phvl_actions', orderable: false, searchable: false },
+                    { data: 'expiry_sort', visible: false }
+                ],
+                order: [[4, 'asc']],
+                pageLength: 25,
+                autoWidth: false
+            });
+
+            document.getElementById('phvl-type-filter').addEventListener('change', function () { table.ajax.reload(); });
+
+            // ==================== Shared field popup ====================
+            var fieldCarId = null;
+            var fieldName = null;
+            var fieldHasMotForm = false;
+            var fieldLabels = {
+                mot_status: 'MOT Status',
+                application_status: 'Application Status',
+                appointment_confirmation: 'Appointment Confirmation',
+                applied_date: 'Applied Date',
+                appointment_at: 'Appointment Date & Time'
+            };
+
+            $('#phvlTable').on('click', '.phvl-status-btn', function () {
+                var btn = this;
+                fieldCarId = btn.getAttribute('data-car-id');
+                fieldName = btn.getAttribute('data-field');
+                fieldHasMotForm = btn.getAttribute('data-has-mot-form') === '1';
+                var current = btn.getAttribute('data-current') || '';
+                var optionsRaw = btn.getAttribute('data-options');
+                var inputType = btn.getAttribute('data-input-type') || '';
+
+                document.getElementById('phvlFieldModalTitle').textContent = fieldLabels[fieldName] || 'Update';
+                var body = document.getElementById('phvl-field-body');
+                body.innerHTML = '';
+
+                if (inputType) {
+                    var inp = document.createElement('input');
+                    inp.type = inputType;
+                    inp.className = 'form-control';
+                    inp.id = 'phvl-field-input';
+                    inp.value = current;
+                    body.appendChild(inp);
+                } else if (optionsRaw) {
+                    var options = {};
+                    try { options = JSON.parse(optionsRaw); } catch (e) {}
+                    var sel = document.createElement('select');
+                    sel.className = 'form-control';
+                    sel.id = 'phvl-field-input';
+                    for (var k in options) {
+                        var o = document.createElement('option');
+                        o.value = k;
+                        o.textContent = options[k];
+                        if (k === current) o.selected = true;
+                        sel.appendChild(o);
+                    }
+                    body.appendChild(sel);
+                }
+
+                if (fieldHasMotForm) {
+                    var motSection = document.createElement('div');
+                    motSection.id = 'phvl-mot-section';
+                    motSection.className = 'mt-2';
+                    motSection.innerHTML =
+                        '<button type="button" class="btn btn-sm btn-outline-primary" id="phvl-mot-toggle"><i class="fa fa-plus mr-50"></i>Add MOT details</button>' +
+                        '<div id="phvl-mot-fields" class="d-none mt-2">' +
+                        '  <div class="form-group"><label>Expiry Date</label><input type="date" class="form-control" id="phvl-mot-expiry"></div>' +
+                        '  <div class="form-group"><label>Amount</label><input type="number" step="0.01" min="0" class="form-control" id="phvl-mot-amount"></div>' +
+                        '  <div class="form-group"><label>Term</label><input type="text" class="form-control" id="phvl-mot-term" placeholder="e.g. 12 months"></div>' +
+                        '  <div class="form-group mb-0"><label>Document</label><input type="file" class="form-control-file" id="phvl-mot-document" accept=".pdf,.jpg,.jpeg,.png"></div>' +
+                        '</div>';
+                    body.appendChild(motSection);
+                }
+
+                $modal('#phvlFieldModal').modal('show');
+
+                setTimeout(function () {
+                    var toggle = document.getElementById('phvl-mot-toggle');
+                    if (toggle) {
+                        toggle.addEventListener('click', function () {
+                            var f = document.getElementById('phvl-mot-fields');
+                            if (f) { f.classList.toggle('d-none'); }
+                        });
+                    }
+                }, 50);
+            });
+
+            document.getElementById('phvl-field-save').addEventListener('click', function () {
+                if (!fieldCarId || !fieldName) return;
+
+                var inp = document.getElementById('phvl-field-input');
+                var val = inp ? inp.value : '';
+                var body = {};
+                body[fieldName] = val || null;
+
+                var motExpiry = document.getElementById('phvl-mot-expiry');
+                var hasMotData = motExpiry && motExpiry.value;
+
+                patchProgress(fieldCarId, body).then(function () {
+                    if (!hasMotData) {
+                        $modal('#phvlFieldModal').modal('hide');
+                        table.ajax.reload(null, false);
+                        return;
+                    }
+                    var fd = new FormData();
+                    fd.append('_token', csrfToken);
+                    fd.append('expiry_date', document.getElementById('phvl-mot-expiry').value);
+                    var amt = document.getElementById('phvl-mot-amount');
+                    if (amt && amt.value) fd.append('amount', amt.value);
+                    var term = document.getElementById('phvl-mot-term');
+                    if (term && term.value) fd.append('term', term.value);
+                    var doc = document.getElementById('phvl-mot-document');
+                    if (doc && doc.files && doc.files.length) fd.append('document', doc.files[0]);
+
+                    return fetch(addMotUrl(fieldCarId), {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        credentials: 'same-origin',
+                        body: fd
+                    }).then(function (r) {
+                        return r.json().then(function (d) { if (!r.ok) throw new Error((d && d.message) || 'MOT save failed'); return d; });
+                    }).then(function () {
+                        $modal('#phvlFieldModal').modal('hide');
+                        table.ajax.reload(null, false);
+                    });
+                }).catch(function (e) {
+                    alert(e.message || 'Could not save');
+                });
+            });
+
+            // ==================== PHVL Result popup ====================
+            $('#phvlTable').on('click', '.phvl-result-btn', function () {
+                var carId = this.getAttribute('data-car-id');
+                var current = this.getAttribute('data-current') || '';
+                var notes = this.getAttribute('data-notes') || '';
+                document.getElementById('phvl-result-car-id').value = carId;
+                document.getElementById('phvl-result-select').value = current;
+                document.getElementById('phvl-result-notes').value = notes;
+                document.getElementById('phvl-result-notes-group').classList.toggle('d-none', current !== 'fail');
+                $modal('#phvlResultModal').modal('show');
+            });
+
+            document.getElementById('phvl-result-select').addEventListener('change', function () {
+                document.getElementById('phvl-result-notes-group').classList.toggle('d-none', this.value !== 'fail');
+            });
+
+            document.getElementById('phvl-result-save').addEventListener('click', function () {
+                var carId = document.getElementById('phvl-result-car-id').value;
+                var val = document.getElementById('phvl-result-select').value;
+                var notes = document.getElementById('phvl-result-notes').value;
+                var payload = { phvl_result_status: val || null };
+                if (val === 'fail') payload.fail_notes = notes;
+                if (val !== 'fail') payload.fail_notes = null;
+
+                patchProgress(carId, payload).then(function () {
+                    $modal('#phvlResultModal').modal('hide');
+                    table.ajax.reload(null, false);
+                }).catch(function (e) {
+                    alert(e.message || 'Could not save');
+                });
+            });
+
+            // ==================== Fail notes modal ====================
+            $('#phvlTable').on('click', '.phvl-fail-notes-btn', function () {
+                var carId = this.getAttribute('data-car-id');
+                var notes = this.getAttribute('data-notes') || '';
+                document.getElementById('phvl-fail-notes-car-id').value = carId;
+                document.getElementById('phvl-fail-notes-text').value = notes;
+                $modal('#phvlFailNotesModal').modal('show');
+            });
+
+            document.getElementById('phvl-fail-notes-save').addEventListener('click', function () {
+                var carId = document.getElementById('phvl-fail-notes-car-id').value;
+                var notes = document.getElementById('phvl-fail-notes-text').value;
+                patchProgress(carId, { phvl_result_status: 'fail', fail_notes: notes }).then(function () {
+                    $modal('#phvlFailNotesModal').modal('hide');
+                    table.ajax.reload(null, false);
+                }).catch(function (e) { alert(e.message || 'Could not save'); });
+            });
+
+            // ==================== Add PHV modal ====================
+            $('#phvlTable').on('click', '.phvl-add-phv-btn', function () {
+                var carId = this.getAttribute('data-car-id');
+                document.getElementById('phvlAddPhvForm').reset();
+                document.getElementById('phvl-add-phv-car-id').value = carId;
+                $modal('#phvlAddPhvModal').modal('show');
+            });
+
+            document.getElementById('phvlAddPhvForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                var carId = document.getElementById('phvl-add-phv-car-id').value;
+                var fd = new FormData(this);
+
+                fetch(completePassUrl(carId), {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                    body: fd
+                }).then(function (r) {
+                    return r.json().then(function (d) {
+                        if (!r.ok) { var msg = (d && d.message) || 'Save failed'; if (d && d.errors) msg = Object.values(d.errors).flat().join(' '); throw new Error(msg); }
+                        return d;
+                    });
+                }).then(function () {
+                    $modal('#phvlAddPhvModal').modal('hide');
+                    table.ajax.reload(null, false);
+                }).catch(function (err) { alert(err.message || 'Could not save PHV'); });
+            });
+        })();
+    </script>
+@endsection
