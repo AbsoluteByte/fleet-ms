@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Car;
 use App\Models\CarModel;
 use App\Models\CarMot;
+use App\Models\CarSornHistory;
 use App\Models\CarPhv;
 use App\Models\CarRoadTax;
 use App\Models\Company;
@@ -340,7 +341,7 @@ class CarController extends Controller
         }
 
         $model = Car::where('tenant_id', $tenant->id)
-            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'sornAppliedBy', 'services', 'reservations'])
+            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'sornAppliedBy', 'sornHistories.startedBy', 'sornHistories.endedBy', 'services', 'reservations'])
             ->findOrFail($id);
         $this->sortCarHistoryRelations($model);
 
@@ -815,6 +816,8 @@ class CarController extends Controller
             'sorn_applied' => true,
             'sorn_applied_at' => now(),
             'sorn_applied_by' => Auth::id(),
+            'fleet_status' => 'sorn',
+            'available_from_date' => null,
             'updatedBy' => Auth::id(),
         ];
 
@@ -827,6 +830,14 @@ class CarController extends Controller
 
         $car->update($data);
         $car->refresh();
+
+        CarSornHistory::create([
+            'tenant_id' => $car->tenant_id,
+            'car_id' => $car->id,
+            'sorn_started_at' => $car->sorn_applied_at,
+            'sorn_started_by' => Auth::id(),
+            'sorn_document' => $car->sorn_document,
+        ]);
 
         return response()->json([
             'ok' => true,
@@ -1240,6 +1251,7 @@ class CarController extends Controller
             'sold' => 'Sold',
             'reserved' => 'Reserved',
             'vehicle_swap' => 'Vehicle swap',
+            'sorn' => 'SORN',
         ];
     }
 
@@ -1278,6 +1290,18 @@ class CarController extends Controller
      */
     private function clearSornState(Car $car): void
     {
+        $activeHistory = CarSornHistory::where('car_id', $car->id)
+            ->whereNull('sorn_ended_at')
+            ->latest('sorn_started_at')
+            ->first();
+
+        if ($activeHistory) {
+            $activeHistory->update([
+                'sorn_ended_at' => now(),
+                'sorn_ended_by' => Auth::id(),
+            ]);
+        }
+
         if ($car->sorn_document) {
             $this->deleteFile($car->sorn_document, 'uploads/cars/sorn_documents');
         }
@@ -1287,6 +1311,7 @@ class CarController extends Controller
             'sorn_applied_at' => null,
             'sorn_applied_by' => null,
             'sorn_document' => null,
+            'fleet_status' => 'available_for_rent',
             'updatedBy' => Auth::id(),
         ]);
     }

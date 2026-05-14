@@ -342,6 +342,7 @@
                             $latestRt = $rtsSorted->count() > 0 ? $rtsSorted->first() : null;
                             $olderRts = $rtsSorted->count() > 1 ? $rtsSorted->slice(1) : collect();
                         @endphp
+                        <div style="position:relative;">
                         <div class="row mb-4">
                             <div class="col-12 d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">
                                 <h4 class="mb-0">Road Tax Information</h4>
@@ -375,6 +376,14 @@
                                     <p class="text-muted">No Road Tax records available</p>
                                 </div>
                             @endif
+                        </div>
+                        @if($car->sorn_applied)
+                        <div style="position:absolute;inset:0;background:rgba(255,255,255,0.4);display:flex;align-items:center;justify-content:center;border-radius:4px;z-index:2;">
+                            <span style="background:#fff;padding:6px 18px;border-radius:6px;font-weight:600;color:#334155;font-size:1.05rem;box-shadow:0 1px 4px rgba(0,0,0,.08);letter-spacing:.01em;">
+                                <i class="fa fa-ban text-danger mr-50"></i> This car is currently SORN
+                            </span>
+                        </div>
+                        @endif
                         </div>
                         @if($olderRts->isNotEmpty())
                         <div class="modal fade" id="showRoadTaxHistoryModal" tabindex="-1" role="dialog" aria-labelledby="showRoadTaxHistoryModalLabel" aria-hidden="true">

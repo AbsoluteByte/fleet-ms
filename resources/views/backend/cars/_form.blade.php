@@ -574,6 +574,11 @@
                             <i class="fa fa-road"></i> Apply SORN
                         </button>
                     @endif
+                    @if($model->sornHistories->isNotEmpty())
+                        <button type="button" class="btn btn-sm btn-outline-primary mr-1" data-toggle="modal" data-target="#sornHistoryModal">
+                            SORN History
+                        </button>
+                    @endif
                 @endif
                 <button type="button" class="btn btn-sm btn-success" onclick="addRoadTax()">
                     <i class="fa fa-plus"></i> Add Road Tax
@@ -583,7 +588,13 @@
 
         <div class="card">
             <div class="card-body">
-                <div id="roadtax-container">
+                @if($isCarEdit && $model->sorn_applied)
+                <div id="roadtax-sorn-notice" class="text-center py-2">
+                    <p class="mb-0 text-muted"><i class="fa fa-info-circle mr-50"></i> Road tax fields are hidden while SORN is active. Click <strong>Add Road Tax</strong> to enter a new record.</p>
+                </div>
+                @endif
+                <div id="roadtax-container" @if($isCarEdit && $model->sorn_applied) class="d-none" @endif>
+                    @if(!($isCarEdit && $model->sorn_applied))
                     @foreach($roadTaxesForMain as $index => $roadTax)
                         <div class="roadtax-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
                             <div class="col-md-4">
@@ -648,6 +659,7 @@
                             </div>
                         </div>
                     @endforeach
+                    @endif
                 </div>
                 <div id="roadtax-preserved" class="d-none">
                     @if($isCarEdit && $useRoadTaxSplit && $roadTaxesOlder->isNotEmpty())
@@ -709,12 +721,8 @@
             </div>
             <div class="modal-body">
                 <p class="mb-0 text-body">This car is now marked as SORN in FleetIQ.</p>
-                <p class="small text-muted mt-2 mb-0">If you need to complete the notification on GOV.UK, use the link below (opens in a new tab). You can close this message when you are done.</p>
             </div>
-            <div class="modal-footer flex-wrap justify-content-between">
-                <a href="#" id="sornSuccessGovLink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary mb-1 mb-sm-0">
-                    <i class="fa fa-external-link mr-50"></i> Open GOV.UK (make a SORN)
-                </a>
+            <div class="modal-footer">
                 <button type="button" class="btn btn-success" data-dismiss="modal">Close</button>
             </div>
         </div>
@@ -835,6 +843,72 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-danger" id="endSornConfirmBtn">Yes, end SORN</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
+@if($isCarEdit && $model->sornHistories->isNotEmpty())
+<div class="modal fade" id="sornHistoryModal" tabindex="-1" role="dialog" aria-labelledby="sornHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sornHistoryModalLabel">SORN History</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>SORN Started</th>
+                                <th>Started By</th>
+                                <th>SORN Ended</th>
+                                <th>Ended By</th>
+                                <th>Duration</th>
+                                <th>Proof</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($model->sornHistories as $sornH)
+                            <tr>
+                                <td>{{ $sornH->sorn_started_at->format('d M Y, h:i A') }}</td>
+                                <td>{{ $sornH->startedBy?->name ?? '—' }}</td>
+                                <td>
+                                    @if($sornH->sorn_ended_at)
+                                        {{ $sornH->sorn_ended_at->format('d M Y, h:i A') }}
+                                    @else
+                                        <span class="badge badge-success">Active</span>
+                                    @endif
+                                </td>
+                                <td>{{ $sornH->endedBy?->name ?? '—' }}</td>
+                                <td>
+                                    @php
+                                        $end = $sornH->sorn_ended_at ?? now();
+                                        $diff = $sornH->sorn_started_at->diff($end);
+                                        $parts = [];
+                                        if ($diff->y) $parts[] = $diff->y . 'y';
+                                        if ($diff->m) $parts[] = $diff->m . 'mo';
+                                        if ($diff->d) $parts[] = $diff->d . 'd';
+                                        if (empty($parts)) $parts[] = 'less than a day';
+                                    @endphp
+                                    {{ implode(' ', $parts) }}
+                                </td>
+                                <td>
+                                    @if($sornH->sorn_document)
+                                        <a href="{{ asset('uploads/cars/sorn_documents/'.$sornH->sorn_document) }}" target="_blank" rel="noopener noreferrer" title="View proof"><i class="fa fa-file"></i></a>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -1710,10 +1784,6 @@
                         removeApplySornModal();
                         promoteSornToolbarButton();
                         attachFleetiqEndSornHandlers();
-                        var successLink = document.getElementById('sornSuccessGovLink');
-                        if (successLink) {
-                            successLink.href = data.gov_sorn_url;
-                        }
                         if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal) {
                             window.jQuery('#sornAppliedSuccessModal').modal('show');
                         }
@@ -2116,7 +2186,12 @@
         }
 
         function addRoadTax() {
+            var sornNotice = document.getElementById('roadtax-sorn-notice');
+            if (sornNotice) {
+                sornNotice.classList.add('d-none');
+            }
             const container = document.getElementById('roadtax-container');
+            container.classList.remove('d-none');
             const newRoadTax = `
         <div class="roadtax-item row border-bottom pb-3 mb-1" data-index="${roadTaxIndex}">
             <div class="col-md-4">

@@ -132,6 +132,11 @@ class Car extends Model
         return $this->hasMany(CarStatusHistory::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
+    public function sornHistories()
+    {
+        return $this->hasMany(CarSornHistory::class)->orderByDesc('sorn_started_at')->orderByDesc('id');
+    }
+
     /**
      * @return list<string>
      */
@@ -230,7 +235,7 @@ class Car extends Model
             return false;
         }
 
-        if (in_array($this->fleet_status, ['damaged', 'written_off', 'stolen', 'for_sale', 'sold', 'reserved', 'vehicle_swap'], true)) {
+        if (in_array($this->fleet_status, ['damaged', 'written_off', 'stolen', 'for_sale', 'sold', 'reserved', 'vehicle_swap', 'sorn'], true)) {
             return false;
         }
 
