@@ -1,0 +1,8 @@
+/* Keep action buttons visually anchored to the right edge of admin DataTables. */
+#basic-datatable table.datatable th:last-child,
+#basic-datatable table.datatable td:last-child {
+    width: 1%;
+    white-space: nowrap;
+    text-align: right;
+}
+
