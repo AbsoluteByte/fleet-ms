@@ -456,8 +456,13 @@
                                 <div class="form-group">
                                     <label>&nbsp;</label>
                                     <div>
-                                        @if($index > 0)
-                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeMOT(this)">
+                                        @if(isset($model) && $model->id && is_object($mot) && isset($mot->id))
+                                            <x-car-record-delete-button
+                                                :delete-url="route('cars.mots.destroy', [$model, $mot->id])"
+                                                label="MOT record"
+                                            />
+                                        @elseif($motsForMain->count() > 1 || $index > 0)
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeMOT(this)" title="Remove row">
                                                 <i class="fa fa-trash"></i>
                                             </button>
                                         @endif
@@ -529,9 +534,10 @@
                                     @endif
                                 </td>
                                 <td class="text-right">
-                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteCarHistoryMot({{ $model->id }}, {{ $motH->id }})" title="Delete">
-                                        <i class="fa fa-trash"></i>
-                                    </button>
+                                    <x-car-record-delete-button
+                                        :delete-url="route('cars.mots.destroy', [$model, $motH->id])"
+                                        label="MOT record"
+                                    />
                                 </td>
                             </tr>
                             @endforeach
@@ -612,6 +618,9 @@
                     @if(!($isCarEdit && $model->sorn_applied))
                     @foreach($roadTaxesForMain as $index => $roadTax)
                         <div class="roadtax-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
+                            @if(is_object($roadTax) && isset($roadTax->id))
+                                <input type="hidden" name="road_taxes[{{ $index }}][id]" value="{{ $roadTax->id }}">
+                            @endif
                             <div class="col-md-4">
                                 <div class="form-group">
                                     <label>Start Date</label>
@@ -664,8 +673,13 @@
                                 <div class="form-group">
                                     <label>&nbsp;</label>
                                     <div>
-                                        @if($index > 0)
-                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeRoadTax(this)">
+                                        @if(isset($model) && $model->id && is_object($roadTax) && isset($roadTax->id))
+                                            <x-car-record-delete-button
+                                                :delete-url="route('cars.road-taxes.destroy', [$model, $roadTax->id])"
+                                                label="Road tax record"
+                                            />
+                                        @elseif($roadTaxesForMain->count() > 1 || $index > 0)
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeRoadTax(this)" title="Remove row">
                                                 <i class="fa fa-trash"></i>
                                             </button>
                                         @endif
@@ -974,9 +988,10 @@
                                 <td>{{ $rtH->term }}</td>
                                 <td>£{{ number_format($rtH->amount, 2) }}</td>
                                 <td class="text-right">
-                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteCarHistoryRoadTax({{ $model->id }}, {{ $rtH->id }})" title="Delete">
-                                        <i class="fa fa-trash"></i>
-                                    </button>
+                                    <x-car-record-delete-button
+                                        :delete-url="route('cars.road-taxes.destroy', [$model, $rtH->id])"
+                                        label="Road tax record"
+                                    />
                                 </td>
                             </tr>
                             @endforeach
@@ -1144,8 +1159,13 @@
                                 <div class="form-group">
                                     <label>&nbsp;</label>
                                     <div>
-                                        @if($index > 0)
-                                            <button type="button" class="btn btn-danger btn-sm" onclick="removePHV(this)">
+                                        @if(isset($model) && $model->id && is_object($phv) && isset($phv->id))
+                                            <x-car-record-delete-button
+                                                :delete-url="route('cars.phvs.destroy', [$model, $phv->id])"
+                                                label="PHV record"
+                                            />
+                                        @elseif($phvsForMain->count() > 1 || $index > 0)
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="removePHV(this)" title="Remove row">
                                                 <i class="fa fa-trash"></i>
                                             </button>
                                         @endif
@@ -1232,9 +1252,10 @@
                                     @endif
                                 </td>
                                 <td class="text-right">
-                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteCarHistoryPhv({{ $model->id }}, {{ $phvH->id }})" title="Delete">
-                                        <i class="fa fa-trash"></i>
-                                    </button>
+                                    <x-car-record-delete-button
+                                        :delete-url="route('cars.phvs.destroy', [$model, $phvH->id])"
+                                        label="PHV record"
+                                    />
                                 </td>
                             </tr>
                             @endforeach
@@ -1561,7 +1582,7 @@
     </div>
 </div>
 
-@include('components.document-delete-confirm-modal')
+@include('components.fleetiq-delete-confirm-modal')
 
 @push('js')
     <script>
@@ -1572,31 +1593,57 @@
         const carsApiBase = {!! json_encode(url('/admin/cars')) !!};
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
 
-        (function initCarDocumentRemove() {
-            var pendingDocRemove = { url: null, label: null };
-            var $docModal = window.jQuery;
-            var confirmBtn = document.getElementById('documentDeleteConfirmBtn');
+        (function initFleetiqDeleteConfirm() {
+            var pending = { url: null, kind: null };
+            var $modal = window.jQuery;
+            var confirmBtn = document.getElementById('fleetiqDeleteConfirmBtn');
+            var titleEl = document.getElementById('fleetiqDeleteConfirmTitle');
+            var bodyEl = document.getElementById('fleetiqDeleteConfirmBody');
+            var btnTextEl = document.getElementById('fleetiqDeleteConfirmBtnText');
+
+            function openModal(config) {
+                if (titleEl) titleEl.textContent = config.title;
+                if (bodyEl) bodyEl.textContent = config.body;
+                if (btnTextEl) btnTextEl.textContent = config.btnText;
+                if ($modal && $modal.fn && $modal.fn.modal) {
+                    $modal('#fleetiqDeleteConfirmModal').modal('show');
+                }
+            }
 
             document.addEventListener('click', function (e) {
-                var btn = e.target.closest('.car-doc-remove-btn');
-                if (!btn) return;
-                e.preventDefault();
-                pendingDocRemove.url = btn.getAttribute('data-remove-url');
-                pendingDocRemove.label = btn.getAttribute('data-doc-label') || 'document';
-                var bodyEl = document.getElementById('documentDeleteConfirmModalBody');
-                if (bodyEl) {
-                    bodyEl.textContent = 'Are you sure you want to remove this ' + pendingDocRemove.label + '? The file will be deleted from the system. You can upload a new file afterwards.';
+                var docBtn = e.target.closest('.car-doc-remove-btn');
+                if (docBtn) {
+                    e.preventDefault();
+                    pending.url = docBtn.getAttribute('data-remove-url');
+                    pending.kind = 'document';
+                    var label = docBtn.getAttribute('data-doc-label') || 'document';
+                    openModal({
+                        title: 'Remove document?',
+                        body: 'Are you sure you want to remove this ' + label + '? The file will be deleted. You can upload a new file afterwards.',
+                        btnText: 'Yes, remove document',
+                    });
+                    return;
                 }
-                if ($docModal && $docModal.fn && $docModal.fn.modal) {
-                    $docModal('#documentDeleteConfirmModal').modal('show');
+
+                var recordBtn = e.target.closest('.car-record-delete-btn');
+                if (recordBtn) {
+                    e.preventDefault();
+                    pending.url = recordBtn.getAttribute('data-delete-url');
+                    pending.kind = 'record';
+                    var recordLabel = recordBtn.getAttribute('data-record-label') || 'record';
+                    openModal({
+                        title: 'Delete ' + recordLabel + '?',
+                        body: 'This will permanently delete the ' + recordLabel + ' and any linked document. This cannot be undone.',
+                        btnText: 'Yes, delete record',
+                    });
                 }
             });
 
             if (confirmBtn) {
                 confirmBtn.addEventListener('click', function () {
-                    if (!pendingDocRemove.url) return;
+                    if (!pending.url) return;
                     confirmBtn.disabled = true;
-                    fetch(pendingDocRemove.url, {
+                    fetch(pending.url, {
                         method: 'DELETE',
                         headers: {
                             'X-CSRF-TOKEN': csrfToken,
@@ -1608,78 +1655,20 @@
                         if (!r.ok) throw new Error();
                         return r.json();
                     }).then(function () {
-                        if ($docModal && $docModal.fn && $docModal.fn.modal) {
-                            $docModal('#documentDeleteConfirmModal').modal('hide');
+                        if ($modal && $modal.fn && $modal.fn.modal) {
+                            $modal('#fleetiqDeleteConfirmModal').modal('hide');
                         }
                         window.location.reload();
                     }).catch(function () {
-                        alert('Could not remove this document. Please try again.');
+                        alert(pending.kind === 'document'
+                            ? 'Could not remove this document. Please try again.'
+                            : 'Could not delete this record. Please try again.');
                     }).finally(function () {
                         confirmBtn.disabled = false;
                     });
                 });
             }
         })();
-
-        function deleteCarHistoryMot(carId, motId) {
-            if (!confirm('Delete this MOT record?')) return;
-            fetch(carsApiBase + '/' + carId + '/mots/' + motId, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRF-TOKEN': csrfToken,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'same-origin',
-            }).then(function (r) {
-                if (!r.ok) throw new Error();
-                return r.json();
-            }).then(function () {
-                window.location.reload();
-            }).catch(function () {
-                alert('Could not delete this record.');
-            });
-        }
-
-        function deleteCarHistoryRoadTax(carId, roadTaxId) {
-            if (!confirm('Delete this road tax record?')) return;
-            fetch(carsApiBase + '/' + carId + '/road-taxes/' + roadTaxId, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRF-TOKEN': csrfToken,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'same-origin',
-            }).then(function (r) {
-                if (!r.ok) throw new Error();
-                return r.json();
-            }).then(function () {
-                window.location.reload();
-            }).catch(function () {
-                alert('Could not delete this record.');
-            });
-        }
-
-        function deleteCarHistoryPhv(carId, phvId) {
-            if (!confirm('Delete this PHV record?')) return;
-            fetch(carsApiBase + '/' + carId + '/phvs/' + phvId, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRF-TOKEN': csrfToken,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'same-origin',
-            }).then(function (r) {
-                if (!r.ok) throw new Error();
-                return r.json();
-            }).then(function () {
-                window.location.reload();
-            }).catch(function () {
-                alert('Could not delete this record.');
-            });
-        }
 
         @if($isCarEdit)
         (function () {

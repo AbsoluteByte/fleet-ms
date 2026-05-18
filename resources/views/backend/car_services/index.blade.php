@@ -170,7 +170,7 @@
     </section>
 
     @if($selectedCar)
-        @include('components.document-delete-confirm-modal')
+        @include('components.fleetiq-delete-confirm-modal')
     @endif
 @endsection
 
@@ -200,50 +200,40 @@
         <script>
             (function () {
                 var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-                var pendingDocRemove = { url: null, label: null };
-                var $docModal = window.jQuery;
-                var confirmBtn = document.getElementById('documentDeleteConfirmBtn');
+                var pending = { url: null };
+                var $modal = window.jQuery;
+                var confirmBtn = document.getElementById('fleetiqDeleteConfirmBtn');
+                var titleEl = document.getElementById('fleetiqDeleteConfirmTitle');
+                var bodyEl = document.getElementById('fleetiqDeleteConfirmBody');
+                var btnTextEl = document.getElementById('fleetiqDeleteConfirmBtnText');
 
                 document.addEventListener('click', function (e) {
                     var btn = e.target.closest('.car-doc-remove-btn');
                     if (!btn) return;
                     e.preventDefault();
-                    pendingDocRemove.url = btn.getAttribute('data-remove-url');
-                    pendingDocRemove.label = btn.getAttribute('data-doc-label') || 'document';
-                    var bodyEl = document.getElementById('documentDeleteConfirmModalBody');
-                    if (bodyEl) {
-                        bodyEl.textContent = 'Are you sure you want to remove this ' + pendingDocRemove.label + '? The file will be deleted from the system. You can upload a new file afterwards.';
-                    }
-                    if ($docModal && $docModal.fn && $docModal.fn.modal) {
-                        $docModal('#documentDeleteConfirmModal').modal('show');
-                    }
+                    pending.url = btn.getAttribute('data-remove-url');
+                    var label = btn.getAttribute('data-doc-label') || 'document';
+                    if (titleEl) titleEl.textContent = 'Remove document?';
+                    if (bodyEl) bodyEl.textContent = 'Are you sure you want to remove this ' + label + '? The file will be deleted. You can upload a new file afterwards.';
+                    if (btnTextEl) btnTextEl.textContent = 'Yes, remove document';
+                    if ($modal && $modal.fn && $modal.fn.modal) $modal('#fleetiqDeleteConfirmModal').modal('show');
                 });
 
                 if (confirmBtn) {
                     confirmBtn.addEventListener('click', function () {
-                        if (!pendingDocRemove.url) return;
+                        if (!pending.url) return;
                         confirmBtn.disabled = true;
-                        fetch(pendingDocRemove.url, {
+                        fetch(pending.url, {
                             method: 'DELETE',
-                            headers: {
-                                'X-CSRF-TOKEN': csrfToken,
-                                'Accept': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest',
-                            },
+                            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                             credentials: 'same-origin',
-                        }).then(function (r) {
-                            if (!r.ok) throw new Error();
-                            return r.json();
-                        }).then(function () {
-                            if ($docModal && $docModal.fn && $docModal.fn.modal) {
-                                $docModal('#documentDeleteConfirmModal').modal('hide');
-                            }
-                            window.location.reload();
-                        }).catch(function () {
-                            alert('Could not remove this document. Please try again.');
-                        }).finally(function () {
-                            confirmBtn.disabled = false;
-                        });
+                        }).then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                          .then(function () {
+                              if ($modal && $modal.fn && $modal.fn.modal) $modal('#fleetiqDeleteConfirmModal').modal('hide');
+                              window.location.reload();
+                          })
+                          .catch(function () { alert('Could not remove this document. Please try again.'); })
+                          .finally(function () { confirmBtn.disabled = false; });
                     });
                 }
             })();
