@@ -1,4 +1,4 @@
-@extends('layouts.admin', ['title' => 'PHVL'])
+@extends('layouts.admin', ['title' => 'PHVL Management'])
 
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
@@ -60,6 +60,13 @@
             line-height: 1.4;
         }
 
+        .phvl-status-btn:disabled,
+        .phvl-result-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
         #phvlTable .insurance-status {
             display: inline-flex;
             align-items: center;
@@ -109,11 +116,11 @@
                                     <th>Company Name</th>
                                     <th>Council</th>
                                     <th>Expiry Detail</th>
-                                    <th>MOT days old</th>
                                     <th>MOT Status</th>
                                     <th>MOT Date</th>
+                                    <th>Days Since MOT</th>
                                     <th>Application Status</th>
-                                    <th>Applied date</th>
+                                    <th>PHVL applied date</th>
                                     <th>Appointment Confirmation</th>
                                     <th>Appointment Date &amp; Time</th>
                                     <th>PHVL Status</th>
@@ -241,6 +248,29 @@
         </div>
     </div>
 
+    {{-- Appointment notes modal --}}
+    <div class="modal fade" id="phvlAppointmentNotesModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-75">
+                    <h5 class="modal-title">Appointment notes</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="phvl-appointment-notes-car-id" value="">
+                    <div class="form-group mb-0">
+                        <label>Notes</label>
+                        <textarea id="phvl-appointment-notes-text" class="form-control" rows="4"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-75">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="phvl-appointment-notes-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- Fail notes modal --}}
     <div class="modal fade" id="phvlFailNotesModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
@@ -287,7 +317,14 @@
                     credentials: 'same-origin',
                     body: JSON.stringify(body)
                 }).then(function (r) {
-                    return r.json().then(function (d) { if (!r.ok) throw new Error((d && d.message) || 'Save failed'); return d; });
+                    return r.json().then(function (d) {
+                        if (!r.ok) {
+                            var msg = (d && d.message) || 'Save failed';
+                            if (d && d.errors) msg = Object.values(d.errors).flat().join(' ');
+                            throw new Error(msg);
+                        }
+                        return d;
+                    });
                 });
             }
 
@@ -308,9 +345,9 @@
                     { data: 'company' },
                     { data: 'council' },
                     { data: 'expiry_detail', orderData: [13] },
-                    { data: 'mot_days_old', orderable: false },
                     { data: 'mot_status', orderable: false },
                     { data: 'mot_date' },
+                    { data: 'mot_days_old', orderable: false },
                     { data: 'application_status', orderable: false },
                     { data: 'applied_date', orderable: false },
                     { data: 'appointment_confirmation', orderable: false },
@@ -333,11 +370,12 @@
                 mot_status: 'MOT Status',
                 application_status: 'Application Status',
                 appointment_confirmation: 'Appointment Confirmation',
-                applied_date: 'Applied Date',
+                applied_date: 'PHVL applied date',
                 appointment_at: 'Appointment Date & Time'
             };
 
             $('#phvlTable').on('click', '.phvl-status-btn', function () {
+                if (this.disabled) return;
                 var btn = this;
                 fieldCarId = btn.getAttribute('data-car-id');
                 fieldName = btn.getAttribute('data-field');
@@ -406,6 +444,10 @@
 
                 var inp = document.getElementById('phvl-field-input');
                 var val = inp ? inp.value : '';
+                if (fieldName === 'applied_date' && !val) {
+                    alert('PHVL applied date is required.');
+                    return;
+                }
                 var body = {};
                 body[fieldName] = val || null;
 
@@ -446,6 +488,7 @@
 
             // ==================== PHVL Result popup ====================
             $('#phvlTable').on('click', '.phvl-result-btn', function () {
+                if (this.disabled) return;
                 var carId = this.getAttribute('data-car-id');
                 var current = this.getAttribute('data-current') || '';
                 var notes = this.getAttribute('data-notes') || '';
@@ -490,6 +533,27 @@
                 var notes = document.getElementById('phvl-fail-notes-text').value;
                 patchProgress(carId, { phvl_result_status: 'fail', fail_notes: notes }).then(function () {
                     $modal('#phvlFailNotesModal').modal('hide');
+                    table.ajax.reload(null, false);
+                }).catch(function (e) { alert(e.message || 'Could not save'); });
+            });
+
+            // ==================== Appointment notes modal ====================
+            $('#phvlTable').on('click', '.phvl-appointment-notes-btn', function () {
+                var carId = this.getAttribute('data-car-id');
+                var notes = this.getAttribute('data-notes') || '';
+                document.getElementById('phvl-appointment-notes-car-id').value = carId;
+                document.getElementById('phvl-appointment-notes-text').value = notes;
+                $modal('#phvlAppointmentNotesModal').modal('show');
+            });
+
+            document.getElementById('phvl-appointment-notes-save').addEventListener('click', function () {
+                var carId = document.getElementById('phvl-appointment-notes-car-id').value;
+                var notes = document.getElementById('phvl-appointment-notes-text').value;
+                patchProgress(carId, {
+                    appointment_confirmation: 'additional_documents',
+                    appointment_notes: notes
+                }).then(function () {
+                    $modal('#phvlAppointmentNotesModal').modal('hide');
                     table.ajax.reload(null, false);
                 }).catch(function (e) { alert(e.message || 'Could not save'); });
             });

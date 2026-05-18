@@ -99,7 +99,11 @@
                    accept=".pdf,.jpg,.jpeg,.png"
                    data-has-v5="{{ isset($model) && $model->id && $model->v5_document ? '1' : '0' }}">
             @if(isset($model) && $model->id && $model->v5_document)
-                <small class="text-muted">Current: <a href="{{ route('cars.view.v5', $model) }}" target="_blank" rel="noopener">View Document</a></small>
+                <x-car-document-actions
+                    :view-url="route('cars.view.v5', $model)"
+                    :remove-url="route('cars.v5-document.destroy', $model)"
+                    label="V5 document"
+                />
             @endif
             @error('v5_document')
             <div class="invalid-feedback">{{ $message }}</div>
@@ -430,13 +434,17 @@
                                            class="form-control @error('mots.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
                                     @if((is_object($mot) && $mot->document) || (isset($mot['document']) && $mot['document']))
-                                        <small class="text-muted">Current:
-                                            @if(isset($model) && $model->id && is_object($mot) && isset($mot->id))
-                                                <a href="{{ route('cars.mots.download', [$model, $mot->id]) }}" target="_blank">View</a>
-                                            @else
+                                        @if(isset($model) && $model->id && is_object($mot) && isset($mot->id))
+                                            <x-car-document-actions
+                                                :view-url="route('cars.mots.download', [$model, $mot->id])"
+                                                :remove-url="route('cars.mots.document.destroy', [$model, $mot->id])"
+                                                label="MOT document"
+                                            />
+                                        @else
+                                            <small class="text-muted">Current:
                                                 <a href="{{ asset('uploads/cars/mot_documents/' . (is_object($mot) ? $mot->document : $mot['document'])) }}" target="_blank">View</a>
-                                            @endif
-                                        </small>
+                                            </small>
+                                        @endif
                                     @endif
                                     @error('mots.'.$index.'.document')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -509,6 +517,13 @@
                                 <td>
                                     @if($motH->document)
                                         <a href="{{ route('cars.mots.download', [$model, $motH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger ml-50 car-doc-remove-btn"
+                                                data-remove-url="{{ route('cars.mots.document.destroy', [$model, $motH->id]) }}"
+                                                data-doc-label="MOT document"
+                                                title="Remove document only">
+                                            <i class="fa fa-times"></i>
+                                        </button>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
@@ -812,8 +827,14 @@
                     @endif
                 </p>
                 @if($model->sorn_document)
-                    <p class="mb-0 mt-2">
-                        <a href="{{ asset('uploads/cars/sorn_documents/'.$model->sorn_document) }}" target="_blank" rel="noopener noreferrer">View SORN proof</a>
+                    <p class="mb-0 mt-2 d-flex align-items-center flex-wrap">
+                        <a href="{{ asset('uploads/cars/sorn_documents/'.$model->sorn_document) }}" target="_blank" rel="noopener noreferrer" class="mr-75">View SORN proof</a>
+                        <button type="button"
+                                class="btn btn-link btn-sm text-danger p-0 car-doc-remove-btn"
+                                data-remove-url="{{ route('cars.sorn-document.destroy', $model) }}"
+                                data-doc-label="SORN proof document">
+                            <i class="fa fa-times-circle mr-25"></i>Remove
+                        </button>
                     </p>
                 @endif
             </div>
@@ -1101,13 +1122,17 @@
                                            class="form-control @error('phvs.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
                                     @if((is_object($phv) && $phv->document) || (isset($phv['document']) && $phv['document']))
-                                        <small class="text-muted">Current:
-                                            @if(isset($model) && $model->id && is_object($phv) && isset($phv->id))
-                                                <a href="{{ route('cars.phvs.download', [$model, $phv->id]) }}" target="_blank">View</a>
-                                            @else
+                                        @if(isset($model) && $model->id && is_object($phv) && isset($phv->id))
+                                            <x-car-document-actions
+                                                :view-url="route('cars.phvs.download', [$model, $phv->id])"
+                                                :remove-url="route('cars.phvs.document.destroy', [$model, $phv->id])"
+                                                label="PHV document"
+                                            />
+                                        @else
+                                            <small class="text-muted">Current:
                                                 <a href="{{ asset('uploads/cars/phv_documents/' . (is_object($phv) ? $phv->document : $phv['document'])) }}" target="_blank">View</a>
-                                            @endif
-                                        </small>
+                                            </small>
+                                        @endif
                                     @endif
                                     @error('phvs.'.$index.'.document')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -1195,6 +1220,13 @@
                                 <td>
                                     @if($phvH->document)
                                         <a href="{{ route('cars.phvs.download', [$model, $phvH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger ml-50 car-doc-remove-btn"
+                                                data-remove-url="{{ route('cars.phvs.document.destroy', [$model, $phvH->id]) }}"
+                                                data-doc-label="PHV document"
+                                                title="Remove document only">
+                                            <i class="fa fa-times"></i>
+                                        </button>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
@@ -1379,8 +1411,12 @@
                             <input type="file" name="insurance_document" id="insurance_document"
                                    class="form-control @error('insurance_document') is-invalid @enderror"
                                    accept=".pdf,.jpg,.jpeg,.png">
-                            @if($latestInsuranceForForm && $latestInsuranceForForm->insurance_document)
-                                <small class="text-muted">Current: <a href="{{ asset('uploads/cars/insurance_documents/' . $latestInsuranceForForm->insurance_document) }}" target="_blank">View Document</a></small>
+                            @if($latestInsuranceForForm && $latestInsuranceForForm->insurance_document && isset($model) && $model->id)
+                                <x-car-document-actions
+                                    :view-url="asset('uploads/cars/insurance_documents/' . $latestInsuranceForForm->insurance_document)"
+                                    :remove-url="route('cars.insurance-document.destroy', $model)"
+                                    label="Insurance document"
+                                />
                             @endif
                             @error('insurance_document')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -1525,6 +1561,8 @@
     </div>
 </div>
 
+@include('components.document-delete-confirm-modal')
+
 @push('js')
     <script>
         let motIndex = {{ $motMainCount + ($useMotsSplit ? $motsOlder->count() : 0) }};
@@ -1533,6 +1571,55 @@
 
         const carsApiBase = {!! json_encode(url('/admin/cars')) !!};
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+        (function initCarDocumentRemove() {
+            var pendingDocRemove = { url: null, label: null };
+            var $docModal = window.jQuery;
+            var confirmBtn = document.getElementById('documentDeleteConfirmBtn');
+
+            document.addEventListener('click', function (e) {
+                var btn = e.target.closest('.car-doc-remove-btn');
+                if (!btn) return;
+                e.preventDefault();
+                pendingDocRemove.url = btn.getAttribute('data-remove-url');
+                pendingDocRemove.label = btn.getAttribute('data-doc-label') || 'document';
+                var bodyEl = document.getElementById('documentDeleteConfirmModalBody');
+                if (bodyEl) {
+                    bodyEl.textContent = 'Are you sure you want to remove this ' + pendingDocRemove.label + '? The file will be deleted from the system. You can upload a new file afterwards.';
+                }
+                if ($docModal && $docModal.fn && $docModal.fn.modal) {
+                    $docModal('#documentDeleteConfirmModal').modal('show');
+                }
+            });
+
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', function () {
+                    if (!pendingDocRemove.url) return;
+                    confirmBtn.disabled = true;
+                    fetch(pendingDocRemove.url, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                    }).then(function (r) {
+                        if (!r.ok) throw new Error();
+                        return r.json();
+                    }).then(function () {
+                        if ($docModal && $docModal.fn && $docModal.fn.modal) {
+                            $docModal('#documentDeleteConfirmModal').modal('hide');
+                        }
+                        window.location.reload();
+                    }).catch(function () {
+                        alert('Could not remove this document. Please try again.');
+                    }).finally(function () {
+                        confirmBtn.disabled = false;
+                    });
+                });
+            }
+        })();
 
         function deleteCarHistoryMot(carId, motId) {
             if (!confirm('Delete this MOT record?')) return;

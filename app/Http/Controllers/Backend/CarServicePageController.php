@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\Car;
+use App\Models\CarService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 
 class CarServicePageController extends Controller
 {
@@ -118,6 +120,22 @@ class CarServicePageController extends Controller
         return redirect()
             ->route('car-services.index', ['car_id' => $car->id])
             ->with('warning', 'A service for this date already exists for this car.');
+    }
+
+    public function destroyDocument(CarService $carService)
+    {
+        $tenant = Auth::user()->currentTenant();
+        abort_unless($tenant && (int) $carService->tenant_id === (int) $tenant->id, 403);
+
+        if ($carService->document) {
+            $path = public_path('uploads/cars/service_documents/'.$carService->document);
+            if (File::exists($path)) {
+                File::delete($path);
+            }
+            $carService->update(['document' => null]);
+        }
+
+        return response()->json(['ok' => true]);
     }
 
     private function uploadFile($file, $directory)

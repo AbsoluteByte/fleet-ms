@@ -7,7 +7,10 @@ use App\Models\Car;
 use App\Models\CarPhv;
 use App\Models\CarPhvlProgress;
 use App\Models\Counsel;
+use App\Services\PhvlArchiveService;
+use App\Services\PhvlProgressEventLogger;
 use App\Support\PhvlMotHelper;
+use App\Support\PhvlWorkflow;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -85,8 +88,9 @@ class PhvlController extends Controller
             'mot_status' => 'sometimes|in:pending,done',
             'application_status' => 'sometimes|in:pending,applied',
             'applied_date' => 'nullable|date',
-            'appointment_confirmation' => 'sometimes|in:pending,confirmed',
+            'appointment_confirmation' => 'sometimes|in:pending,additional_documents,approved',
             'appointment_at' => 'nullable|date',
+            'appointment_notes' => 'nullable|string|max:65535',
             'phvl_result_status' => 'nullable|in:pass,fail',
             'fail_notes' => 'nullable|string|max:65535',
         ]);
@@ -102,23 +106,46 @@ class PhvlController extends Controller
             ]
         );
 
+        $payload = [];
         foreach ($validated as $key => $value) {
             if ($key === 'applied_date' && $value === '') {
-                $progress->applied_date = null;
+                $payload[$key] = null;
 
                 continue;
             }
             if ($key === 'appointment_at' && $value === '') {
-                $progress->appointment_at = null;
+                $payload[$key] = null;
 
                 continue;
             }
+            $payload[$key] = $value;
+        }
+
+        if (array_key_exists('applied_date', $payload) && $payload['applied_date'] !== null) {
+            $payload['applied_date'] = $payload['applied_date'];
+        }
+
+        PhvlWorkflow::validateTransition($progress->exists ? $progress : null, $payload);
+
+        $original = $progress->exists ? $progress->getOriginal() : [];
+
+        foreach ($payload as $key => $value) {
             $progress->{$key} = $value;
+        }
+
+        if (isset($payload['phvl_result_status']) && $payload['phvl_result_status'] !== 'fail') {
+            $progress->fail_notes = null;
+        }
+
+        if (isset($payload['appointment_confirmation']) && $payload['appointment_confirmation'] !== 'additional_documents') {
+            $progress->appointment_notes = null;
         }
 
         $progress->tenant_id = $tenant->id;
         $progress->updated_by = Auth::id();
         $progress->save();
+
+        PhvlProgressEventLogger::logChanges($progress, $payload, $original);
 
         return response()->json(['ok' => true]);
     }
@@ -195,17 +222,20 @@ class PhvlController extends Controller
 
         $phvData = $this->mergePhvAppliedDataForCreate($phvData);
 
-        DB::transaction(function () use ($car, $phvData, $request) {
-            $car->phvs()->create($phvData);
+        $newPhv = null;
+
+        DB::transaction(function () use ($car, $phvData, $request, &$newPhv) {
+            $newPhv = $car->phvs()->create($phvData);
             $car->refresh();
             $newFuturePhvAdded = $this->hasFuturePhvExpiry($phvData);
             $this->syncCarPhvStatusAfterPhvl($car, $request, $newFuturePhvAdded);
         });
 
+        $car->load(['phvlProgress', 'phvs.counsel']);
+        PhvlArchiveService::tryArchiveAfterNewPhv($car, $newPhv);
+
         return response()->json(['ok' => true]);
     }
-
-    // ==================== Private helpers ====================
 
     private function authorizeTenantCar(Car $car): void
     {
@@ -284,6 +314,7 @@ class PhvlController extends Controller
         $motDateStr = $motDate ? $motDate->format('d M, Y') : '—';
 
         $cid = $car->id;
+        $appliedDateVal = $p?->applied_date?->format('Y-m-d') ?? '';
 
         return [
             'car_id' => $cid,
@@ -293,25 +324,25 @@ class PhvlController extends Controller
             'council' => e($latestPhv?->counsel?->name ?? '—'),
             'expiry_detail' => e($expiryDetail),
             'expiry_sort' => $expirySort,
-            'mot_days_old' => $motDaysHtml,
-            'mot_status' => $this->statusBtnHtml('mot_status', $cid, ['pending' => 'Pending', 'done' => 'Done'], $p?->mot_status ?? 'pending', 'mot_status'),
+            'mot_status' => $this->statusBtnHtml(PhvlWorkflow::FIELD_MOT_STATUS, $cid, ['pending' => 'Pending', 'done' => 'Done'], $p?->mot_status ?? 'pending', $p, 'mot_status'),
             'mot_date' => e($motDateStr),
-            'application_status' => $this->statusBtnHtml('application_status', $cid, ['pending' => 'Pending', 'applied' => 'Applied'], $p?->application_status ?? 'pending'),
-            'applied_date' => $this->dateBtnHtml('applied_date', $cid, $p?->applied_date?->format('Y-m-d') ?? '', 'date'),
-            'appointment_confirmation' => $this->statusBtnHtml('appointment_confirmation', $cid, ['pending' => 'Pending', 'confirmed' => 'Confirmed'], $p?->appointment_confirmation ?? 'pending'),
-            'appointment_at' => $this->dateBtnHtml('appointment_at', $cid, $p?->appointment_at ? $p->appointment_at->format('Y-m-d\TH:i') : '', 'datetime-local'),
+            'mot_days_old' => $motDaysHtml,
+            'application_status' => $this->statusBtnHtml(PhvlWorkflow::FIELD_APPLICATION_STATUS, $cid, ['pending' => 'Pending', 'applied' => 'Applied'], $p?->application_status ?? 'pending', $p),
+            'applied_date' => $this->dateBtnHtml(PhvlWorkflow::FIELD_APPLIED_DATE, $cid, $appliedDateVal, 'date', $p),
+            'appointment_confirmation' => $this->appointmentConfirmationHtml($cid, $p),
+            'appointment_at' => $this->dateBtnHtml(PhvlWorkflow::FIELD_APPOINTMENT_AT, $cid, $p?->appointment_at ? $p->appointment_at->format('Y-m-d\TH:i') : '', 'datetime-local', $p),
             'phvl_actions' => $this->phvlActionsHtml($car, $p),
         ];
     }
 
-    private function statusBtnHtml(string $field, int $carId, array $options, string $current, ?string $extraType = null): string
+    private function statusBtnHtml(string $field, int $carId, array $options, string $current, ?CarPhvlProgress $progress, ?string $extraType = null): string
     {
-        $label = $options[$current] ?? ucfirst($current);
-        $cls = $current === 'done' || $current === 'applied' || $current === 'confirmed'
-            ? 'btn-outline-success'
-            : 'btn-outline-secondary';
+        $label = $options[$current] ?? ucfirst(str_replace('_', ' ', $current));
+        $cls = PhvlWorkflow::statusBtnClass($field, $current);
+        $unlocked = PhvlWorkflow::stepUnlocked($progress, $field);
         $optionsJson = htmlspecialchars(json_encode($options), ENT_QUOTES, 'UTF-8');
         $extra = $extraType === 'mot_status' ? ' data-has-mot-form="1"' : '';
+        $disabled = $unlocked ? '' : ' disabled';
 
         return '<button type="button" class="btn btn-sm '.$cls.' phvl-status-btn" '
             .'data-field="'.e($field).'" '
@@ -319,10 +350,11 @@ class PhvlController extends Controller
             .'data-current="'.e($current).'" '
             .'data-options="'.$optionsJson.'"'
             .$extra
+            .$disabled
             .'>'.e($label).'</button>';
     }
 
-    private function dateBtnHtml(string $field, int $carId, string $value, string $inputType): string
+    private function dateBtnHtml(string $field, int $carId, string $value, string $inputType, ?CarPhvlProgress $progress): string
     {
         if ($value !== '') {
             if ($inputType === 'datetime-local' && strlen($value) >= 16) {
@@ -334,13 +366,42 @@ class PhvlController extends Controller
             $display = '—';
         }
 
-        return '<button type="button" class="btn btn-sm btn-outline-secondary phvl-status-btn" '
+        $cls = PhvlWorkflow::statusBtnClass($field, '', $value);
+        $unlocked = PhvlWorkflow::stepUnlocked($progress, $field);
+        $disabled = $unlocked ? '' : ' disabled';
+
+        return '<button type="button" class="btn btn-sm '.$cls.' phvl-status-btn" '
             .'data-field="'.e($field).'" '
             .'data-car-id="'.$carId.'" '
             .'data-current="'.e($value).'" '
             .'data-input-type="'.e($inputType).'" '
             .'data-options=""'
+            .$disabled
             .'>'.e($display).'</button>';
+    }
+
+    private function appointmentConfirmationHtml(int $carId, ?CarPhvlProgress $p): string
+    {
+        $options = [
+            'pending' => 'Pending',
+            'additional_documents' => 'Additional Documents required',
+            'approved' => 'Approved',
+        ];
+        $current = $p?->appointment_confirmation ?? 'pending';
+        if ($current === 'confirmed') {
+            $current = 'approved';
+        }
+
+        $btn = $this->statusBtnHtml(PhvlWorkflow::FIELD_APPOINTMENT_CONFIRMATION, $carId, $options, $current, $p);
+
+        $notesBtn = '';
+        if ($current === 'additional_documents') {
+            $notes = $p?->appointment_notes ?? '';
+            $notesAttr = htmlspecialchars($notes, ENT_QUOTES, 'UTF-8');
+            $notesBtn = ' <button type="button" class="btn btn-sm btn-outline-primary phvl-appointment-notes-btn ml-50" data-car-id="'.$carId.'" data-notes="'.$notesAttr.'">'.($notes !== '' ? 'View notes' : 'Add notes').'</button>';
+        }
+
+        return '<div class="d-flex flex-nowrap align-items-center gap-1">'.$btn.$notesBtn.'</div>';
     }
 
     private function phvlActionsHtml(Car $car, ?CarPhvlProgress $p): string
@@ -348,6 +409,7 @@ class PhvlController extends Controller
         $cid = $car->id;
         $status = $p?->phvl_result_status ?? '';
         $notes = $p?->fail_notes ?? '';
+        $unlocked = PhvlWorkflow::stepUnlocked($p, PhvlWorkflow::FIELD_PHVL_RESULT);
 
         $options = ['' => '—', 'pass' => 'Pass', 'fail' => 'Fail'];
         $label = $options[$status] ?? '—';
@@ -357,14 +419,17 @@ class PhvlController extends Controller
             default => 'btn-outline-secondary',
         };
 
+        $disabled = $unlocked ? '' : ' disabled';
+
         $btn = '<button type="button" class="btn btn-sm '.$cls.' phvl-result-btn" '
             .'data-car-id="'.$cid.'" '
             .'data-current="'.e($status).'" '
             .'data-notes="'.htmlspecialchars($notes, ENT_QUOTES, 'UTF-8').'"'
+            .$disabled
             .'>'.e($label).'</button>';
 
         $addPhv = '';
-        if ($status === 'pass') {
+        if ($status === 'pass' && ! PhvlWorkflow::hasNewPhvForCurrentCycle($p, $car)) {
             $addPhv = ' <button type="button" class="btn btn-sm btn-success phvl-add-phv-btn ml-50" data-car-id="'.$cid.'">Add PHV</button>';
         }
 

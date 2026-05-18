@@ -75,12 +75,16 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('companies', App\Http\Controllers\Backend\CompanyController::class);
     Route::get('car-services', [App\Http\Controllers\Backend\CarServicePageController::class, 'index'])->name('car-services.index');
     Route::post('car-services', [App\Http\Controllers\Backend\CarServicePageController::class, 'store'])->name('car-services.store');
+    Route::delete('car-services/{carService}/document', [App\Http\Controllers\Backend\CarServicePageController::class, 'destroyDocument'])->name('car-services.document.destroy');
 
     Route::get('phvl', [App\Http\Controllers\Backend\PhvlController::class, 'index'])->name('phvl.index');
     Route::get('phvl/data', [App\Http\Controllers\Backend\PhvlController::class, 'data'])->name('phvl.data');
     Route::patch('phvl/progress/{car}', [App\Http\Controllers\Backend\PhvlController::class, 'updateProgress'])->name('phvl.update-progress');
     Route::post('phvl/{car}/complete-pass', [App\Http\Controllers\Backend\PhvlController::class, 'completePass'])->name('phvl.complete-pass');
     Route::post('phvl/{car}/add-mot', [App\Http\Controllers\Backend\PhvlController::class, 'addMot'])->name('phvl.add-mot');
+    Route::get('phvl/archive', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'index'])->name('phvl.archive');
+    Route::get('phvl/archive/data', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'data'])->name('phvl.archive.data');
+    Route::get('phvl/archive/{archive}/timeline', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'timeline'])->name('phvl.archive.timeline');
 
     Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
     Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');
@@ -91,6 +95,11 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('cars/{car}/phvs/{car_phv}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadPhv'])->name('cars.phvs.download');
     Route::post('cars/{car}/apply-sorn', [App\Http\Controllers\Backend\CarController::class, 'applySorn'])->name('cars.apply-sorn');
     Route::post('cars/{car}/end-sorn', [App\Http\Controllers\Backend\CarController::class, 'endSorn'])->name('cars.end-sorn');
+    Route::delete('cars/{car}/v5-document', [App\Http\Controllers\Backend\CarController::class, 'destroyV5Document'])->name('cars.v5-document.destroy');
+    Route::delete('cars/{car}/mots/{car_mot}/document', [App\Http\Controllers\Backend\CarController::class, 'destroyMotDocument'])->name('cars.mots.document.destroy');
+    Route::delete('cars/{car}/phvs/{car_phv}/document', [App\Http\Controllers\Backend\CarController::class, 'destroyPhvDocument'])->name('cars.phvs.document.destroy');
+    Route::delete('cars/{car}/insurance-document', [App\Http\Controllers\Backend\CarController::class, 'destroyInsuranceDocument'])->name('cars.insurance-document.destroy');
+    Route::delete('cars/{car}/sorn-document', [App\Http\Controllers\Backend\CarController::class, 'destroySornDocument'])->name('cars.sorn-document.destroy');
     Route::delete('cars/{car}/mots/{car_mot}', [App\Http\Controllers\Backend\CarController::class, 'destroyMot'])->name('cars.mots.destroy');
     Route::delete('cars/{car}/road-taxes/{car_road_tax}', [App\Http\Controllers\Backend\CarController::class, 'destroyRoadTax'])->name('cars.road-taxes.destroy');
     Route::delete('cars/{car}/phvs/{car_phv}', [App\Http\Controllers\Backend\CarController::class, 'destroyPhv'])->name('cars.phvs.destroy');

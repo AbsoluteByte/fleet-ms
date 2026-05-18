@@ -138,7 +138,13 @@
                                                 <td style="white-space: pre-wrap; max-width: 280px;">{{ $service->notes ?: '—' }}</td>
                                                 <td>
                                                     @if($service->document)
-                                                        <a href="{{ asset('uploads/cars/service_documents/'.$service->document) }}" target="_blank" rel="noopener">View</a>
+                                                        <a href="{{ asset('uploads/cars/service_documents/'.$service->document) }}" target="_blank" rel="noopener" class="mr-50">View</a>
+                                                        <button type="button"
+                                                                class="btn btn-link btn-sm text-danger p-0 car-doc-remove-btn"
+                                                                data-remove-url="{{ route('car-services.document.destroy', $service) }}"
+                                                                data-doc-label="Service document">
+                                                            <i class="fa fa-times-circle mr-25"></i>Remove
+                                                        </button>
                                                     @else
                                                         —
                                                     @endif
@@ -162,6 +168,10 @@
             </div>
         </div>
     </section>
+
+    @if($selectedCar)
+        @include('components.document-delete-confirm-modal')
+    @endif
 @endsection
 
 @section('js')
@@ -184,6 +194,59 @@
                 });
                 this.style.display = 'none';
             });
+        </script>
+    @endif
+    @if($selectedCar)
+        <script>
+            (function () {
+                var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                var pendingDocRemove = { url: null, label: null };
+                var $docModal = window.jQuery;
+                var confirmBtn = document.getElementById('documentDeleteConfirmBtn');
+
+                document.addEventListener('click', function (e) {
+                    var btn = e.target.closest('.car-doc-remove-btn');
+                    if (!btn) return;
+                    e.preventDefault();
+                    pendingDocRemove.url = btn.getAttribute('data-remove-url');
+                    pendingDocRemove.label = btn.getAttribute('data-doc-label') || 'document';
+                    var bodyEl = document.getElementById('documentDeleteConfirmModalBody');
+                    if (bodyEl) {
+                        bodyEl.textContent = 'Are you sure you want to remove this ' + pendingDocRemove.label + '? The file will be deleted from the system. You can upload a new file afterwards.';
+                    }
+                    if ($docModal && $docModal.fn && $docModal.fn.modal) {
+                        $docModal('#documentDeleteConfirmModal').modal('show');
+                    }
+                });
+
+                if (confirmBtn) {
+                    confirmBtn.addEventListener('click', function () {
+                        if (!pendingDocRemove.url) return;
+                        confirmBtn.disabled = true;
+                        fetch(pendingDocRemove.url, {
+                            method: 'DELETE',
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            credentials: 'same-origin',
+                        }).then(function (r) {
+                            if (!r.ok) throw new Error();
+                            return r.json();
+                        }).then(function () {
+                            if ($docModal && $docModal.fn && $docModal.fn.modal) {
+                                $docModal('#documentDeleteConfirmModal').modal('hide');
+                            }
+                            window.location.reload();
+                        }).catch(function () {
+                            alert('Could not remove this document. Please try again.');
+                        }).finally(function () {
+                            confirmBtn.disabled = false;
+                        });
+                    });
+                }
+            })();
         </script>
     @endif
 @endsection

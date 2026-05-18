@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Services\PhvlArchiveService;
 use App\Models\Car;
 use App\Models\CarModel;
 use App\Models\CarMot;
@@ -236,6 +237,7 @@ class CarController extends Controller
 
                 // Store PHVs
                 $newFuturePhvAdded = false;
+                $lastNewPhv = null;
                 if ($request->has('phvs')) {
                     foreach ($request->input('phvs') as $index => $phvData) {
                         if (! $this->historyRowHasValues($phvData, ['counsel_id', 'amount', 'start_date', 'expiry_date', 'notify_before_expiry'])) {
@@ -249,13 +251,20 @@ class CarController extends Controller
                             );
                         }
                         $phvData = $this->mergePhvAppliedData($phvData, null);
-                        $car->phvs()->create($phvData);
+                        $lastNewPhv = $car->phvs()->create($phvData);
                         $newFuturePhvAdded = $newFuturePhvAdded || $this->hasFuturePhvExpiry($phvData);
                     }
                 }
 
                 $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
                 $this->syncReservation($request, $car, $tenant);
+
+                if ($lastNewPhv) {
+                    PhvlArchiveService::tryArchiveAfterNewPhv(
+                        $car->fresh(['phvlProgress', 'phvs.counsel']),
+                        $lastNewPhv
+                    );
+                }
 
                 // Store Insurance
                 if ($request->has('has_insurance')) {
@@ -591,6 +600,7 @@ class CarController extends Controller
                 $existingPhvs = $car->phvs->keyBy('id');
                 $processedPhvIds = [];
                 $newFuturePhvAdded = false;
+                $lastNewPhv = null;
 
                 if ($request->has('phvs')) {
                     foreach ($request->input('phvs') as $index => $phvData) {
@@ -621,8 +631,8 @@ class CarController extends Controller
                             $existingPhv->update($phvData);
                             $processedPhvIds[] = $existingPhv->id;
                         } else {
-                            $newPhv = $car->phvs()->create($phvData);
-                            $processedPhvIds[] = $newPhv->id;
+                            $lastNewPhv = $car->phvs()->create($phvData);
+                            $processedPhvIds[] = $lastNewPhv->id;
                             $newFuturePhvAdded = $newFuturePhvAdded || $this->hasFuturePhvExpiry($phvData);
                         }
                     }
@@ -639,6 +649,13 @@ class CarController extends Controller
 
                 $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
                 $this->syncReservation($request, $car, $tenant);
+
+                if ($lastNewPhv) {
+                    PhvlArchiveService::tryArchiveAfterNewPhv(
+                        $car->fresh(['phvlProgress', 'phvs.counsel']),
+                        $lastNewPhv
+                    );
+                }
 
                 // ==================== Update Insurance ====================
                 $latestInsurance = $car->insurances
@@ -868,12 +885,38 @@ class CarController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function destroyV5Document(Car $car)
+    {
+        $this->authorizeCarTenant($car);
+
+        if ($car->v5_document) {
+            $this->deleteFile($car->v5_document, 'uploads/cars');
+            $car->update([
+                'v5_document' => null,
+                'updatedBy' => Auth::id(),
+            ]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function destroyMotDocument(Car $car, int $car_mot)
+    {
+        $this->authorizeCarTenant($car);
+
+        $record = CarMot::where('car_id', $car->id)->where('id', $car_mot)->firstOrFail();
+        if ($record->document) {
+            $this->deleteFile($record->document, 'uploads/cars/mot_documents');
+            $record->update(['document' => null]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     public function destroyMot(Car $car, int $car_mot)
     {
-        $tenant = Auth::user()->currentTenant();
-        if (! $tenant || $car->tenant_id !== $tenant->id) {
-            abort(403);
-        }
+        $this->authorizeCarTenant($car);
+
         $record = CarMot::where('car_id', $car->id)->where('id', $car_mot)->firstOrFail();
         if ($record->document) {
             $this->deleteFile($record->document, 'uploads/cars/mot_documents');
@@ -895,12 +938,23 @@ class CarController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function destroyPhvDocument(Car $car, int $car_phv)
+    {
+        $this->authorizeCarTenant($car);
+
+        $record = CarPhv::where('car_id', $car->id)->where('id', $car_phv)->firstOrFail();
+        if ($record->document) {
+            $this->deleteFile($record->document, 'uploads/cars/phv_documents');
+            $record->update(['document' => null]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     public function destroyPhv(Car $car, int $car_phv)
     {
-        $tenant = Auth::user()->currentTenant();
-        if (! $tenant || $car->tenant_id !== $tenant->id) {
-            abort(403);
-        }
+        $this->authorizeCarTenant($car);
+
         $record = CarPhv::where('car_id', $car->id)->where('id', $car_phv)->firstOrFail();
         if ($record->document) {
             $this->deleteFile($record->document, 'uploads/cars/phv_documents');
@@ -908,6 +962,44 @@ class CarController extends Controller
         $record->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    public function destroyInsuranceDocument(Car $car)
+    {
+        $this->authorizeCarTenant($car);
+
+        $car->load('insurances');
+        $insurance = $car->insurances
+            ->sortByDesc(fn ($row) => [optional($row->created_at)->timestamp ?? 0, $row->id])
+            ->first();
+
+        if ($insurance?->insurance_document) {
+            $this->deleteFile($insurance->insurance_document, 'uploads/cars/insurance_documents');
+            $insurance->update(['insurance_document' => null]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function destroySornDocument(Car $car)
+    {
+        $this->authorizeCarTenant($car);
+
+        if ($car->sorn_document) {
+            $this->deleteFile($car->sorn_document, 'uploads/cars/sorn_documents');
+            $car->update([
+                'sorn_document' => null,
+                'updatedBy' => Auth::id(),
+            ]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function authorizeCarTenant(Car $car): void
+    {
+        $tenant = Auth::user()->currentTenant();
+        abort_unless($tenant && (int) $car->tenant_id === (int) $tenant->id, 403);
     }
 
     public function statusReport(string $status)

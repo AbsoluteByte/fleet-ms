@@ -120,11 +120,23 @@
                         <span class="menu-title">Agreements</span>
                     </a>
                 </li>
-                <li class="nav-item {{ Request::is('admin/phvl*') ? 'active' : '' }}">
-                    <a href="{{ route('phvl.index') }}">
+                <li class="nav-item {{ Request::is('admin/phvl*') ? 'sidebar-group-active' : '' }}">
+                    <a href="#">
                         <i class="fa fa-clipboard"></i>
-                        <span class="menu-title">PHVL</span>
+                        <span class="menu-title">PHVL Management</span>
                     </a>
+                    <ul class="menu-content">
+                        <li class="{{ Request::is('admin/phvl') && ! Request::is('admin/phvl/archive*') ? 'active' : '' }}">
+                            <a href="{{ route('phvl.index') }}">
+                                <span class="menu-title">PHVL</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/phvl/archive*') ? 'active' : '' }}">
+                            <a href="{{ route('phvl.archive') }}">
+                                <span class="menu-title">Archive</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
                 <li class="nav-item {{ Request::is('admin/cars*') || Request::is('admin/car-status*') || Request::is('admin/car-services*') || Request::is('admin/reservations*') || Request::is('admin/vehicle-swaps*') ? 'sidebar-group-active' : '' }}">
                     <a href="#">
