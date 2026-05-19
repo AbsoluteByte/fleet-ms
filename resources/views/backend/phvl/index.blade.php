@@ -45,6 +45,18 @@
         #phvlTable.table th:nth-child(13),
         #phvlTable.table td:nth-child(13) { min-width: 160px; }
 
+        #phvlTable_wrapper .dataTables_filter {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        #phvlTable_wrapper .dataTables_filter label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0;
+        }
+
         #phvlTable_wrapper .dataTables_filter input {
             margin-left: 0.5rem;
         }
@@ -85,6 +97,145 @@
         }
 
         .gap-1 { gap: 0.35rem; }
+
+        .cars-filter-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 3rem;
+            height: 3rem;
+            margin-left: .5rem;
+            margin-top: 1rem;
+            border: 1px solid #d8d6de;
+            border-radius: .25rem;
+            color: #6e6b7b;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .cars-filter-button:hover,
+        .cars-filter-button:focus {
+            border-color: #7367f0;
+            color: #7367f0;
+            outline: none;
+        }
+
+        .cars-filter-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1040;
+            display: none;
+            background: rgba(34, 41, 47, .35);
+        }
+
+        .cars-filter-backdrop.is-open {
+            display: block;
+        }
+
+        .cars-filter-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 1050;
+            width: 360px;
+            max-width: 92vw;
+            height: 100vh;
+            background: #fff;
+            box-shadow: -8px 0 24px rgba(34, 41, 47, .15);
+            transform: translateX(100%);
+            transition: transform .2s ease;
+        }
+
+        .cars-filter-panel.is-open {
+            transform: translateX(0);
+        }
+
+        .cars-filter-panel__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #ebe9f1;
+        }
+
+        .cars-filter-panel__body {
+            height: calc(100vh - 65px);
+            padding: 1.25rem;
+            overflow-y: auto;
+        }
+
+        .phvl-card-body {
+            overflow-x: hidden;
+        }
+
+        #phvlTable_wrapper {
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .phvl-dt-top {
+            width: 100%;
+            overflow: visible;
+        }
+
+        .phvl-dt-top::after {
+            content: '';
+            display: table;
+            clear: both;
+        }
+
+        .phvl-dt-top .dataTables_length {
+            float: left;
+        }
+
+        .phvl-dt-top .dataTables_filter {
+            float: right;
+        }
+
+        .phvl-dt-scroll {
+            width: 100%;
+            clear: both;
+            overflow-x: auto;
+            overflow-y: visible;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .phvl-dt-scroll::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .phvl-dt-scroll::-webkit-scrollbar-thumb {
+            background: #d8d6de;
+            border-radius: 4px;
+        }
+
+        .phvl-dt-scroll table {
+            min-width: 1500px;
+            width: max-content;
+            margin-bottom: 0;
+        }
+
+        .phvl-dt-bottom {
+            width: 100%;
+            margin-top: 0.75rem;
+            overflow: visible;
+        }
+
+        .phvl-dt-bottom::after {
+            content: '';
+            display: table;
+            clear: both;
+        }
+
+        .phvl-dt-bottom .dataTables_info {
+            float: left;
+            padding-top: 0.75rem;
+        }
+
+        .phvl-dt-bottom .dataTables_paginate {
+            float: right;
+        }
     </style>
 @endsection
 
@@ -105,10 +256,9 @@
                         </div>
                     </div>
                     <hr class="my-0">
-                    <div class="card-body px-1 pt-1 pb-0">
+                    <div class="card-body px-1 pt-1 pb-0 phvl-card-body">
                         @include('alerts')
-                        <div class="table-responsive">
-                            <table id="phvlTable" class="table table-bordered table-striped w-100">
+                        <table id="phvlTable" class="table table-bordered table-striped w-100">
                                 <thead>
                                 <tr>
                                     <th>Make &amp; Model</th>
@@ -127,13 +277,33 @@
                                 </tr>
                                 </thead>
                                 <tbody></tbody>
-                            </table>
-                        </div>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
     </section>
+
+    <div class="cars-filter-backdrop" id="phvlFilterBackdrop"></div>
+    <aside class="cars-filter-panel" id="phvlFilterPanel" aria-hidden="true">
+        <div class="cars-filter-panel__header">
+            <h5 class="mb-0">Advanced Search</h5>
+            <button type="button" class="close" id="phvlFilterClose" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="cars-filter-panel__body">
+            <div class="form-group">
+                <label>PHVL Appointment</label>
+                <label class="small text-muted mb-25 d-block" for="phvlFilterAppointmentFrom">From</label>
+                <input type="date" id="phvlFilterAppointmentFrom" class="form-control mb-1">
+                <label class="small text-muted mb-25 d-block" for="phvlFilterAppointmentTo">To</label>
+                <input type="date" id="phvlFilterAppointmentTo" class="form-control">
+            </div>
+            <button type="button" class="btn btn-primary btn-block mb-1" id="phvlFilterApply">Apply</button>
+            <button type="button" class="btn btn-outline-secondary btn-block" id="phvlFilterReset">Reset Filters</button>
+        </div>
+    </aside>
 
     {{-- Shared field popup --}}
     <div class="modal fade" id="phvlFieldModal" tabindex="-1" role="dialog" aria-hidden="true">
@@ -233,8 +403,8 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label>Document</label>
-                                    <input type="file" class="form-control-file" name="document" accept=".pdf,.jpg,.jpeg,.png">
+                                    <label>Document <span class="text-danger">*</span></label>
+                                    <input type="file" class="form-control-file" name="document" accept=".pdf,.jpg,.jpeg,.png" required>
                                 </div>
                             </div>
                         </div>
@@ -337,7 +507,11 @@
                 ajax: {
                     url: @json(route('phvl.data')),
                     dataSrc: 'data',
-                    data: function (d) { d.type = document.getElementById('phvl-type-filter').value; }
+                    data: function (d) {
+                        d.type = document.getElementById('phvl-type-filter').value;
+                        d.appointment_from = document.getElementById('phvlFilterAppointmentFrom').value;
+                        d.appointment_to = document.getElementById('phvlFilterAppointmentTo').value;
+                    }
                 },
                 columns: [
                     { data: 'make_model' },
@@ -353,14 +527,76 @@
                     { data: 'appointment_confirmation', orderable: false },
                     { data: 'appointment_at', orderable: false },
                     { data: 'phvl_actions', orderable: false, searchable: false },
-                    { data: 'expiry_sort', visible: false }
+                    { data: 'expiry_sort', visible: false, searchable: false, orderable: true }
+                ],
+                columnDefs: [
+                    { targets: 0, width: '120px' },
+                    { targets: 1, width: '115px' },
+                    { targets: 2, width: '130px' },
+                    { targets: 3, width: '130px' },
+                    { targets: 4, width: '120px' },
+                    { targets: 5, width: '90px' },
+                    { targets: 6, width: '90px' },
+                    { targets: 7, width: '100px' },
+                    { targets: 8, width: '110px' },
+                    { targets: 9, width: '100px' },
+                    { targets: 10, width: '130px' },
+                    { targets: 11, width: '140px' },
+                    { targets: 12, width: '160px' },
+                    { targets: 13, width: '0px', visible: false }
                 ],
                 order: [[4, 'asc']],
                 pageLength: 25,
-                autoWidth: false
+                autoWidth: false,
+                initComplete: function () {
+                    var $wrapper = $('#phvlTable_wrapper');
+                    if (! $wrapper.find('.phvl-dt-scroll').length) {
+                        var $top = $('<div class="phvl-dt-top"></div>');
+                        var $scroll = $('<div class="phvl-dt-scroll"></div>');
+                        var $bottom = $('<div class="phvl-dt-bottom"></div>');
+
+                        $wrapper.find('.dataTables_length').appendTo($top);
+                        $wrapper.find('.dataTables_filter').appendTo($top);
+                        $wrapper.find('.dataTables_info').appendTo($bottom);
+                        $wrapper.find('.dataTables_paginate').appendTo($bottom);
+                        $wrapper.find('table.dataTable').appendTo($scroll);
+
+                        $wrapper.empty().append($top).append($scroll).append($bottom);
+                    }
+
+                    if (! document.getElementById('phvlFilterOpen')) {
+                        $('#phvlTable_filter').append(
+                            '<button type="button" class="cars-filter-button" id="phvlFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
+                        );
+                    }
+                }
             });
 
             document.getElementById('phvl-type-filter').addEventListener('change', function () { table.ajax.reload(); });
+
+            function setPhvlFilterPanelOpen(isOpen) {
+                $('#phvlFilterPanel').toggleClass('is-open', isOpen).attr('aria-hidden', isOpen ? 'false' : 'true');
+                $('#phvlFilterBackdrop').toggleClass('is-open', isOpen);
+            }
+
+            $(document).on('click', '#phvlFilterOpen', function () {
+                setPhvlFilterPanelOpen(true);
+            });
+
+            $('#phvlFilterClose, #phvlFilterBackdrop').on('click', function () {
+                setPhvlFilterPanelOpen(false);
+            });
+
+            $('#phvlFilterApply').on('click', function () {
+                setPhvlFilterPanelOpen(false);
+                table.ajax.reload();
+            });
+
+            $('#phvlFilterReset').on('click', function () {
+                document.getElementById('phvlFilterAppointmentFrom').value = '';
+                document.getElementById('phvlFilterAppointmentTo').value = '';
+                table.ajax.reload();
+            });
 
             // ==================== Shared field popup ====================
             var fieldCarId = null;
@@ -421,7 +657,7 @@
                         '  <div class="form-group"><label>Expiry Date</label><input type="date" class="form-control" id="phvl-mot-expiry"></div>' +
                         '  <div class="form-group"><label>Amount</label><input type="number" step="0.01" min="0" class="form-control" id="phvl-mot-amount"></div>' +
                         '  <div class="form-group"><label>Term</label><input type="text" class="form-control" id="phvl-mot-term" placeholder="e.g. 12 months"></div>' +
-                        '  <div class="form-group mb-0"><label>Document</label><input type="file" class="form-control-file" id="phvl-mot-document" accept=".pdf,.jpg,.jpeg,.png"></div>' +
+                        '  <div class="form-group mb-0"><label>Document <span class="text-danger">*</span></label><input type="file" class="form-control-file" id="phvl-mot-document" accept=".pdf,.jpg,.jpeg,.png" required></div>' +
                         '</div>';
                     body.appendChild(motSection);
                 }
@@ -453,6 +689,14 @@
 
                 var motExpiry = document.getElementById('phvl-mot-expiry');
                 var hasMotData = motExpiry && motExpiry.value;
+
+                if (hasMotData) {
+                    var motDoc = document.getElementById('phvl-mot-document');
+                    if (!motDoc || !motDoc.files || !motDoc.files.length) {
+                        alert('MOT document is required when MOT details are provided.');
+                        return;
+                    }
+                }
 
                 patchProgress(fieldCarId, body).then(function () {
                     if (!hasMotData) {
@@ -569,6 +813,11 @@
             document.getElementById('phvlAddPhvForm').addEventListener('submit', function (e) {
                 e.preventDefault();
                 var carId = document.getElementById('phvl-add-phv-car-id').value;
+                var docInput = this.querySelector('input[name="document"]');
+                if (!docInput || !docInput.files || !docInput.files.length) {
+                    alert('PHV document is required when adding PHV details.');
+                    return;
+                }
                 var fd = new FormData(this);
 
                 fetch(completePassUrl(carId), {

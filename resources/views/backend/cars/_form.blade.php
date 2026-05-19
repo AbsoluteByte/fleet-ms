@@ -568,6 +568,10 @@
         $useRoadTaxSplit = false;
     }
     $showRoadTaxViewAll = $isCarEdit && $useRoadTaxSplit && $roadTaxesOlder->isNotEmpty();
+    $hasRoadTaxHistory = $showRoadTaxViewAll;
+    $hasSornHistory = $isCarEdit && isset($model) && $model->sornHistories->isNotEmpty();
+    $showRoadTaxSornHistory = $isCarEdit && ($hasRoadTaxHistory || $hasSornHistory);
+    $roadTaxSornActiveTab = $hasRoadTaxHistory ? 'road-tax' : 'sorn';
     $rtMainCount = $roadTaxesForMain->count();
     $rtHiddenStartIndex = $rtMainCount;
 @endphp
@@ -580,9 +584,9 @@
                 <i class="fa fa-road"></i> Road Tax Information
             </span>
             <span>
-                @if($showRoadTaxViewAll)
-                <button type="button" class="btn btn-sm btn-outline-primary mr-1" data-toggle="modal" data-target="#editRoadTaxHistoryModal">
-                    View All
+                @if($showRoadTaxSornHistory)
+                <button type="button" class="btn btn-sm btn-outline-primary mr-1" data-toggle="modal" data-target="#roadTaxSornHistoryModal">
+                    History
                 </button>
                 @endif
                 @if($isCarEdit)
@@ -593,11 +597,6 @@
                     @else
                         <button type="button" id="carSornToolbarBtn" class="btn btn-sm btn-outline-success mr-1" data-toggle="modal" data-target="#applySornModal" data-sorn-toolbar-state="apply">
                             <i class="fa fa-road"></i> Apply SORN
-                        </button>
-                    @endif
-                    @if($model->sornHistories->isNotEmpty())
-                        <button type="button" class="btn btn-sm btn-outline-primary mr-1" data-toggle="modal" data-target="#sornHistoryModal">
-                            SORN History
                         </button>
                     @endif
                 @endif
@@ -884,7 +883,7 @@
 </div>
 @endif
 
-@if($isCarEdit && $model->sornHistories->isNotEmpty())
+@if(false)
 <div class="modal fade" id="sornHistoryModal" tabindex="-1" role="dialog" aria-labelledby="sornHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
         <div class="modal-content">
@@ -950,6 +949,10 @@
 </div>
 @endif
 
+@if($showRoadTaxSornHistory)
+    @include('backend.cars.partials.road-tax-sorn-history-modal')
+@endif
+
 @if($isCarEdit)
 <div id="sornApplyOverlay" class="d-none" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;flex-direction:column;">
     <div class="bg-white rounded shadow p-4 text-center" style="min-width:260px;border-radius:12px;">
@@ -960,7 +963,7 @@
 </div>
 @endif
 
-@if($showRoadTaxViewAll)
+@if(false)
 <div class="modal fade" id="editRoadTaxHistoryModal" tabindex="-1" role="dialog" aria-labelledby="editRoadTaxHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
         <div class="modal-content">

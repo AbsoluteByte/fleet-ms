@@ -51,6 +51,15 @@ class PhvlController extends Controller
             $type = 'all';
         }
 
+        $appointmentFrom = $request->query('appointment_from');
+        $appointmentTo = $request->query('appointment_to');
+        if ($appointmentFrom || $appointmentTo) {
+            $request->validate([
+                'appointment_from' => 'nullable|date',
+                'appointment_to' => 'nullable|date',
+            ]);
+        }
+
         $cars = Car::query()
             ->forCurrentTenant()
             ->with(['company', 'carModel', 'mots', 'phvs.counsel', 'phvlProgress'])
@@ -70,6 +79,19 @@ class PhvlController extends Controller
             }
             if ($type === 'all' && ! $renewal && ! $need) {
                 continue;
+            }
+
+            if ($appointmentFrom || $appointmentTo) {
+                $appt = $car->phvlProgress?->appointment_at;
+                if (! $appt) {
+                    continue;
+                }
+                if ($appointmentFrom && $appt->lt(Carbon::parse($appointmentFrom)->startOfDay())) {
+                    continue;
+                }
+                if ($appointmentTo && $appt->gt(Carbon::parse($appointmentTo)->endOfDay())) {
+                    continue;
+                }
             }
 
             $rows[] = $this->formatRow($car);
@@ -160,7 +182,7 @@ class PhvlController extends Controller
             'expiry_date' => 'required|date',
             'amount' => 'nullable|numeric|min:0',
             'term' => 'nullable|string',
-            'document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
         $motData = [
@@ -194,7 +216,7 @@ class PhvlController extends Controller
             'start_date' => 'required|date',
             'expiry_date' => 'required|date',
             'notify_before_expiry' => 'required|integer|min:1',
-            'document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
         $counselTenant = Counsel::query()->whereKey($validated['counsel_id'])->value('tenant_id');

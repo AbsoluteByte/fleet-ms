@@ -194,6 +194,7 @@ class CarController extends Controller
         }
 
         $validated = $request->validate($rules);
+        $this->validateMotPhvDocuments($request, null);
 
         try {
             $car = DB::transaction(function () use ($validated, $request, $tenant) {
@@ -510,6 +511,8 @@ class CarController extends Controller
                 ]);
             }
         }
+
+        $this->validateMotPhvDocuments($request, $car);
 
         try {
             $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant) {
@@ -1140,6 +1143,53 @@ class CarController extends Controller
         }
 
         return $phvData;
+    }
+
+    private function validateMotPhvDocuments(Request $request, ?Car $car): void
+    {
+        if ($car && (! $car->relationLoaded('mots') || ! $car->relationLoaded('phvs'))) {
+            $car->load(['mots', 'phvs']);
+        }
+
+        $existingMots = $car ? $car->mots->keyBy('id') : collect();
+        $existingPhvs = $car ? $car->phvs->keyBy('id') : collect();
+        $errors = [];
+
+        if ($request->has('mots')) {
+            foreach ($request->input('mots') as $index => $motData) {
+                if (! $this->historyRowHasValues($motData, ['expiry_date', 'amount', 'term'])) {
+                    continue;
+                }
+
+                $existingMot = ! empty($motData['id']) ? $existingMots->get($motData['id']) : null;
+                $hasDocument = $request->hasFile("mots.{$index}.document")
+                    || ($existingMot && $existingMot->document);
+
+                if (! $hasDocument) {
+                    $errors["mots.{$index}.document"] = 'MOT document is required when MOT details are provided.';
+                }
+            }
+        }
+
+        if ($request->has('phvs')) {
+            foreach ($request->input('phvs') as $index => $phvData) {
+                if (! $this->historyRowHasValues($phvData, ['counsel_id', 'amount', 'start_date', 'expiry_date', 'notify_before_expiry'])) {
+                    continue;
+                }
+
+                $existingPhv = ! empty($phvData['id']) ? $existingPhvs->get($phvData['id']) : null;
+                $hasDocument = $request->hasFile("phvs.{$index}.document")
+                    || ($existingPhv && $existingPhv->document);
+
+                if (! $hasDocument) {
+                    $errors["phvs.{$index}.document"] = 'PHV document is required when PHV details are provided.';
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     private function historyRowHasValues(array $row, array $keys): bool
