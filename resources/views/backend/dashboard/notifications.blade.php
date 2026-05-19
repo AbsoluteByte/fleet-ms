@@ -299,6 +299,7 @@
                                 'phv_expiry': 'icon-award text-secondary',
                                 'mot_expiry': 'icon-tool text-warning',
                                 'road_tax_expiry': 'icon-credit-card text-success',
+                                'road_tax_missing': 'icon-credit-card text-warning',
                                 'driver_license_expiry': 'icon-user text-info',
                                 'phd_license_expiry': 'icon-user-check text-secondary'
                             };
@@ -342,7 +343,7 @@
                     {
                         data: 'time_ago',
                         render: function(data, type, row) {
-                            if (row.type === 'insurance_applied') {
+                            if (row.type === 'insurance_applied' || row.type === 'road_tax_missing') {
                                 return '-';
                             }
                             let colorClass = 'success';

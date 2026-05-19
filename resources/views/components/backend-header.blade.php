@@ -259,6 +259,7 @@
                 'phv_expiry': 'insurance-expiry',
                 'mot_expiry': 'due-soon',
                 'road_tax_expiry': 'payment-received',
+                'road_tax_missing': 'due-soon',
                 'driver_license_expiry': 'insurance-expiry',
                 'phd_license_expiry': 'insurance-expiry',
                 'default': ''

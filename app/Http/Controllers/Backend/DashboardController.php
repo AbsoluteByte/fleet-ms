@@ -533,6 +533,28 @@ class DashboardController extends Controller
             ]);
         }
 
+        $carsMissingRoadTax = $this->carsMissingRoadTax($tenant, $allRoadTaxes, $fleetNotificationExcludedStatuses);
+
+        foreach ($carsMissingRoadTax as $car) {
+            $notifications->push([
+                'id' => 'road_tax_missing_'.$car->id,
+                'type' => 'road_tax_missing',
+                'priority' => 2,
+                'title' => 'Road Tax Not Added',
+                'message' => $car->registration.' - No road tax details on file',
+                'simple_message' => $car->registration.' - No road tax details on file',
+                'vehicle' => $car->registration,
+                'time_ago' => 'Not on file',
+                'action_url' => route('cars.edit', $car->id),
+                'icon' => 'icon-credit-card',
+                'color' => 'warning',
+                'bg_color' => 'rgba(245, 158, 11, 0.1)',
+                'border_color' => '#f59e0b',
+                'created_at' => $car->created_at ?? now(),
+                'sort_key' => now()->timestamp,
+            ]);
+        }
+
         // ==================== 8. CAR SERVICES (latest service per car, every 3 months) ====================
         $serviceRows = CarService::with(['car'])
             ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
@@ -728,7 +750,7 @@ class DashboardController extends Controller
             'expiring_insurance' => $expiringInsurance->count(),
             'expiring_phv' => $expiringPhvs->count(),
             'expiring_mot' => $expiringMots->count(),
-            'expiring_road_tax' => $expiringRoadTaxes->count(),
+            'expiring_road_tax' => $expiringRoadTaxes->count() + $carsMissingRoadTax->count(),
             'car_service_due' => $serviceNotifications->count(),
             'agreement_terminations' => $terminationNotices->count(),
             'expiring_driver_licenses' => $expiringDriverLicenses->count(),
@@ -767,7 +789,11 @@ class DashboardController extends Controller
 
             // ✅ Filter by type if requested
             if ($request->has('type') && $request->type) {
-                $fleetNotifications = $fleetNotifications->where('type', $request->type);
+                if ($request->type === 'road_tax_expiry') {
+                    $fleetNotifications = $fleetNotifications->whereIn('type', ['road_tax_expiry', 'road_tax_missing']);
+                } else {
+                    $fleetNotifications = $fleetNotifications->where('type', $request->type);
+                }
             }
 
             // ✅ Chronological by expiry/due date (expired oldest-first, then upcoming soonest-first)
@@ -864,6 +890,26 @@ class DashboardController extends Controller
                 return [optional($r->start_date)->timestamp ?? 0, $r->id];
             })->first();
         })->values();
+    }
+
+    /**
+     * Cars that need a road tax record (none on file, or latest period cannot be calculated).
+     * Same eligibility as expiring road tax: tenant fleet, not SORN, not written off/stolen/sold.
+     */
+    private function carsMissingRoadTax($tenant, Collection $allRoadTaxes, array $fleetNotificationExcludedStatuses): Collection
+    {
+        $carIdsWithValidRoadTax = $this->latestRoadTaxPerCar($allRoadTaxes)
+            ->filter(fn ($roadTax) => $this->calculateRoadTaxExpiry($roadTax) !== null)
+            ->pluck('car_id')
+            ->unique();
+
+        return Car::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('sorn_applied', false)
+            ->whereNotIn('fleet_status', $fleetNotificationExcludedStatuses)
+            ->whereNotIn('id', $carIdsWithValidRoadTax)
+            ->orderBy('registration')
+            ->get();
     }
 
     private function latestInsurancePerCar(Collection $policies): Collection
