@@ -19,6 +19,9 @@
                                 <li class="nav-item">
                                     <a class="nav-link active" id="reports-mots-tab" data-toggle="pill" href="#reports-mots-pane" role="tab" aria-controls="reports-mots-pane" aria-selected="true">MOTs</a>
                                 </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" id="reports-phvl-tab" data-toggle="pill" href="#reports-phvl-pane" role="tab" aria-controls="reports-phvl-pane" aria-selected="false">PHVL</a>
+                                </li>
                             </ul>
 
                             <div class="tab-content" id="reports-tab-content">
@@ -41,80 +44,37 @@
                                             </thead>
                                             <tbody>
                                             @forelse($cars as $car)
-                                                @php
-                                                    $carStatusLabel = ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent'));
-                                                    if ($carStatusLabel === 'Sorn') {
-                                                        $carStatusLabel = 'SORN';
-                                                    }
-                                                    $latestInsurance = $car->insurances
-                                                        ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->created_at)->timestamp ?? 0, $i->id])
-                                                        ->first();
-                                                    $latestInsuranceStatusName = trim((string) optional(optional($latestInsurance)->status)->name);
-                                                    $insuranceStatusLabel = strcasecmp($latestInsuranceStatusName, 'Applied') === 0
-                                                        ? 'Applied'
-                                                        : (strcasecmp($latestInsuranceStatusName, 'Active') === 0 ? 'Active' : 'Inactive');
-                                                    $phvCounselLabel = $car->latestPhvCounselName() ?? '—';
-                                                    $motStatus = $car->report_mot_status;
-                                                    $motExpiryIso = $car->report_mot_expiry ? $car->report_mot_expiry->format('Y-m-d') : '';
-                                                    $motStatusClass = match ($motStatus) {
-                                                        'Missing' => 'badge-light-warning',
-                                                        'Expired' => 'badge-light-danger',
-                                                        'Expiring' => 'badge-light-warning',
-                                                        default => 'badge-light-success',
-                                                    };
-                                                @endphp
-                                                <tr
-                                                    data-company="{{ $car->company->name ?? '' }}"
-                                                    data-mot-expiry="{{ $motExpiryIso }}"
-                                                    data-mot-missing="{{ $car->report_mot_missing ? '1' : '0' }}"
-                                                >
-                                                    <td><strong>{{ $car->registration }}</strong></td>
-                                                    <td>{{ $car->company->name ?? '—' }}</td>
-                                                    <td>{{ $car->carModel->name ?? '—' }}</td>
-                                                    <td>
-                                                        <span class="badge bg-secondary">{{ $car->color }}</span>
-                                                    </td>
-                                                    <td>{{ $carStatusLabel }}</td>
-                                                    <td>{{ $phvCounselLabel }}</td>
-                                                    <td>
-                                                        @if($insuranceStatusLabel === 'Active')
-                                                            <span class="insurance-status">
-                                                                <span class="insurance-status-dot insurance-status-dot--active" aria-hidden="true"></span>
-                                                                <span class="insurance-status-label">Active</span>
-                                                            </span>
-                                                        @elseif($insuranceStatusLabel === 'Applied')
-                                                            <span class="insurance-status">
-                                                                <span class="insurance-status-dot insurance-status-dot--pending" aria-hidden="true"></span>
-                                                                <span class="insurance-status-label">Applied</span>
-                                                            </span>
-                                                        @else
-                                                            <span class="insurance-status">
-                                                                <span class="insurance-status-dot insurance-status-dot--inactive" aria-hidden="true"></span>
-                                                                <span class="insurance-status-label">Inactive</span>
-                                                            </span>
-                                                        @endif
-                                                    </td>
-                                                    <td>
-                                                        @if($car->report_mot_expiry)
-                                                            {{ $car->report_mot_expiry->format('d M, Y') }}
-                                                        @else
-                                                            <span class="text-muted">—</span>
-                                                        @endif
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge {{ $motStatusClass }}">{{ $motStatus }}</span>
-                                                    </td>
-                                                    <td>
-                                                        <div class="btn-group" role="group">
-                                                            <a href="{{ route('cars.show', $car) }}" class="btn btn-sm btn-outline-info" title="View">
-                                                                <i class="fa fa-eye"></i>
-                                                            </a>
-                                                            <a href="{{ route('cars.edit', $car) }}" class="btn btn-sm btn-outline-warning" title="Edit">
-                                                                <i class="fa fa-edit"></i>
-                                                            </a>
-                                                        </div>
-                                                    </td>
+                                                @include('backend.reports.partials.report-row', ['car' => $car, 'reportType' => 'mot'])
+                                            @empty
+                                                <tr>
+                                                    <td colspan="10" class="text-center text-muted py-4">No cars found.</td>
                                                 </tr>
+                                            @endforelse
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="tab-pane fade" id="reports-phvl-pane" role="tabpanel" aria-labelledby="reports-phvl-tab">
+                                    <div class="table-responsive">
+                                        <table id="reportsPhvlTable" class="table datatable table-bordered table-striped">
+                                            <thead>
+                                            <tr>
+                                                <th>Registration</th>
+                                                <th>Company</th>
+                                                <th>Model</th>
+                                                <th>Color</th>
+                                                <th>Status</th>
+                                                <th>PHV Council</th>
+                                                <th>Insurance Status</th>
+                                                <th>PHVL Expiry</th>
+                                                <th>PHVL Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            @forelse($cars as $car)
+                                                @include('backend.reports.partials.report-row', ['car' => $car, 'reportType' => 'phvl'])
                                             @empty
                                                 <tr>
                                                     <td colspan="10" class="text-center text-muted py-4">No cars found.</td>
@@ -137,17 +97,18 @@
     @endphp
 
     <div class="cars-filter-backdrop" id="reportsFilterBackdrop"></div>
-    <aside class="cars-filter-panel" id="reportsFilterPanel" aria-hidden="true">
+
+    <aside class="cars-filter-panel" id="reportsMotsFilterPanel" aria-hidden="true">
         <div class="cars-filter-panel__header">
-            <h5 class="mb-0">Advanced Search</h5>
-            <button type="button" class="close" id="reportsFilterClose" aria-label="Close">
+            <h5 class="mb-0">Advanced Search — MOTs</h5>
+            <button type="button" class="close reports-mots-filter-close" aria-label="Close">
                 <span aria-hidden="true">&times;</span>
             </button>
         </div>
         <div class="cars-filter-panel__body">
             <div class="form-group">
-                <label for="reportsFilterCompany">Company</label>
-                <select id="reportsFilterCompany" class="form-control reports-advanced-filter" data-filter-key="company">
+                <label for="reportsMotsFilterCompany">Company</label>
+                <select id="reportsMotsFilterCompany" class="form-control">
                     <option value="">All Companies</option>
                     @foreach($filterCompanies as $company)
                         <option value="{{ $company }}">{{ $company }}</option>
@@ -167,8 +128,43 @@
                     <label class="custom-control-label" for="reportsIncludeMissingMot">Include cars with no MOT added yet</label>
                 </div>
             </div>
-            <button type="button" class="btn btn-primary btn-block mb-1" id="reportsFilterApply">Apply</button>
-            <button type="button" class="btn btn-outline-secondary btn-block" id="reportsFilterReset">Reset Filters</button>
+            <button type="button" class="btn btn-primary btn-block mb-1" id="reportsMotsFilterApply">Apply</button>
+            <button type="button" class="btn btn-outline-secondary btn-block" id="reportsMotsFilterReset">Reset Filters</button>
+        </div>
+    </aside>
+
+    <aside class="cars-filter-panel" id="reportsPhvlFilterPanel" aria-hidden="true">
+        <div class="cars-filter-panel__header">
+            <h5 class="mb-0">Advanced Search — PHVL</h5>
+            <button type="button" class="close reports-phvl-filter-close" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="cars-filter-panel__body">
+            <div class="form-group">
+                <label for="reportsPhvlFilterCompany">Company</label>
+                <select id="reportsPhvlFilterCompany" class="form-control">
+                    <option value="">All Companies</option>
+                    @foreach($filterCompanies as $company)
+                        <option value="{{ $company }}">{{ $company }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="form-group">
+                <label>PHVL Expiring</label>
+                <label class="small text-muted mb-25 d-block" for="reportsPhvlExpiringFrom">From</label>
+                <input type="date" id="reportsPhvlExpiringFrom" class="form-control mb-1">
+                <label class="small text-muted mb-25 d-block" for="reportsPhvlExpiringTo">To</label>
+                <input type="date" id="reportsPhvlExpiringTo" class="form-control">
+            </div>
+            <div class="form-group">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" id="reportsIncludeMissingPhvl">
+                    <label class="custom-control-label" for="reportsIncludeMissingPhvl">Include cars with no PHVL added yet</label>
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary btn-block mb-1" id="reportsPhvlFilterApply">Apply</button>
+            <button type="button" class="btn btn-outline-secondary btn-block" id="reportsPhvlFilterReset">Reset Filters</button>
         </div>
     </aside>
 @endsection
@@ -176,19 +172,22 @@
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
     <style>
-        #reportsMotsTable_filter {
+        #reportsMotsTable_filter,
+        #reportsPhvlTable_filter {
             display: flex;
             justify-content: flex-end;
             align-items: center;
         }
 
-        #reportsMotsTable_filter label {
+        #reportsMotsTable_filter label,
+        #reportsPhvlTable_filter label {
             display: flex;
             align-items: center;
             margin-bottom: 0;
         }
 
-        #reportsMotsTable_filter input {
+        #reportsMotsTable_filter input,
+        #reportsPhvlTable_filter input {
             margin-left: .5rem;
         }
 
@@ -258,7 +257,8 @@
             overflow-y: auto;
         }
 
-        #reportsFilterClose {
+        .reports-mots-filter-close,
+        .reports-phvl-filter-close {
             padding: 0.3rem 0.7rem;
         }
 
@@ -300,135 +300,127 @@
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
     <script>
         $(document).ready(function () {
-            const motFilters = {
-                company: '',
-                from: '',
-                to: '',
-                includeMissing: false
-            };
+            let activeReportTab = 'mots';
 
-            function isMotFilterActive() {
-                return !!(motFilters.from || motFilters.to || motFilters.includeMissing);
+            const motFilters = { company: '', from: '', to: '', includeMissing: false };
+            const phvlFilters = { company: '', from: '', to: '', includeMissing: false };
+
+            function parseDateYmd(value) {
+                if (!value) return null;
+                const parts = value.split('-');
+                if (parts.length !== 3) return null;
+                const date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                return isNaN(date.getTime()) ? null : date;
             }
 
-            function isAnyAdvancedFilterActive() {
-                return !!motFilters.company || isMotFilterActive();
+            function expiryInRange(expiryIso, fromStr, toStr) {
+                if (!expiryIso) return false;
+                const expiry = parseDateYmd(expiryIso);
+                if (!expiry) return false;
+                const from = parseDateYmd(fromStr);
+                const to = parseDateYmd(toStr);
+                if (from && expiry < from) return false;
+                if (to && expiry > to) return false;
+                return true;
             }
 
-            const dataTable = $('#reportsMotsTable').DataTable({
+            function isExpiryFilterActive(filters) {
+                return !!(filters.from || filters.to || filters.includeMissing);
+            }
+
+            function isAnyFilterActive(filters) {
+                return !!filters.company || isExpiryFilterActive(filters);
+            }
+
+            function applyReportRowFilter(settings, dataIndex, tableApi, filters, expiryKey, missingKey) {
+                if (!isAnyFilterActive(filters)) return true;
+                const row = tableApi.row(dataIndex).node();
+                if (!row) return true;
+                if (filters.company && row.dataset.company !== filters.company) return false;
+                if (!isExpiryFilterActive(filters)) return true;
+
+                const isMissing = row.dataset[missingKey] === '1';
+                const expiryIso = row.dataset[expiryKey] || '';
+                const hasDateRange = !!(filters.from || filters.to);
+
+                if (filters.includeMissing && isMissing) return true;
+                if (hasDateRange && expiryInRange(expiryIso, filters.from, filters.to)) return true;
+                if (!hasDateRange && filters.includeMissing) return isMissing;
+                return false;
+            }
+
+            const motsDataTable = $('#reportsMotsTable').DataTable({
+                processing: true,
+                responsive: true,
+                order: [[7, 'asc']]
+            });
+
+            const phvlDataTable = $('#reportsPhvlTable').DataTable({
                 processing: true,
                 responsive: true,
                 order: [[7, 'asc']]
             });
 
             $('#reportsMotsTable_filter').append(
-                '<button type="button" class="cars-filter-button" id="reportsFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
+                '<button type="button" class="cars-filter-button" id="reportsMotsFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
+            );
+            $('#reportsPhvlTable_filter').append(
+                '<button type="button" class="cars-filter-button" id="reportsPhvlFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
             );
 
-            function parseDateYmd(value) {
-                if (!value) {
-                    return null;
+            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                if (settings.nTable.id === 'reportsMotsTable') {
+                    return applyReportRowFilter(settings, dataIndex, motsDataTable, motFilters, 'motExpiry', 'motMissing');
                 }
-                const parts = value.split('-');
-                if (parts.length !== 3) {
-                    return null;
-                }
-                const y = parseInt(parts[0], 10);
-                const m = parseInt(parts[1], 10) - 1;
-                const d = parseInt(parts[2], 10);
-                const date = new Date(y, m, d);
-                return isNaN(date.getTime()) ? null : date;
-            }
-
-            function motExpiryInRange(expiryIso, fromStr, toStr) {
-                if (!expiryIso) {
-                    return false;
-                }
-                const expiry = parseDateYmd(expiryIso);
-                if (!expiry) {
-                    return false;
-                }
-                const from = parseDateYmd(fromStr);
-                const to = parseDateYmd(toStr);
-                if (from && expiry < from) {
-                    return false;
-                }
-                if (to && expiry > to) {
-                    return false;
+                if (settings.nTable.id === 'reportsPhvlTable') {
+                    return applyReportRowFilter(settings, dataIndex, phvlDataTable, phvlFilters, 'phvExpiry', 'phvMissing');
                 }
                 return true;
-            }
-
-            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-                if (settings.nTable.id !== 'reportsMotsTable') {
-                    return true;
-                }
-                if (!isAnyAdvancedFilterActive()) {
-                    return true;
-                }
-
-                const row = dataTable.row(dataIndex).node();
-                if (!row) {
-                    return true;
-                }
-
-                if (motFilters.company && row.dataset.company !== motFilters.company) {
-                    return false;
-                }
-
-                if (!isMotFilterActive()) {
-                    return true;
-                }
-
-                const isMissing = row.dataset.motMissing === '1';
-                const expiryIso = row.dataset.motExpiry || '';
-                const hasFrom = !!motFilters.from;
-                const hasTo = !!motFilters.to;
-                const hasDateRange = hasFrom || hasTo;
-
-                if (motFilters.includeMissing && isMissing) {
-                    return true;
-                }
-
-                if (hasDateRange && motExpiryInRange(expiryIso, motFilters.from, motFilters.to)) {
-                    return true;
-                }
-
-                if (!hasDateRange && motFilters.includeMissing) {
-                    return isMissing;
-                }
-
-                return false;
             });
 
-            function syncMotFiltersFromPanel() {
-                motFilters.company = document.getElementById('reportsFilterCompany').value;
-                motFilters.from = document.getElementById('reportsMotExpiringFrom').value;
-                motFilters.to = document.getElementById('reportsMotExpiringTo').value;
-                motFilters.includeMissing = document.getElementById('reportsIncludeMissingMot').checked;
-            }
-
-            function setFilterPanelOpen(isOpen) {
-                $('#reportsFilterPanel').toggleClass('is-open', isOpen).attr('aria-hidden', isOpen ? 'false' : 'true');
+            function setFilterPanelOpen(panelSelector, isOpen) {
+                $(panelSelector).toggleClass('is-open', isOpen).attr('aria-hidden', isOpen ? 'false' : 'true');
                 $('#reportsFilterBackdrop').toggleClass('is-open', isOpen);
             }
 
-            $(document).on('click', '#reportsFilterOpen', function () {
-                setFilterPanelOpen(true);
+            function closeAllFilterPanels() {
+                setFilterPanelOpen('#reportsMotsFilterPanel', false);
+                setFilterPanelOpen('#reportsPhvlFilterPanel', false);
+            }
+
+            $('#reportsMotsFilterOpen').on('click', function () {
+                closeAllFilterPanels();
+                setFilterPanelOpen('#reportsMotsFilterPanel', true);
+            });
+            $('#reportsPhvlFilterOpen').on('click', function () {
+                closeAllFilterPanels();
+                setFilterPanelOpen('#reportsPhvlFilterPanel', true);
             });
 
-            $('#reportsFilterClose, #reportsFilterBackdrop').on('click', function () {
-                setFilterPanelOpen(false);
+            $('.reports-mots-filter-close, .reports-phvl-filter-close, #reportsFilterBackdrop').on('click', function () {
+                closeAllFilterPanels();
             });
 
-            $('#reportsFilterApply').on('click', function () {
-                syncMotFiltersFromPanel();
-                setFilterPanelOpen(false);
-                dataTable.draw();
+            $('#reportsMotsFilterApply').on('click', function () {
+                motFilters.company = document.getElementById('reportsMotsFilterCompany').value;
+                motFilters.from = document.getElementById('reportsMotExpiringFrom').value;
+                motFilters.to = document.getElementById('reportsMotExpiringTo').value;
+                motFilters.includeMissing = document.getElementById('reportsIncludeMissingMot').checked;
+                closeAllFilterPanels();
+                motsDataTable.draw();
             });
 
-            $('#reportsFilterReset').on('click', function () {
-                document.getElementById('reportsFilterCompany').value = '';
+            $('#reportsPhvlFilterApply').on('click', function () {
+                phvlFilters.company = document.getElementById('reportsPhvlFilterCompany').value;
+                phvlFilters.from = document.getElementById('reportsPhvlExpiringFrom').value;
+                phvlFilters.to = document.getElementById('reportsPhvlExpiringTo').value;
+                phvlFilters.includeMissing = document.getElementById('reportsIncludeMissingPhvl').checked;
+                closeAllFilterPanels();
+                phvlDataTable.draw();
+            });
+
+            $('#reportsMotsFilterReset').on('click', function () {
+                document.getElementById('reportsMotsFilterCompany').value = '';
                 document.getElementById('reportsMotExpiringFrom').value = '';
                 document.getElementById('reportsMotExpiringTo').value = '';
                 document.getElementById('reportsIncludeMissingMot').checked = false;
@@ -436,19 +428,34 @@
                 motFilters.from = '';
                 motFilters.to = '';
                 motFilters.includeMissing = false;
-                dataTable.draw();
+                motsDataTable.draw();
             });
 
-            const motExportHeaders = [
-                'Registration',
-                'Company',
-                'Model',
-                'Color',
-                'Status',
-                'PHV Council',
-                'Insurance Status',
-                'MOT Expiry',
-                'MOT Status'
+            $('#reportsPhvlFilterReset').on('click', function () {
+                document.getElementById('reportsPhvlFilterCompany').value = '';
+                document.getElementById('reportsPhvlExpiringFrom').value = '';
+                document.getElementById('reportsPhvlExpiringTo').value = '';
+                document.getElementById('reportsIncludeMissingPhvl').checked = false;
+                phvlFilters.company = '';
+                phvlFilters.from = '';
+                phvlFilters.to = '';
+                phvlFilters.includeMissing = false;
+                phvlDataTable.draw();
+            });
+
+            $('a[data-toggle="pill"]').on('shown.bs.tab', function (e) {
+                activeReportTab = e.target.getAttribute('href') === '#reports-phvl-pane' ? 'phvl' : 'mots';
+                closeAllFilterPanels();
+                if (activeReportTab === 'phvl') {
+                    phvlDataTable.columns.adjust().responsive.recalc();
+                } else {
+                    motsDataTable.columns.adjust().responsive.recalc();
+                }
+            });
+
+            const reportExportHeaders = [
+                'Registration', 'Company', 'Model', 'Color', 'Status',
+                'PHV Council', 'Insurance Status'
             ];
 
             function csvEscape(value) {
@@ -456,19 +463,29 @@
                 return /[",\n\r]/.test(str) ? '"' + str + '"' : str;
             }
 
-            function exportMotsCsv() {
-                const lines = [motExportHeaders.map(csvEscape).join(',')];
+            function downloadCsv(filename, lines) {
+                const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            function exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix) {
+                const headers = reportExportHeaders.concat([expiryLabel, statusLabel]);
+                const lines = [headers.map(csvEscape).join(',')];
                 let rowCount = 0;
 
-                dataTable.rows({ search: 'applied', order: 'applied' }).every(function () {
+                tableApi.rows({ search: 'applied', order: 'applied' }).every(function () {
                     const node = this.node();
-                    if (!node) {
-                        return;
-                    }
+                    if (!node) return;
                     const cells = node.querySelectorAll('td');
-                    if (cells.length < 9) {
-                        return;
-                    }
+                    if (cells.length < 9) return;
                     const row = [];
                     for (let i = 0; i < 9; i++) {
                         row.push(csvEscape(cells[i].innerText.replace(/\s+/g, ' ').trim()));
@@ -482,21 +499,16 @@
                     return;
                 }
 
-                const csvContent = '\uFEFF' + lines.join('\r\n');
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                const stamp = new Date().toISOString().slice(0, 10);
-                link.href = url;
-                link.download = 'mot-report-' + stamp + '.csv';
-                link.style.display = 'none';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                downloadCsv(filePrefix + '-' + new Date().toISOString().slice(0, 10) + '.csv', lines);
             }
 
-            $('#reportsExportCsv').on('click', exportMotsCsv);
+            $('#reportsExportCsv').on('click', function () {
+                if (activeReportTab === 'phvl') {
+                    exportTableCsv(phvlDataTable, 'PHVL Expiry', 'PHVL Status', 'phvl-report');
+                } else {
+                    exportTableCsv(motsDataTable, 'MOT Expiry', 'MOT Status', 'mot-report');
+                }
+            });
         });
     </script>
 @endsection
