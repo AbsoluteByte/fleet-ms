@@ -64,6 +64,7 @@
                                                     };
                                                 @endphp
                                                 <tr
+                                                    data-company="{{ $car->company->name ?? '' }}"
                                                     data-mot-expiry="{{ $motExpiryIso }}"
                                                     data-mot-missing="{{ $car->report_mot_missing ? '1' : '0' }}"
                                                 >
@@ -131,6 +132,10 @@
         </div>
     </section>
 
+    @php
+        $filterCompanies = $cars->map(fn ($car) => $car->company->name ?? null)->filter()->unique()->sort()->values();
+    @endphp
+
     <div class="cars-filter-backdrop" id="reportsFilterBackdrop"></div>
     <aside class="cars-filter-panel" id="reportsFilterPanel" aria-hidden="true">
         <div class="cars-filter-panel__header">
@@ -140,6 +145,15 @@
             </button>
         </div>
         <div class="cars-filter-panel__body">
+            <div class="form-group">
+                <label for="reportsFilterCompany">Company</label>
+                <select id="reportsFilterCompany" class="form-control reports-advanced-filter" data-filter-key="company">
+                    <option value="">All Companies</option>
+                    @foreach($filterCompanies as $company)
+                        <option value="{{ $company }}">{{ $company }}</option>
+                    @endforeach
+                </select>
+            </div>
             <div class="form-group">
                 <label>MOT Expiring</label>
                 <label class="small text-muted mb-25 d-block" for="reportsMotExpiringFrom">From</label>
@@ -287,11 +301,19 @@
     <script>
         $(document).ready(function () {
             const motFilters = {
+                company: '',
                 from: '',
                 to: '',
-                includeMissing: false,
-                active: false
+                includeMissing: false
             };
+
+            function isMotFilterActive() {
+                return !!(motFilters.from || motFilters.to || motFilters.includeMissing);
+            }
+
+            function isAnyAdvancedFilterActive() {
+                return !!motFilters.company || isMotFilterActive();
+            }
 
             const dataTable = $('#reportsMotsTable').DataTable({
                 processing: true,
@@ -341,12 +363,20 @@
                 if (settings.nTable.id !== 'reportsMotsTable') {
                     return true;
                 }
-                if (!motFilters.active) {
+                if (!isAnyAdvancedFilterActive()) {
                     return true;
                 }
 
                 const row = dataTable.row(dataIndex).node();
                 if (!row) {
+                    return true;
+                }
+
+                if (motFilters.company && row.dataset.company !== motFilters.company) {
+                    return false;
+                }
+
+                if (!isMotFilterActive()) {
                     return true;
                 }
 
@@ -372,10 +402,10 @@
             });
 
             function syncMotFiltersFromPanel() {
+                motFilters.company = document.getElementById('reportsFilterCompany').value;
                 motFilters.from = document.getElementById('reportsMotExpiringFrom').value;
                 motFilters.to = document.getElementById('reportsMotExpiringTo').value;
                 motFilters.includeMissing = document.getElementById('reportsIncludeMissingMot').checked;
-                motFilters.active = !!(motFilters.from || motFilters.to || motFilters.includeMissing);
             }
 
             function setFilterPanelOpen(isOpen) {
@@ -398,13 +428,14 @@
             });
 
             $('#reportsFilterReset').on('click', function () {
+                document.getElementById('reportsFilterCompany').value = '';
                 document.getElementById('reportsMotExpiringFrom').value = '';
                 document.getElementById('reportsMotExpiringTo').value = '';
                 document.getElementById('reportsIncludeMissingMot').checked = false;
+                motFilters.company = '';
                 motFilters.from = '';
                 motFilters.to = '';
                 motFilters.includeMissing = false;
-                motFilters.active = false;
                 dataTable.draw();
             });
 
