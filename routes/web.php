@@ -86,6 +86,8 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('phvl/archive/data', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'data'])->name('phvl.archive.data');
     Route::get('phvl/archive/{archive}/timeline', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'timeline'])->name('phvl.archive.timeline');
 
+    Route::get('reports', [App\Http\Controllers\Backend\ReportController::class, 'index'])->name('reports.index');
+
     Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
     Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');
     Route::get('cars/reports/awaiting-phv', [App\Http\Controllers\Backend\CarController::class, 'awaitingPhv'])->name('cars.reports.awaiting-phv');

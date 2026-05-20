@@ -177,6 +177,12 @@
                         </li>
                     </ul>
                 </li>
+                <li class="nav-item {{ Request::is('admin/reports*') ? 'active' : '' }}">
+                    <a href="{{ route('reports.index') }}">
+                        <i class="fa fa-bar-chart"></i>
+                        <span class="menu-title">Reports</span>
+                    </a>
+                </li>
                 <li class="nav-item {{ Request::is('admin/cars/reports/available-by-phv') ? 'active' : '' }}">
                     <a href="{{ route('cars.reports.available-by-phv') }}">
                         <i class="fa fa-taxi"></i>
