@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Car;
 use App\Models\CarMot;
+use App\Models\CarPhv;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 
@@ -40,11 +41,18 @@ class ReportController extends Controller
 
         $cars = $cars->map(function (Car $car) {
             $latestMot = $this->latestMotForCar($car);
-            $expiry = $latestMot?->expiry_date;
+            $motExpiry = $latestMot?->expiry_date;
             $car->report_latest_mot = $latestMot;
-            $car->report_mot_expiry = $expiry;
-            $car->report_mot_missing = ! $expiry;
-            $car->report_mot_status = $this->motStatusLabel($expiry);
+            $car->report_mot_expiry = $motExpiry;
+            $car->report_mot_missing = ! $motExpiry;
+            $car->report_mot_status = $this->expiryStatusLabel($motExpiry);
+
+            $latestPhv = $this->latestPhvForCar($car);
+            $phvExpiry = $latestPhv?->expiry_date;
+            $car->report_latest_phv = $latestPhv;
+            $car->report_phv_expiry = $phvExpiry;
+            $car->report_phv_missing = ! $phvExpiry;
+            $car->report_phv_status = $this->expiryStatusLabel($phvExpiry);
 
             return $car;
         });
@@ -59,7 +67,14 @@ class ReportController extends Controller
             ->first();
     }
 
-    private function motStatusLabel(?Carbon $expiry): string
+    private function latestPhvForCar(Car $car): ?CarPhv
+    {
+        return $car->phvs
+            ->sortByDesc(fn (CarPhv $p) => [optional($p->expiry_date)->timestamp ?? 0, $p->id])
+            ->first();
+    }
+
+    private function expiryStatusLabel(?Carbon $expiry): string
     {
         if (! $expiry) {
             return 'Missing';
