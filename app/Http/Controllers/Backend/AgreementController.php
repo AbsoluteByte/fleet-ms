@@ -60,8 +60,8 @@ class AgreementController extends Controller
         }
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
-        $cars = Car::where('tenant_id', $tenant->id)->get();
-        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get(); // Add this
+        $cars = Car::where('tenant_id', $tenant->id)->with('carModel')->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $model = new Agreement;
         $statuses = Status::where('type', 'agreement')->get();
 
@@ -100,7 +100,8 @@ class AgreementController extends Controller
             'own_insurance_end_date' => 'required_if:using_own_insurance,1|nullable|date|after:own_insurance_start_date',
             'own_insurance_type' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_policy_number' => 'required_if:using_own_insurance,1|nullable|string|max:255',
-            'own_insurance_proof_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'own_insurance_proof_document' => 'nullable|array',
+            'own_insurance_proof_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:2048',
             'termination_notice_date' => 'nullable|date',
             'termination_available_from_date' => 'nullable|date',
             'termination_notes' => 'nullable|string',
@@ -113,13 +114,7 @@ class AgreementController extends Controller
         ]);
         try {
             $agreement = DB::transaction(function () use ($validated, $request, $tenant) {
-                // Handle file upload for insurance proof document
-                if ($request->hasFile('own_insurance_proof_document')) {
-                    $file = $request->file('own_insurance_proof_document');
-                    $filename = time().'_'.$file->getClientOriginalName();
-                    $file->move(public_path('uploads/insurance_documents'), $filename);
-                    $validated['own_insurance_proof_document'] = $filename;
-                }
+                $validated = $this->mergeInsuranceData($request, $validated);
 
                 // Create agreement record
                 $validated['tenant_id'] = $tenant->id;
@@ -189,8 +184,8 @@ class AgreementController extends Controller
         $model = $agreement->load('collections');
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
-        $cars = Car::where('tenant_id', $tenant->id)->get();
-        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get(); // Add this
+        $cars = Car::where('tenant_id', $tenant->id)->with('carModel')->get();
+        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'agreement')->get();
 
         return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
@@ -228,7 +223,8 @@ class AgreementController extends Controller
             'own_insurance_end_date' => 'required_if:using_own_insurance,1|nullable|date|after:own_insurance_start_date',
             'own_insurance_type' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_policy_number' => 'required_if:using_own_insurance,1|nullable|string|max:255',
-            'own_insurance_proof_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'own_insurance_proof_document' => 'nullable|array',
+            'own_insurance_proof_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:2048',
             'termination_notice_date' => 'nullable|date',
             'termination_available_from_date' => 'nullable|date',
             'termination_notes' => 'nullable|string',
@@ -243,21 +239,7 @@ class AgreementController extends Controller
             $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant) {
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
 
-                // Handle file upload for insurance proof document
-                if ($request->hasFile('own_insurance_proof_document')) {
-                    // Delete old file if exists
-                    if ($agreement->own_insurance_proof_document) {
-                        $oldFilePath = public_path('uploads/insurance_documents/'.$agreement->own_insurance_proof_document);
-                        if (file_exists($oldFilePath)) {
-                            unlink($oldFilePath);
-                        }
-                    }
-
-                    $file = $request->file('own_insurance_proof_document');
-                    $filename = time().'_'.$file->getClientOriginalName();
-                    $file->move(public_path('uploads/insurance_documents'), $filename);
-                    $validated['own_insurance_proof_document'] = $filename;
-                }
+                $validated = $this->mergeInsuranceData($request, $validated, $agreement);
 
                 // Update agreement record
                 $validated['tenant_id'] = $tenant->id;
@@ -310,12 +292,8 @@ class AgreementController extends Controller
                 abort(403, 'Unauthorized access');
             }
             DB::transaction(function () use ($agreement) {
-                // Delete insurance document if exists
-                if ($agreement->own_insurance_proof_document) {
-                    $filePath = public_path('uploads/insurance_documents/'.$agreement->own_insurance_proof_document);
-                    if (file_exists($filePath)) {
-                        unlink($filePath);
-                    }
+                foreach ($agreement->ownInsuranceProofFileNames() as $name) {
+                    $this->deleteInsuranceProofFile($name);
                 }
 
                 // Delete related collections first
@@ -348,6 +326,85 @@ class AgreementController extends Controller
             : Auth::id();
 
         return $validated;
+    }
+
+    private function mergeInsuranceData(Request $request, array $validated, ?Agreement $existing = null): array
+    {
+        $usingOwn = $request->boolean('using_own_insurance');
+        $validated['using_own_insurance'] = $usingOwn;
+
+        if (! $usingOwn) {
+            if ($existing) {
+                foreach ($existing->ownInsuranceProofFileNames() as $name) {
+                    $this->deleteInsuranceProofFile($name);
+                }
+            }
+
+            $validated['own_insurance_provider_name'] = null;
+            $validated['own_insurance_start_date'] = null;
+            $validated['own_insurance_end_date'] = null;
+            $validated['own_insurance_type'] = null;
+            $validated['own_insurance_policy_number'] = null;
+            $validated['own_insurance_proof_document'] = null;
+
+            return $validated;
+        }
+
+        $validated['insurance_provider_id'] = null;
+
+        $names = $existing?->ownInsuranceProofFileNames() ?? [];
+
+        foreach ($this->collectInsuranceProofUploads($request) as $file) {
+            $names[] = $this->uploadInsuranceProofFile($file);
+        }
+
+        $validated['own_insurance_proof_document'] = $names === [] ? null : array_values(array_unique($names));
+
+        return $validated;
+    }
+
+    /**
+     * @return list<\Illuminate\Http\UploadedFile>
+     */
+    private function collectInsuranceProofUploads(Request $request): array
+    {
+        if (! $request->hasFile('own_insurance_proof_document')) {
+            return [];
+        }
+
+        $files = $request->file('own_insurance_proof_document');
+
+        return collect(is_array($files) ? $files : [$files])
+            ->filter(fn ($file) => $file && $file->isValid())
+            ->values()
+            ->all();
+    }
+
+    private function uploadInsuranceProofFile($file): string
+    {
+        $directory = 'uploads/insurance_documents';
+        $path = public_path($directory);
+
+        if (! file_exists($path)) {
+            mkdir($path, 0755, true);
+        }
+
+        $filename = time().'_'.$file->getClientOriginalName();
+
+        if (! $file->move($path, $filename)) {
+            throw new \Exception('Failed to upload insurance proof document');
+        }
+
+        return $filename;
+    }
+
+    private function deleteInsuranceProofFile(string $filename): void
+    {
+        $filePath = public_path('uploads/insurance_documents/'.$filename);
+
+        if (File::exists($filePath)) {
+            File::delete($filePath);
+        }
     }
 
     private function syncTerminatedCarAvailability(Agreement $agreement): void

@@ -43,6 +43,7 @@ class Agreement extends Model
         'auto_schedule_collections' => 'boolean',
 
         'using_own_insurance' => 'boolean',
+        'own_insurance_proof_document' => 'array',
         'own_insurance_start_date' => 'date',
         'own_insurance_end_date' => 'date',
 
@@ -81,6 +82,23 @@ class Agreement extends Model
     public function insuranceProvider()
     {
         return $this->belongsTo(InsuranceProvider::class);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function ownInsuranceProofFileNames(): array
+    {
+        $names = $this->own_insurance_proof_document;
+
+        if (is_string($names) && $names !== '') {
+            return [$names];
+        }
+
+        return array_values(array_filter(
+            is_array($names) ? $names : [],
+            fn ($n) => is_string($n) && $n !== ''
+        ));
     }
 
     public function collections()

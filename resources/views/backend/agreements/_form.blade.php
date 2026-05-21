@@ -50,7 +50,7 @@
                         <option value="">Select Driver</option>
                         @foreach($drivers as $driver)
                             <option value="{{ $driver->id }}" {{ (old('driver_id') ?? (isset($model) ? $model->driver_id : '')) == $driver->id ? 'selected' : '' }}>
-                                {{ $driver->full_name }}
+                                {{ $driver->full_name }} - {{ $driver->post_code ?: '—' }} - {{ $driver->phone_number ?: '—' }}
                             </option>
                         @endforeach
                     </select>
@@ -193,20 +193,20 @@
         <div class="row">
             <div class="col-12">
                 <div class="mb-3">
-                    <label class="form-label">Will you be using your own insurance? *</label>
+                    <label class="form-label">Insurance provided by *</label>
                     <div class="d-flex gap-5">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="using_own_insurance" id="using_own_insurance_yes"
+                            <input class="form-check-input" type="radio" name="using_own_insurance" id="using_own_insurance_client"
                                    value="1" {{ (old('using_own_insurance') ?? (isset($model) ? $model->using_own_insurance : false)) ? 'checked' : '' }}>
-                            <label class="form-check-label mr-2" for="using_own_insurance_yes">
-                                Yes
+                            <label class="form-check-label mr-2" for="using_own_insurance_client">
+                                Client's
                             </label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="using_own_insurance" id="using_own_insurance_no"
+                            <input class="form-check-input" type="radio" name="using_own_insurance" id="using_own_insurance_company"
                                    value="0" {{ !(old('using_own_insurance') ?? (isset($model) ? $model->using_own_insurance : false)) ? 'checked' : '' }}>
-                            <label class="form-check-label" for="using_own_insurance_no">
-                                No
+                            <label class="form-check-label" for="using_own_insurance_company">
+                                Company's
                             </label>
                         </div>
                     </div>
@@ -217,7 +217,7 @@
             </div>
         </div>
 
-        <!-- Provider Insurance Section (shown when "No" is selected) -->
+        <!-- Company's insurance (provider) -->
         <div id="provider-insurance-section" style="display: none;">
             <div class="row">
                 <div class="col-md-6">
@@ -241,7 +241,7 @@
             </div>
         </div>
 
-        <!-- Own Insurance Section (shown when "Yes" is selected) -->
+        <!-- Client's insurance -->
         <div id="own-insurance-section" style="display: none;">
             <div class="row">
                 <div class="col-md-6">
@@ -309,22 +309,22 @@
 
                 <div class="col-md-6">
                     <div class="mb-3">
-                        <label for="own_insurance_proof_document" class="form-label">Proof of Insurance Document</label>
-                        <input type="file" name="own_insurance_proof_document" id="own_insurance_proof_document"
+                        <label for="own_insurance_proof_document" class="form-label">Proof of Insurance Document <span class="text-muted font-weight-normal">(multiple files)</span></label>
+                        <input type="file" name="own_insurance_proof_document[]" id="own_insurance_proof_document"
                                class="form-control @error('own_insurance_proof_document') is-invalid @enderror"
-                               accept=".pdf,.jpg,.jpeg,.png">
-                        @if(isset($model) && $model->own_insurance_proof_document)
-                            <div class="mt-2">
-                                <small class="text-muted">Current file: {{ $model->own_insurance_proof_document }}</small>
-                                <a href="{{ asset('uploads/insurance_documents/' . $model->own_insurance_proof_document) }}"
-                                   target="_blank" class="btn btn-sm btn-outline-info ms-2">
-                                    <i class="fa fa-eye"></i> View
-                                </a>
-                            </div>
+                               accept=".pdf,.jpg,.jpeg,.png"
+                               multiple>
+                        @if(isset($model) && $model->id && $model->ownInsuranceProofFileNames() !== [])
+                            @foreach($model->ownInsuranceProofFileNames() as $proofName)
+                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}: <a href="{{ asset('uploads/insurance_documents/' . $proofName) }}" target="_blank">View</a></small>
+                            @endforeach
                         @endif
-                        <div class="form-text">Accepted formats: PDF, JPG, JPEG, PNG (Max: 2MB)</div>
+                        <div class="form-text">Accepted formats: PDF, JPG, JPEG, PNG (Max: 2MB per file)</div>
                         @error('own_insurance_proof_document')
                         <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        @error('own_insurance_proof_document.*')
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
                         @enderror
                     </div>
                 </div>
@@ -598,7 +598,13 @@
     </a>
 </div>
 
+@push('css')
+    <link rel="stylesheet" type="text/css"
+          href="{{ asset('app-assets/vendors/css/forms/select/select2.min.css') }}">
+@endpush
+
 @push('js')
+    <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
     <script>
         let collectionIndex = {{ count($collections ?? []) }};
 
@@ -653,22 +659,20 @@
             }
         }
 
-        // Toggle insurance sections based on radio button selection
+        // Toggle insurance sections based on Client's / Company's selection
         function toggleInsuranceSections() {
-            const usingOwnInsuranceYes = document.getElementById('using_own_insurance_yes');
-            const usingOwnInsuranceNo = document.getElementById('using_own_insurance_no');
+            const usingOwnInsuranceClient = document.getElementById('using_own_insurance_client');
+            const usingOwnInsuranceCompany = document.getElementById('using_own_insurance_company');
             const providerSection = document.getElementById('provider-insurance-section');
             const ownSection = document.getElementById('own-insurance-section');
 
-            if (usingOwnInsuranceYes.checked) {
+            if (usingOwnInsuranceClient.checked) {
                 providerSection.style.display = 'none';
                 ownSection.style.display = 'block';
-                // Clear provider insurance field
                 document.getElementById('insurance_provider_id').value = '';
-            } else if (usingOwnInsuranceNo.checked) {
+            } else if (usingOwnInsuranceCompany.checked) {
                 providerSection.style.display = 'block';
                 ownSection.style.display = 'none';
-                // Clear own insurance fields
                 clearOwnInsuranceFields();
             }
         }
@@ -688,16 +692,29 @@
             toggleCollectionMode();
             toggleInsuranceSections();
 
-            // Initial filter on page load
             filterInsuranceProviders();
 
-            // Event listeners
             document.getElementById('auto_schedule_collections').addEventListener('change', toggleCollectionMode);
-            document.getElementById('using_own_insurance_yes').addEventListener('change', toggleInsuranceSections);
-            document.getElementById('using_own_insurance_no').addEventListener('change', toggleInsuranceSections);
-
-            // Filter insurance providers when company changes
+            document.getElementById('using_own_insurance_client').addEventListener('change', toggleInsuranceSections);
+            document.getElementById('using_own_insurance_company').addEventListener('change', toggleInsuranceSections);
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
+
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $('#car_id, #driver_id').select2({
+                    width: '100%',
+                    placeholder: 'Search…',
+                });
+
+                $('#car_id').on('change', function() {
+                    const selectedOption = this.options[this.selectedIndex];
+                    const companyId = selectedOption ? selectedOption.getAttribute('data-company-id') : null;
+
+                    if (companyId) {
+                        document.getElementById('company_id').value = companyId;
+                        filterInsuranceProviders();
+                    }
+                });
+            }
         });
 
         function addCollection() {
@@ -793,8 +810,6 @@
                 return true;
             }
 
-            startDateInput.addEventListener('change', validateDates);
-            endDateInput.addEventListener('change', validateDates);
             ownInsuranceStartDate.addEventListener('change', validateInsuranceDates);
             ownInsuranceEndDate.addEventListener('change', validateInsuranceDates);
             mileageInInput.addEventListener('change', validateMileage);
@@ -815,15 +830,5 @@
             });
         });
 
-        document.getElementById('car_id').addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const companyId = selectedOption.getAttribute('data-company-id');
-
-            if (companyId) {
-                document.getElementById('company_id').value = companyId;
-                // Insurance providers bhi filter ho jayein company change hone par
-                filterInsuranceProviders();
-            }
-        });
     </script>
 @endpush
