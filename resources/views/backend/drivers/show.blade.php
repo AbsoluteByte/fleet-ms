@@ -10,7 +10,7 @@
                         <div>
                             @if(!$driver->hasAcceptedInvitation())
                                 @if($driver->is_invited)
-                                    <form action="{{ route($url . 'resendInvitation', $driver->id) }}" method="POST" class="d-inline">
+                                    <form action="{{ route($url . 'resend-invitation', $driver) }}" method="POST" class="d-inline">
                                         @csrf
                                         <button type="submit" class="btn btn-warning btn-sm">
                                             <i class="fa fa-paper-plane"></i> Resend Invitation
