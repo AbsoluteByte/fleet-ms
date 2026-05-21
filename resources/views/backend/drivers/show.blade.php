@@ -267,7 +267,7 @@
                                     </p>
                                 </div>
                             @endif
-                            @if(!$driver->driver_license_document && !$driver->driver_phd_license_document && !$driver->proof_of_address_document && !$driver->$driver->dvla_license_summary && !$driver->misc_document && !$driver->phd_card_document)
+                            @if(!$driver->driver_license_document && !$driver->driver_phd_license_document && !$driver->proof_of_address_document && !$driver->dvla_license_summary && !$driver->misc_document && !$driver->phd_card_document)
                                 <div class="col-12">
                                     <p class="text-muted">No documents uploaded</p>
                                 </div>
