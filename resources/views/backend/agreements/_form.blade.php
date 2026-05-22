@@ -787,6 +787,11 @@
             }*/
 
             function validateInsuranceDates() {
+                const clientRadio = document.getElementById('using_own_insurance_client');
+                if (!clientRadio || !clientRadio.checked) {
+                    return true;
+                }
+
                 const startDate = ownInsuranceStartDate.value;
                 const endDate = ownInsuranceEndDate.value;
 
@@ -810,8 +815,8 @@
                 return true;
             }
 
-            ownInsuranceStartDate.addEventListener('change', validateInsuranceDates);
-            ownInsuranceEndDate.addEventListener('change', validateInsuranceDates);
+            ownInsuranceStartDate.addEventListener('blur', validateInsuranceDates);
+            ownInsuranceEndDate.addEventListener('blur', validateInsuranceDates);
             mileageInInput.addEventListener('change', validateMileage);
 
             // Set minimum date for start date (today)
