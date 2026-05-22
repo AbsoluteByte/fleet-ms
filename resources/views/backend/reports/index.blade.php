@@ -7,9 +7,15 @@
                 <div class="card">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
                         <h4 class="card-title mb-0">Reports</h4>
-                        <button type="button" class="btn btn-outline-primary btn-sm mt-25 mt-md-0" id="reportsExportCsv">
-                            <i class="fa fa-download mr-50"></i> Export CSV
-                        </button>
+                        <div class="btn-group mt-25 mt-md-0">
+                            <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" id="reportsExportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                <i class="fa fa-download mr-50"></i> Export
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-right" aria-labelledby="reportsExportDropdown">
+                                <button type="button" class="dropdown-item" id="reportsExportCsv">Export CSV</button>
+                                <button type="button" class="dropdown-item" id="reportsExportPdf">Export PDF</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-body card-dashboard">
@@ -115,8 +121,16 @@
                     @endforeach
                 </select>
             </div>
-            <div class="form-group">
-                <label>MOT Expiring</label>
+            <div class="form-group reports-expiring-month-group">
+                <div class="reports-expiring-label-row d-flex justify-content-between align-items-center mb-1">
+                    <label class="mb-0">MOT Expiring</label>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary reports-month-picker-btn" id="reportsMotMonthPickerBtn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Pick month">
+                            <i class="fa fa-calendar" aria-hidden="true"></i>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right" id="reportsMotMonthMenu" aria-labelledby="reportsMotMonthPickerBtn"></div>
+                    </div>
+                </div>
                 <label class="small text-muted mb-25 d-block" for="reportsMotExpiringFrom">From</label>
                 <input type="date" id="reportsMotExpiringFrom" class="form-control mb-1">
                 <label class="small text-muted mb-25 d-block" for="reportsMotExpiringTo">To</label>
@@ -150,8 +164,16 @@
                     @endforeach
                 </select>
             </div>
-            <div class="form-group">
-                <label>PHVL Expiring</label>
+            <div class="form-group reports-expiring-month-group">
+                <div class="reports-expiring-label-row d-flex justify-content-between align-items-center mb-1">
+                    <label class="mb-0">PHVL Expiring</label>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary reports-month-picker-btn" id="reportsPhvlMonthPickerBtn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Pick month">
+                            <i class="fa fa-calendar" aria-hidden="true"></i>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right" id="reportsPhvlMonthMenu" aria-labelledby="reportsPhvlMonthPickerBtn"></div>
+                    </div>
+                </div>
                 <label class="small text-muted mb-25 d-block" for="reportsPhvlExpiringFrom">From</label>
                 <input type="date" id="reportsPhvlExpiringFrom" class="form-control mb-1">
                 <label class="small text-muted mb-25 d-block" for="reportsPhvlExpiringTo">To</label>
@@ -292,12 +314,39 @@
             background-color: #7367f0;
             color: #fff;
         }
+
+        .reports-expiring-month-group {
+            position: relative;
+            overflow: visible;
+        }
+
+        .reports-month-picker-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.25rem;
+            height: 2.25rem;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .reports-month-picker-btn .fa {
+            margin: 0;
+            font-size: 0.95rem;
+            line-height: 1;
+        }
+
+        .cars-filter-panel__body .reports-expiring-month-group .dropdown-menu {
+            min-width: 11rem;
+        }
     </style>
 @endsection
 
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/pdfmake.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
     <script>
         $(document).ready(function () {
             let activeReportTab = 'mots';
@@ -458,6 +507,69 @@
                 'PHV Council', 'Insurance Status'
             ];
 
+            function formatYmd(date) {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return y + '-' + m + '-' + d;
+            }
+
+            function getUpcomingFourMonths() {
+                const months = [];
+                const now = new Date();
+                for (let i = 0; i < 4; i++) {
+                    const start = new Date(now.getFullYear(), now.getMonth() + i, 1);
+                    const end = new Date(now.getFullYear(), now.getMonth() + i + 1, 0);
+                    months.push({
+                        label: start.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
+                        from: formatYmd(start),
+                        to: formatYmd(end)
+                    });
+                }
+                return months;
+            }
+
+            function closeDropdownMenu(menuEl) {
+                const $dropdown = $(menuEl).closest('.dropdown');
+                $dropdown.removeClass('show');
+                $(menuEl).removeClass('show');
+                $dropdown.find('[data-toggle="dropdown"]').attr('aria-expanded', 'false');
+            }
+
+            function buildMonthPickerMenu(menuEl, fromInputId, toInputId, filtersObj, tableApi) {
+                menuEl.innerHTML = '';
+                getUpcomingFourMonths().forEach(function (month) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'dropdown-item';
+                    btn.textContent = month.label;
+                    btn.addEventListener('click', function () {
+                        document.getElementById(fromInputId).value = month.from;
+                        document.getElementById(toInputId).value = month.to;
+                        filtersObj.from = month.from;
+                        filtersObj.to = month.to;
+                        tableApi.draw();
+                        closeDropdownMenu(menuEl);
+                    });
+                    menuEl.appendChild(btn);
+                });
+            }
+
+            buildMonthPickerMenu(
+                document.getElementById('reportsMotMonthMenu'),
+                'reportsMotExpiringFrom',
+                'reportsMotExpiringTo',
+                motFilters,
+                motsDataTable
+            );
+            buildMonthPickerMenu(
+                document.getElementById('reportsPhvlMonthMenu'),
+                'reportsPhvlExpiringFrom',
+                'reportsPhvlExpiringTo',
+                phvlFilters,
+                phvlDataTable
+            );
+
             function csvEscape(value) {
                 const str = String(value ?? '').replace(/"/g, '""').trim();
                 return /[",\n\r]/.test(str) ? '"' + str + '"' : str;
@@ -476,11 +588,8 @@
                 URL.revokeObjectURL(url);
             }
 
-            function exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix) {
-                const headers = reportExportHeaders.concat([expiryLabel, statusLabel]);
-                const lines = [headers.map(csvEscape).join(',')];
-                let rowCount = 0;
-
+            function collectExportRows(tableApi) {
+                const rows = [];
                 tableApi.rows({ search: 'applied', order: 'applied' }).every(function () {
                     const node = this.node();
                     if (!node) return;
@@ -488,13 +597,23 @@
                     if (cells.length < 9) return;
                     const row = [];
                     for (let i = 0; i < 9; i++) {
-                        row.push(csvEscape(cells[i].innerText.replace(/\s+/g, ' ').trim()));
+                        row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
                     }
-                    lines.push(row.join(','));
-                    rowCount++;
+                    rows.push(row);
+                });
+                return rows;
+            }
+
+            function exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix) {
+                const headers = reportExportHeaders.concat([expiryLabel, statusLabel]);
+                const lines = [headers.map(csvEscape).join(',')];
+                const bodyRows = collectExportRows(tableApi);
+
+                bodyRows.forEach(function (row) {
+                    lines.push(row.map(csvEscape).join(','));
                 });
 
-                if (rowCount === 0) {
+                if (bodyRows.length === 0) {
                     alert('No records to export. Adjust your search or filters and try again.');
                     return;
                 }
@@ -502,12 +621,81 @@
                 downloadCsv(filePrefix + '-' + new Date().toISOString().slice(0, 10) + '.csv', lines);
             }
 
-            $('#reportsExportCsv').on('click', function () {
-                if (activeReportTab === 'phvl') {
-                    exportTableCsv(phvlDataTable, 'PHVL Expiry', 'PHVL Status', 'phvl-report');
-                } else {
-                    exportTableCsv(motsDataTable, 'MOT Expiry', 'MOT Status', 'mot-report');
+            function exportTablePdf(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle) {
+                const headers = reportExportHeaders.concat([expiryLabel, statusLabel]);
+                const bodyRows = collectExportRows(tableApi);
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
                 }
+
+                if (typeof pdfMake === 'undefined') {
+                    alert('PDF export is not available. Please refresh the page and try again.');
+                    return;
+                }
+
+                const tableBody = [
+                    headers.map(function (h) {
+                        return { text: h, style: 'tableHeader' };
+                    })
+                ];
+                bodyRows.forEach(function (row) {
+                    tableBody.push(row.map(function (cell) {
+                        return { text: cell, style: 'tableCell' };
+                    }));
+                });
+
+                const doc = {
+                    pageSize: 'A4',
+                    pageOrientation: 'landscape',
+                    pageMargins: [24, 48, 24, 32],
+                    content: [
+                        {
+                            text: reportTitle + ' — ' + new Date().toISOString().slice(0, 10),
+                            style: 'title',
+                            margin: [0, 0, 0, 12]
+                        },
+                        {
+                            table: {
+                                headerRows: 1,
+                                widths: ['*', '*', '*', '*', '*', '*', '*', '*', '*'],
+                                body: tableBody
+                            },
+                            layout: 'lightHorizontalLines'
+                        }
+                    ],
+                    styles: {
+                        title: { fontSize: 14, bold: true },
+                        tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
+                        tableCell: { fontSize: 7 }
+                    },
+                    defaultStyle: { fontSize: 8 }
+                };
+
+                pdfMake.createPdf(doc).download(filePrefix + '-' + new Date().toISOString().slice(0, 10) + '.pdf');
+            }
+
+            function runActiveTabExport(exportFn) {
+                if (activeReportTab === 'phvl') {
+                    exportFn(phvlDataTable, 'PHVL Expiry', 'PHVL Status', 'phvl-report', 'PHVL Report');
+                } else {
+                    exportFn(motsDataTable, 'MOT Expiry', 'MOT Status', 'mot-report', 'MOT Report');
+                }
+            }
+
+            $('#reportsExportCsv').on('click', function (e) {
+                e.preventDefault();
+                runActiveTabExport(function (tableApi, expiryLabel, statusLabel, filePrefix) {
+                    exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix);
+                });
+            });
+
+            $('#reportsExportPdf').on('click', function (e) {
+                e.preventDefault();
+                runActiveTabExport(function (tableApi, expiryLabel, statusLabel, filePrefix, reportTitle) {
+                    exportTablePdf(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle);
+                });
             });
         });
     </script>
