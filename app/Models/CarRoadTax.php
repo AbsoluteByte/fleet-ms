@@ -21,34 +21,37 @@ class CarRoadTax extends Model
         return $this->belongsTo(Car::class);
     }
 
+    /**
+     * Last day the tax is valid (UK VED: inclusive end date, day before renewal).
+     * e.g. start 1 Dec 2025 + 6 months → expires 31 May 2026, not 1 Jun 2026.
+     */
     public function expiryDate(): ?Carbon
     {
         if (! $this->start_date || ! $this->term) {
             return null;
         }
 
-        $startDate = $this->start_date->copy();
+        $renewalDate = match (strtolower($this->term)) {
+            '6 months' => $this->start_date->copy()->addMonths(6),
+            '12 months', '1 year' => $this->start_date->copy()->addYear(),
+            default => $this->renewalDateFromTermString(),
+        };
 
-        switch (strtolower($this->term)) {
-            case '6 months':
-                return $startDate->addMonths(6);
-            case '12 months':
-            case '1 year':
-                return $startDate->addYear();
-            default:
-                if (preg_match('/(\d+)\s*(month|year)/', strtolower($this->term), $matches)) {
-                    $number = (int) $matches[1];
-                    $unit = $matches[2];
+        return $renewalDate?->subDay();
+    }
 
-                    if ($unit === 'month') {
-                        return $startDate->addMonths($number);
-                    }
-                    if ($unit === 'year') {
-                        return $startDate->addYears($number);
-                    }
-                }
-
-                return null;
+    private function renewalDateFromTermString(): ?Carbon
+    {
+        if (! preg_match('/(\d+)\s*(month|year)/', strtolower($this->term), $matches)) {
+            return null;
         }
+
+        $number = (int) $matches[1];
+
+        return match ($matches[2]) {
+            'month' => $this->start_date->copy()->addMonths($number),
+            'year' => $this->start_date->copy()->addYears($number),
+            default => null,
+        };
     }
 }

@@ -7,6 +7,9 @@ use App\Services\PhvlArchiveService;
 use App\Models\Car;
 use App\Models\CarModel;
 use App\Models\CarMot;
+use App\Models\CarPhvlArchive;
+use App\Models\CarPhvlProgress;
+use App\Models\CarPhvlProgressEvent;
 use App\Models\CarSornHistory;
 use App\Models\CarPhv;
 use App\Models\CarRoadTax;
@@ -769,6 +772,12 @@ class CarController extends Controller
                 foreach ($car->reservations as $reservation) {
                     $reservation->delete();
                 }
+                $car->statusHistories()->delete();
+                $car->sornHistories()->delete();
+                // PHVL rows deleted first to avoid MySQL FK cascade order issues on production.
+                CarPhvlProgressEvent::query()->where('car_id', $car->id)->delete();
+                CarPhvlArchive::query()->where('car_id', $car->id)->delete();
+                CarPhvlProgress::query()->where('car_id', $car->id)->delete();
                 $car->delete();
             });
 
