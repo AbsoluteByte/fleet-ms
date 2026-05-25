@@ -400,6 +400,7 @@
                                                     <tr>
                                                         <th>Start Date</th>
                                                         <th>Term</th>
+                                                        <th>Expiry Date</th>
                                                         <th>Amount</th>
                                                     </tr>
                                                 </thead>
@@ -408,6 +409,13 @@
                                                     <tr>
                                                         <td>{{ $roadTax->start_date->format('d M, Y') }}</td>
                                                         <td>{{ $roadTax->term }}</td>
+                                                        <td>
+                                                            @if($rtExpiry = $roadTax->expiryDate())
+                                                                {{ $rtExpiry->format('d M, Y') }}
+                                                            @else
+                                                                —
+                                                            @endif
+                                                        </td>
                                                         <td>£{{ number_format($roadTax->amount, 2) }}</td>
                                                     </tr>
                                                     @endforeach

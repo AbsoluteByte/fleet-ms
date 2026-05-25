@@ -490,14 +490,14 @@ class DashboardController extends Controller
 
         $expiringRoadTaxes = $this->latestRoadTaxPerCar($allRoadTaxes)
             ->filter(function ($roadTax) {
-                $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
+                $expiryDate = $roadTax->expiryDate();
 
                 return $expiryDate && $expiryDate <= now()->addDays(30);
             })
             ->values();
 
         foreach ($expiringRoadTaxes as $roadTax) {
-            $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
+            $expiryDate = $roadTax->expiryDate();
             $daysDiff = (int) now()->diffInDays($expiryDate, false);
 
             if ($daysDiff > 0) {
@@ -899,7 +899,7 @@ class DashboardController extends Controller
     private function carsMissingRoadTax($tenant, Collection $allRoadTaxes, array $fleetNotificationExcludedStatuses): Collection
     {
         $carIdsWithValidRoadTax = $this->latestRoadTaxPerCar($allRoadTaxes)
-            ->filter(fn ($roadTax) => $this->calculateRoadTaxExpiry($roadTax) !== null)
+            ->filter(fn ($roadTax) => $roadTax->expiryDate() !== null)
             ->pluck('car_id')
             ->unique();
 
@@ -930,34 +930,4 @@ class DashboardController extends Controller
         })->values();
     }
 
-    // ✅ Helper method: Calculate road tax expiry
-    private function calculateRoadTaxExpiry($roadTax)
-    {
-        if (! $roadTax->start_date || ! $roadTax->term) {
-            return null;
-        }
-
-        $startDate = \Carbon\Carbon::parse($roadTax->start_date);
-
-        switch (strtolower($roadTax->term)) {
-            case '6 months':
-                return $startDate->copy()->addMonths(6);
-            case '12 months':
-            case '1 year':
-                return $startDate->copy()->addYear();
-            default:
-                if (preg_match('/(\d+)\s*(month|year)/', strtolower($roadTax->term), $matches)) {
-                    $number = (int) $matches[1];
-                    $unit = $matches[2];
-
-                    if ($unit === 'month') {
-                        return $startDate->copy()->addMonths($number);
-                    } elseif ($unit === 'year') {
-                        return $startDate->copy()->addYears($number);
-                    }
-                }
-
-                return null;
-        }
-    }
 }

@@ -50,6 +50,7 @@
                                     <tr>
                                         <th>Start Date</th>
                                         <th>Term</th>
+                                        <th>Expiry Date</th>
                                         <th>Amount</th>
                                         <th class="text-right" style="width:80px">Action</th>
                                     </tr>
@@ -59,6 +60,13 @@
                                         <tr data-hist-rt-id="{{ $rtH->id }}">
                                             <td>{{ $rtH->start_date->format('d M, Y') }}</td>
                                             <td>{{ $rtH->term }}</td>
+                                            <td>
+                                                @if($rtExpiry = $rtH->expiryDate())
+                                                    {{ $rtExpiry->format('d M, Y') }}
+                                                @else
+                                                    —
+                                                @endif
+                                            </td>
                                             <td>£{{ number_format($rtH->amount, 2) }}</td>
                                             <td class="text-right">
                                                 <x-car-record-delete-button
