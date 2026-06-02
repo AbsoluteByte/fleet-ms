@@ -103,7 +103,7 @@
                     </a>
                 </li>
             @endif--}}
-            @if (auth()->user()->isAdmin() || auth()->user()->isUser())
+            @if (auth()->user()->isAdmin() || auth()->user()->isUser() || auth()->user()->hasRole('manager'))
                 <li class="navigation-header"><span>Main</span></li>
                 <li class="nav-item {{ Request::is('admin/agreements/*') ? 'active' : '' }} {{ Request::is('admin/agreements') ? 'active' : '' }}">
                     <a href="{{ route('agreements.index') }}">
