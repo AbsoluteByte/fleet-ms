@@ -39,6 +39,16 @@ class Driver extends Model
         return $this->hasMany(Agreement::class);
     }
 
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -116,6 +126,43 @@ class Driver extends Model
         return $this->collections()
             ->where('payment_status', 'pending')
             ->with(['agreement.car']);
+    }
+
+    public function activeInvoices()
+    {
+        return $this->invoices()->where('balance_amount', '>', 0);
+    }
+
+    public function overdueInvoices()
+    {
+        return $this->activeInvoices()->whereDate('due_date', '<', now());
+    }
+
+    public function getTotalInvoicedAttribute()
+    {
+        return (float) $this->invoices()->sum('total_amount');
+    }
+
+    public function getTotalPaidAttribute()
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    public function getTotalAllocatedAttribute()
+    {
+        return (float) PaymentAllocation::whereHas('payment', function ($query) {
+            $query->where('driver_id', $this->id);
+        })->sum('allocated_amount');
+    }
+
+    public function getTotalDueAttribute()
+    {
+        return (float) $this->activeInvoices()->sum('balance_amount');
+    }
+
+    public function getCreditAmountAttribute()
+    {
+        return max($this->total_paid - $this->total_allocated, 0);
     }
 
     // Get overdue payments

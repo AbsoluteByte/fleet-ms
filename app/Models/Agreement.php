@@ -12,7 +12,7 @@ class Agreement extends Model
     protected $fillable = [
         'tenant_id', 'company_id', 'start_date', 'end_date', 'driver_id',
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
-        'deposit_amount', 'security_deposit', 'mileage_out', 'mileage_in',
+        'deposit_amount', 'discount_type', 'discount_value', 'discount_notes', 'security_deposit', 'mileage_out', 'mileage_in',
         'collection_type', 'auto_schedule_collections', 'next_collection_date',
         'condition_report', 'notes', 'status_id',
         // New insurance fields
@@ -39,6 +39,7 @@ class Agreement extends Model
         'next_collection_date' => 'date',
         'agreed_rent' => 'decimal:2',
         'deposit_amount' => 'decimal:2',
+        'discount_value' => 'decimal:2',
         'security_deposit' => 'decimal:2',
         'auto_schedule_collections' => 'boolean',
 

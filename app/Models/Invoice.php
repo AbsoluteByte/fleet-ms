@@ -9,90 +9,137 @@ class Invoice extends Model
     use HasFactory;
 
     protected $fillable = [
-        'tenant_id',
-        'subscription_id',
-        'stripe_invoice_id',
-        'invoice_number',
-        'amount',
-        'tax',
-        'total',
+        'invoice_no',
+        'driver_id',
+        'source_id',
+        'invoice_type',
+        'invoice_date',
+        'subtotal',
+        'discount_amount',
+        'discount_description',
+        'tax_amount',
+        'total_amount',
+        'paid_amount',
+        'balance_amount',
         'status',
-        'paid_at',
         'due_date',
-        'pdf_path'
+        'notes',
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
-        'tax' => 'decimal:2',
-        'total' => 'decimal:2',
-        'paid_at' => 'datetime',
+        'invoice_date' => 'date',
         'due_date' => 'datetime',
+        'subtotal' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
+        'tax_amount' => 'decimal:2',
+        'total_amount' => 'decimal:2',
+        'paid_amount' => 'decimal:2',
+        'balance_amount' => 'decimal:2',
     ];
 
-    // ==================== RELATIONSHIPS ====================
-
-    public function tenant()
+    protected static function booted()
     {
-        return $this->belongsTo(Tenant::class);
+        static::creating(function (Invoice $invoice) {
+            if (empty($invoice->invoice_no)) {
+                $invoice->invoice_no = self::generateInvoiceNo();
+            }
+
+            if ($invoice->balance_amount === null) {
+                $invoice->balance_amount = ((float) $invoice->total_amount) - ((float) $invoice->paid_amount);
+            }
+        });
     }
 
-    public function subscription()
+    public function driver()
     {
-        return $this->belongsTo(Subscription::class);
+        return $this->belongsTo(Driver::class);
     }
 
-    // ==================== HELPER METHODS ====================
-
-    public function markAsPaid()
+    public function paymentAllocations()
     {
+        return $this->hasMany(PaymentAllocation::class);
+    }
+
+    public function markAsPaid($amountPaid = null)
+    {
+        $payment = $amountPaid ?? $this->balance_amount;
+        $newPaidAmount = ((float) $this->paid_amount) + ((float) $payment);
+        $newBalance = ((float) $this->total_amount) - $newPaidAmount;
+
         $this->update([
-            'status' => 'paid',
-            'paid_at' => now()
+            'status' => $newBalance <= 0 ? 'paid' : 'partial',
+            'paid_amount' => $newPaidAmount,
+            'balance_amount' => max($newBalance, 0),
         ]);
 
         return $this;
     }
 
-    public function markAsFailed()
+    public function refreshPaymentTotals()
     {
-        $this->update(['status' => 'failed']);
+        $paidAmount = (float) $this->paymentAllocations()->sum('allocated_amount');
+        $totalAmount = (float) $this->total_amount;
+        $balanceAmount = max($totalAmount - $paidAmount, 0);
+
+        $this->forceFill([
+            'paid_amount' => $paidAmount,
+            'balance_amount' => $balanceAmount,
+            'status' => $this->resolveStatus($balanceAmount, $paidAmount),
+        ])->save();
+
         return $this;
     }
 
-    public function isPaid(): bool
+    public function resolveStatus(float $balanceAmount, float $paidAmount): string
     {
-        return $this->status === 'paid';
-    }
+        if ($balanceAmount <= 0) {
+            return 'paid';
+        }
 
-    public function isPending(): bool
-    {
-        return $this->status === 'pending';
-    }
+        if ($paidAmount > 0) {
+            return 'partial';
+        }
 
-    public function isFailed(): bool
-    {
-        return $this->status === 'failed';
+        return $this->due_date && $this->due_date->lt(now()->startOfDay()) ? 'overdue' : 'pending';
     }
 
     public function isOverdue(): bool
     {
         return $this->due_date &&
             $this->due_date < now() &&
-            !$this->isPaid();
+            !in_array($this->status, ['paid', 'cancelled'], true);
     }
 
-    public function getFormattedAmount()
+    public function getFormattedSubtotal()
     {
-        return '£' . number_format($this->amount, 2);
+        return '£' . number_format((float) $this->subtotal, 2);
     }
 
-    public function getFormattedTotal()
+    public function getFormattedTotalAmount()
     {
-        return '£' . number_format($this->total, 2);
+        return '£' . number_format((float) $this->total_amount, 2);
     }
 
-    // ==================== SCOPES ====================
+    // Backward compatibility for existing views/controllers.
+    public function getInvoiceNumberAttribute()
+    {
+        return $this->invoice_no;
+    }
+
+    public function setInvoiceNumberAttribute($value)
+    {
+        $this->attributes['invoice_no'] = $value;
+    }
+
+    public function getTaxAttribute()
+    {
+        return $this->tax_amount;
+    }
+
+    public function getTotalAttribute()
+    {
+        return $this->total_amount;
+    }
 
     public function scopePaid($query)
     {
@@ -104,28 +151,33 @@ class Invoice extends Model
         return $query->where('status', 'pending');
     }
 
-    public function scopeFailed($query)
-    {
-        return $query->where('status', 'failed');
-    }
-
     public function scopeOverdue($query)
     {
         return $query->where('due_date', '<', now())
             ->where('status', '!=', 'paid');
     }
 
-    // ==================== STATIC METHODS ====================
-
-    public static function generateInvoiceNumber()
+    public function scopeAgreement($query)
     {
-        $year = now()->year;
-        $lastInvoice = self::whereYear('created_at', $year)
-            ->latest('id')
-            ->first();
+        return $query->where('invoice_type', 'agreement');
+    }
 
-        $nextNumber = $lastInvoice ? (int) substr($lastInvoice->invoice_number, -4) + 1 : 1;
+    public function scopeActive($query)
+    {
+        return $query->where('balance_amount', '>', 0);
+    }
 
-        return 'INV-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+    public function scopeDue($query)
+    {
+        return $query->active()->whereDate('due_date', '<', now());
+    }
+
+    public static function generateInvoiceNo(): string
+    {
+        $lastInvoice = self::query()->latest('id')->value('invoice_no');
+        preg_match('/(\d+)$/', (string) $lastInvoice, $matches);
+        $nextNumber = isset($matches[1]) ? ((int) $matches[1]) + 1 : 1;
+
+        return 'Invoice #' . $nextNumber;
     }
 }

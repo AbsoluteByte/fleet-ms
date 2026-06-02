@@ -183,12 +183,6 @@
                         <span class="menu-title">Reports</span>
                     </a>
                 </li>
-                <li class="nav-item {{ Request::is('admin/cars/reports/available-by-phv') ? 'active' : '' }}">
-                    <a href="{{ route('cars.reports.available-by-phv') }}">
-                        <i class="fa fa-taxi"></i>
-                        <span class="menu-title">Available by PHV</span>
-                    </a>
-                </li>
                 <li class="nav-item {{ Request::is('admin/drivers/*') ? 'active' : '' }} {{ Request::is('admin/drivers') ? 'active' : '' }}">
                     <a href="{{ route('drivers.index') }}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
@@ -202,6 +196,30 @@
                         </svg>
                         <span class="menu-title">Drivers</span>
                     </a>
+                </li>
+                <li class="nav-item {{ Request::is('admin/payments*') ? 'sidebar-group-active open' : '' }}">
+                    <a href="#">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-coin-pound">
+                            <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
+                            <path d="M15 9a2 2 0 1 0 -4 0v5a2 2 0 0 1 -2 2h6"></path>
+                            <path d="M9 12h4"></path>
+                        </svg>
+                        <span class="menu-title">Payments</span>
+                    </a>
+                    <ul class="menu-content">
+                        <li class="{{ Request::is('admin/payments') || Request::is('admin/payments/drivers/*') ? 'active' : '' }}">
+                            <a href="{{ route('payments.index') }}">
+                                <span class="menu-title">Payments</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/payments/create') ? 'active' : '' }}">
+                            <a href="{{ route('payments.create') }}">
+                                <span class="menu-title">Add Payment</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
                 <li class="navigation-header"><span>Expenses</span></li>
                 <li class="nav-item {{ Request::is('admin/claims/*') ? 'active' : '' }} {{ Request::is('admin/claims') ? 'active' : '' }}">
@@ -242,8 +260,8 @@
             @endif
             <li class="navigation-header"><span>Settings</span></li>
             @if (auth()->user()->isAdmin())
-                <li class="nav-item {{ Request::is('admin/payments/*') ? 'active' : '' }} {{ Request::is('admin/payments') ? 'active' : '' }}">
-                    <a href="{{ route('payments.index') }}">
+                <li class="nav-item {{ Request::is('admin/payment-settings/*') ? 'active' : '' }} {{ Request::is('admin/payment-settings') ? 'active' : '' }}">
+                    <a href="{{ route('payment-settings.index') }}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
                              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
                              stroke-linejoin="round" class="tabler-icon tabler-icon-coin-pound">

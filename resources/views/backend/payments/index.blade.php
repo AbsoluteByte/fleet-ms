@@ -1,14 +1,14 @@
-@extends('layouts.admin', ['title' => 'Payments'])
+@extends('layouts.admin', ['title' => 'Driver Payments'])
 @section('content')
     <section id="basic-datatable">
         <div class="row">
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h4 class="card-title">{{ $plural }}</h4>
-                        <a class="btn btn-primary float-right" href="{{ route($url . 'create') }}"><i
-                                class="fa fa-plus"></i>
-                            Add {{ $singular }}</a>
+                        <h4 class="card-title">Driver Payments</h4>
+                        <a class="btn btn-primary float-right" href="{{ route('payments.create') }}">
+                            <i class="fa fa-plus"></i> Add Payment
+                        </a>
                     </div>
                     <hr>
                     <div class="card-content">
@@ -18,41 +18,53 @@
                                 <table id="dataTable" class="table datatable table-bordered table-striped">
                                     <thead>
                                     <tr>
-                                        <th>Company</th>
-                                        <th>Payment Type</th>
+                                        <th>Driver</th>
+                                        <th>Email</th>
+                                        <th>Phone</th>
+                                        <th>Invoices</th>
+                                        <th>Payments</th>
+                                        <th>Total Due</th>
+                                        <th>Credit</th>
                                         <th>Actions</th>
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    @forelse($payments as $payment)
+                                    @forelse($drivers as $driver)
                                         <tr>
-                                            <td>{{ $payment->company->name }}</td>
-                                            <td>{{ $payment->payment_type }}</td>
+                                            <td>
+                                                <strong>{{ $driver->full_name ?: 'N/A' }}</strong>
+                                            </td>
+                                            <td>{{ $driver->email ?? 'N/A' }}</td>
+                                            <td>{{ $driver->phone_number ?? 'N/A' }}</td>
+                                            <td>{{ $driver->invoices_count }}</td>
+                                            <td>{{ $driver->payments_count }}</td>
+                                            <td>
+                                                <strong class="{{ $driver->total_due > 0 ? 'text-danger' : 'text-muted' }}">
+                                                    £{{ number_format($driver->total_due, 2) }}
+                                                </strong>
+                                            </td>
+                                            <td>
+                                                <strong class="{{ $driver->credit_amount > 0 ? 'text-success' : 'text-muted' }}">
+                                                    £{{ number_format($driver->credit_amount, 2) }}
+                                                </strong>
+                                            </td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <a href="{{ route('payments.show', $payment) }}" class="btn btn-sm btn-outline-info">
+                                                    <a href="{{ route('payments.driver', $driver) }}" class="btn btn-sm btn-outline-info">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
-                                                    <a href="{{ route('payments.edit', $payment) }}" class="btn btn-sm btn-outline-warning">
-                                                        <i class="fa fa-edit"></i>
+                                                    <a href="{{ route('payments.create', ['driver_id' => $driver->id]) }}" class="btn btn-sm btn-outline-primary">
+                                                        <i class="fa fa-plus"></i>
                                                     </a>
-                                                    <form action="{{ route('payments.destroy', $payment) }}" method="POST" style="display: inline;">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                                onclick="return confirm('Are you sure?')">
-                                                            <i class="fa fa-trash"></i>
-                                                        </button>
-                                                    </form>
                                                 </div>
                                             </td>
                                         </tr>
                                     @empty
                                         <tr>
                                             <td colspan="8" class="text-center text-muted py-4">
-                                                <i class="fas fa-handshake fa-3x mb-3"></i>
+                                                <i class="fa fa-user fa-3x mb-3"></i>
                                                 <br>
-                                                No agreements found. <a href="{{ route('payments.create') }}">Create your first payment</a>
+                                                No drivers found.
                                             </td>
                                         </tr>
                                     @endforelse

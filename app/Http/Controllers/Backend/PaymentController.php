@@ -2,11 +2,13 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
-use App\Models\Payment;
-use App\Models\Company;
+use App\Models\Driver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use App\Models\Payment;
+use App\Services\PaymentAllocationService;
 
 class PaymentController extends Controller
 {
@@ -27,127 +29,184 @@ class PaymentController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $payments = Payment::where('tenant_id', $tenant->id)->with('company')->get();
-        return view($this->dir.'index', compact('payments'));
+
+        $drivers = Driver::query()
+            ->where('tenant_id', $tenant->id)
+            ->withCount(['invoices', 'payments'])
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        return view($this->dir.'index', compact('drivers'));
     }
 
-    public function create()
+    public function driver(Driver $driver)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $this->authorizeDriver($driver, $tenant);
+
+        $invoices = $driver->invoices()
+            ->with('paymentAllocations.payment')
+            ->orderByDesc('invoice_date')
+            ->orderByDesc('id')
+            ->get();
+
+        $activeInvoices = $driver->activeInvoices()
+            ->orderBy('invoice_date')
+            ->orderBy('due_date')
+            ->get();
+
+        $dueInvoices = $driver->overdueInvoices()
+            ->orderBy('due_date')
+            ->get();
+
+        $payments = $driver->payments()
+            ->with('allocations.invoice')
+            ->orderByDesc('payment_date')
+            ->orderByDesc('id')
+            ->get();
+
+        $summary = $this->driverSummary($driver);
+
+        return view($this->dir.'show', compact('driver', 'invoices', 'activeInvoices', 'dueInvoices', 'payments', 'summary'));
+    }
+
+    public function create(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
+
+        $drivers = Driver::where('tenant_id', $tenant->id)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        $selectedDriver = null;
+        $openInvoices = collect();
+        $selectedDriverId = old('driver_id', $request->query('driver_id'));
+
+        if ($selectedDriverId) {
+            $selectedDriver = Driver::where('tenant_id', $tenant->id)->find($selectedDriverId);
+
+            if ($selectedDriver) {
+                $openInvoices = $selectedDriver->activeInvoices()
+                    ->orderBy('invoice_date')
+                    ->orderBy('due_date')
+                    ->get();
+            }
+        }
+
         $model = new Payment();
-        return view($this->dir.'create', compact('model'));
+
+        return view($this->dir.'create', compact('model', 'drivers', 'selectedDriver', 'openInvoices'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, PaymentAllocationService $paymentAllocationService)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
-        $rules = [
-            'payment_type' => 'required|string|max:255',
-            'company_id' => 'required|exists:companies,id',
-        ];
 
-        // Conditional validation based on payment type
-        if ($request->payment_type === 'Bank Transfer') {
-            $rules['bank_name'] = 'required|string|max:255';
-            $rules['account_number'] = 'required|string|max:255';
-            $rules['sort_code'] = 'required|string|max:10';
-            $rules['iban_number'] = 'nullable|string|max:34';
-        } elseif ($request->payment_type === 'Stripe') {
-            $rules['stripe_public_key'] = 'required|string|max:255';
-            $rules['stripe_secret_key'] = 'required|string|max:255';
-        } elseif ($request->payment_type === 'PayPal') {
-            $rules['paypal_client_id'] = 'required|string|max:255';
-            $rules['paypal_secret'] = 'required|string|max:255';
-        }
+        $validated = $request->validate([
+            'driver_id' => [
+                'required',
+                Rule::exists('drivers', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
+            'payment_method' => 'required|string|max:255',
+            'payment_date' => 'required|date',
+            'amount' => 'required|numeric|min:0.01',
+            'notes' => 'nullable|string',
+            'auto_manage_invoices' => 'boolean',
+            'allocations' => 'nullable|array',
+            'allocations.*' => 'nullable|numeric|min:0',
+        ]);
 
-        $validated = $request->validate($rules);
-        $validated['tenant_id'] = $tenant->id;
-        $validated['createdBy'] = Auth::id();
-        Payment::create($validated);
+        $driver = Driver::where('tenant_id', $tenant->id)->findOrFail($validated['driver_id']);
+        $autoManageInvoices = $request->boolean('auto_manage_invoices', true);
 
-        return redirect()->route($this->url.'index')
-            ->with('success', 'Payment method created successfully.');
+        $payment = $paymentAllocationService->createPayment(
+            $driver,
+            [
+                'payment_method' => $validated['payment_method'],
+                'payment_date' => $validated['payment_date'],
+                'amount' => $validated['amount'],
+                'notes' => $validated['notes'] ?? null,
+            ],
+            $autoManageInvoices,
+            $validated['allocations'] ?? []
+        );
+
+        return redirect()->route('payments.driver', $payment->driver_id)
+            ->with('success', 'Payment added successfully.');
     }
 
     public function show(Payment $payment)
     {
-        $payment->load('company');
-        return view($this->dir.'show', compact('payment'));
+        $tenant = Auth::user()->currentTenant();
+        $payment->load(['driver', 'allocations.invoice']);
+        $this->authorizeDriver($payment->driver, $tenant);
+
+        return view($this->dir.'payment', compact('payment'));
     }
 
-    public function edit($id)
+    public function edit(Payment $payment)
     {
-        $tenant = Auth::user()->currentTenant();
-
-        if (!$tenant) {
-            return redirect()->route('dashboard')
-                ->with('error', 'No active company found!');
-        }
-        $model = Payment::where('tenant_id', $tenant->id)->findOrFail($id);
-        return view($this->dir.'edit', compact('model'));
+        return redirect()->route('payments.show', $payment);
     }
 
     public function update(Request $request, Payment $payment)
     {
-        $tenant = Auth::user()->currentTenant();
-
-        if (!$tenant) {
-            return redirect()->back()
-                ->with('error', 'No active company found!');
-        }
-        $rules = [
-            'payment_type' => 'required|string|max:255',
-            'company_id' => 'required|exists:companies,id',
-        ];
-
-        // Conditional validation based on payment type
-        if ($request->payment_type === 'Bank Transfer') {
-            $rules['bank_name'] = 'required|string|max:255';
-            $rules['account_number'] = 'required|string|max:255';
-            $rules['sort_code'] = 'required|string|max:10';
-            $rules['iban_number'] = 'nullable|string|max:34';
-        } elseif ($request->payment_type === 'Stripe') {
-            $rules['stripe_public_key'] = 'required|string|max:255';
-            $rules['stripe_secret_key'] = 'required|string|max:255';
-        } elseif ($request->payment_type === 'PayPal') {
-            $rules['paypal_client_id'] = 'required|string|max:255';
-            $rules['paypal_secret'] = 'required|string|max:255';
-        }
-
-        $validated = $request->validate($rules);
-        $validated['tenant_id'] = $tenant->id;
-        $validated['updatedBy'] = Auth::id();
-        $payment->update($validated);
-
-        return redirect()->route($this->url.'index')
-            ->with('success', 'Payment method updated successfully.');
+        return redirect()->route('payments.show', $payment);
     }
 
     public function destroy(Payment $payment)
     {
         $tenant = Auth::user()->currentTenant();
+        $payment->load(['driver', 'allocations.invoice']);
+        $this->authorizeDriver($payment->driver, $tenant);
 
-        // ✅ Check ownership
-        if ($payment->tenant_id !== $tenant->id) {
-            abort(403, 'Unauthorized access');
+        $invoices = $payment->allocations->pluck('invoice')->filter();
+
+        foreach ($payment->allocations as $allocation) {
+            $allocation->delete();
         }
+
         $payment->delete();
 
-        return redirect()->route($this->url.'index')
-            ->with('success', 'Payment method deleted successfully.');
+        foreach ($invoices as $invoice) {
+            $invoice->refreshPaymentTotals();
+        }
+
+        return redirect()->route('payments.driver', $payment->driver_id)
+            ->with('success', 'Payment deleted successfully.');
+    }
+
+    private function authorizeDriver(?Driver $driver, $tenant): void
+    {
+        abort_unless($tenant && $driver && (int) $driver->tenant_id === (int) $tenant->id, 403);
+    }
+
+    private function driverSummary(Driver $driver): array
+    {
+        return [
+            'total_invoiced' => (float) $driver->invoices()->sum('total_amount'),
+            'total_paid' => (float) $driver->payments()->sum('amount'),
+            'total_allocated' => (float) $driver->payments()
+                ->join('payment_allocations', 'payments.id', '=', 'payment_allocations.payment_id')
+                ->sum('payment_allocations.allocated_amount'),
+            'total_due' => (float) $driver->activeInvoices()->sum('balance_amount'),
+            'overdue_due' => (float) $driver->overdueInvoices()->sum('balance_amount'),
+        ];
     }
 }

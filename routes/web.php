@@ -130,7 +130,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
         ->name('agreements.view-signed');
 
     // Settings
+    Route::get('payments/drivers/{driver}', [App\Http\Controllers\Backend\PaymentController::class, 'driver'])->name('payments.driver');
     Route::resource('payments', App\Http\Controllers\Backend\PaymentController::class);
+    Route::resource('payment-settings', App\Http\Controllers\Backend\PaymentSettingController::class)
+        ->parameters(['payment-settings' => 'paymentSetting']);
     Route::resource('users', App\Http\Controllers\Backend\UserController::class);
     Route::resource('statuses', App\Http\Controllers\Backend\StatusController::class);
     Route::resource('car-models', App\Http\Controllers\Backend\CarModelController::class);

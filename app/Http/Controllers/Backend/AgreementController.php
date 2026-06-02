@@ -9,6 +9,8 @@ use App\Models\Company;
 use App\Models\Driver;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
+use App\Services\AgreementInvoiceService;
+use App\Services\PaymentAllocationService;
 // Add this
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -16,10 +18,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use PDF;
 
 class AgreementController extends Controller
 {
+    private const DISCOUNT_ALLOWED_EMAIL = 'jawad@samoretraders.com';
+
     protected $url = 'agreements.';
 
     protected $dir = 'backend.agreements.';
@@ -65,7 +70,9 @@ class AgreementController extends Controller
         $model = new Agreement;
         $statuses = Status::where('type', 'agreement')->get();
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
+        $canManageDiscount = $this->canManageDiscount();
+
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount'));
     }
 
     public function store(Request $request)
@@ -85,6 +92,9 @@ class AgreementController extends Controller
             'agreed_rent' => 'required|numeric|min:0',
             'rent_interval' => 'required|string',
             'deposit_amount' => 'required|numeric|min:0',
+            'discount_type' => 'nullable|in:percentage,fixed',
+            'discount_value' => 'nullable|numeric|min:0',
+            'discount_notes' => 'nullable|string',
             'mileage_out' => 'nullable|integer|min:0',
             'mileage_in' => 'nullable|integer|min:0',
             'collection_type' => 'required|in:weekly,monthly,static',
@@ -111,15 +121,23 @@ class AgreementController extends Controller
             'collections.*.due_date' => 'nullable|date',
             'collections.*.method' => 'required_if:auto_schedule_collections,0|nullable|string',
             'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
+            'add_payment' => 'boolean',
+            'agreement_payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
+            'agreement_payment_date' => 'required_if:add_payment,1|nullable|date',
+            'agreement_payment_amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
+            'agreement_payment_notes' => 'nullable|string',
         ]);
+        $validated['auto_schedule_collections'] = $request->boolean('auto_schedule_collections');
+        [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request);
         try {
-            $agreement = DB::transaction(function () use ($validated, $request, $tenant) {
+            $agreement = DB::transaction(function () use ($validated, $request, $tenant, $agreementPaymentData) {
                 $validated = $this->mergeInsuranceData($request, $validated);
 
                 // Create agreement record
                 $validated['tenant_id'] = $tenant->id;
                 $validated['createdBy'] = Auth::id();
                 $validated = $this->mergeTerminationData($validated);
+                $validated = $this->applyDiscountData($validated, $request);
                 $agreement = Agreement::create($validated);
                 $this->syncTerminatedCarAvailability($agreement);
 
@@ -139,12 +157,24 @@ class AgreementController extends Controller
                     }
                 }
 
+                app(AgreementInvoiceService::class)->generateForAgreement($agreement->fresh());
+
+                if ($agreementPaymentData) {
+                    app(PaymentAllocationService::class)->createPayment(
+                        $agreement->driver()->firstOrFail(),
+                        $agreementPaymentData,
+                        true
+                    );
+                }
+
                 return $agreement;
             });
 
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement created successfully.');
 
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
@@ -188,7 +218,9 @@ class AgreementController extends Controller
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'agreement')->get();
 
-        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders'));
+        $canManageDiscount = $this->canManageDiscount();
+
+        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount'));
     }
 
     public function update(Request $request, Agreement $agreement)
@@ -208,6 +240,9 @@ class AgreementController extends Controller
             'agreed_rent' => 'required|numeric|min:0',
             'rent_interval' => 'required|string',
             'deposit_amount' => 'required|numeric|min:0',
+            'discount_type' => 'nullable|in:percentage,fixed',
+            'discount_value' => 'nullable|numeric|min:0',
+            'discount_notes' => 'nullable|string',
             'mileage_out' => 'nullable|integer|min:0',
             'mileage_in' => 'nullable|integer|min:0',
             'collection_type' => 'required|in:weekly,monthly,static',
@@ -234,9 +269,16 @@ class AgreementController extends Controller
             'collections.*.due_date' => 'nullable|date',
             'collections.*.method' => 'required_if:auto_schedule_collections,0|nullable|string',
             'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
+            'add_payment' => 'boolean',
+            'agreement_payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
+            'agreement_payment_date' => 'required_if:add_payment,1|nullable|date',
+            'agreement_payment_amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
+            'agreement_payment_notes' => 'nullable|string',
         ]);
+        $validated['auto_schedule_collections'] = $request->boolean('auto_schedule_collections');
+        [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request);
         try {
-            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant) {
+            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant, $agreementPaymentData) {
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
 
                 $validated = $this->mergeInsuranceData($request, $validated, $agreement);
@@ -245,6 +287,7 @@ class AgreementController extends Controller
                 $validated['tenant_id'] = $tenant->id;
                 $validated['updatedBy'] = Auth::id();
                 $validated = $this->mergeTerminationData($validated, $agreement);
+                $validated = $this->applyDiscountData($validated, $request, $agreement);
                 $agreement->update($validated);
                 $this->syncTerminatedCarAvailability($agreement);
 
@@ -269,12 +312,24 @@ class AgreementController extends Controller
                     }
                 }
 
+                app(AgreementInvoiceService::class)->generateForAgreement($agreement->fresh());
+
+                if ($agreementPaymentData) {
+                    app(PaymentAllocationService::class)->createPayment(
+                        $agreement->driver()->firstOrFail(),
+                        $agreementPaymentData,
+                        true
+                    );
+                }
+
                 return $agreement;
             });
 
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement updated successfully.');
 
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
@@ -359,6 +414,73 @@ class AgreementController extends Controller
         }
 
         $validated['own_insurance_proof_document'] = $names === [] ? null : array_values(array_unique($names));
+
+        return $validated;
+    }
+
+    private function canManageDiscount(): bool
+    {
+        return strtolower(trim((string) Auth::user()?->email)) === self::DISCOUNT_ALLOWED_EMAIL;
+    }
+
+    private function prepareAgreementPaymentData(array $validated, Request $request): array
+    {
+        $paymentData = null;
+
+        if ($request->boolean('add_payment')) {
+            $paymentData = [
+                'payment_method' => $validated['agreement_payment_method'],
+                'payment_date' => $validated['agreement_payment_date'],
+                'amount' => $validated['agreement_payment_amount'],
+                'notes' => $validated['agreement_payment_notes'] ?? null,
+            ];
+        }
+
+        unset(
+            $validated['add_payment'],
+            $validated['agreement_payment_method'],
+            $validated['agreement_payment_date'],
+            $validated['agreement_payment_amount'],
+            $validated['agreement_payment_notes']
+        );
+
+        return [$validated, $paymentData];
+    }
+
+    private function applyDiscountData(array $validated, Request $request, ?Agreement $existing = null): array
+    {
+        if (! $this->canManageDiscount()) {
+            $validated['discount_type'] = $existing?->discount_type;
+            $validated['discount_value'] = $existing?->discount_value;
+            $validated['discount_notes'] = $existing?->discount_notes;
+
+            return $validated;
+        }
+
+        $validated['discount_notes'] = $request->filled('discount_notes')
+            ? trim((string) $request->input('discount_notes'))
+            : null;
+
+        $discountType = $request->input('discount_type');
+        $discountValue = $request->input('discount_value');
+
+        if (! in_array($discountType, ['percentage', 'fixed'], true) || $discountValue === null || $discountValue === '') {
+            $validated['discount_type'] = null;
+            $validated['discount_value'] = null;
+
+            return $validated;
+        }
+
+        $discountValue = (float) $discountValue;
+
+        if ($discountType === 'percentage' && $discountValue > 100) {
+            throw ValidationException::withMessages([
+                'discount_value' => 'Percentage discount cannot be greater than 100.',
+            ]);
+        }
+
+        $validated['discount_type'] = $discountType;
+        $validated['discount_value'] = round($discountValue, 2);
 
         return $validated;
     }

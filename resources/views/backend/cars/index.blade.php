@@ -7,13 +7,13 @@
                     <div class="card-header">
                         <h4 class="card-title">{{ $plural }}</h4>
                         <div class="float-right">
-                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.available-by-phv') }}">Available by PHV</a>
-                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.awaiting-phv') }}">Awaiting PHV</a>
-                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'damaged') }}">Damaged</a>
-                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'written_off') }}">Written off</a>
-                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'stolen') }}">Stolen</a>
-                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'for_sale') }}">For sale</a>
-                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'sold') }}">Sold</a>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="available_by_phv">Available by PHV</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="awaiting_phv">Awaiting PHV</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="damaged">Damaged</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="written_off">Written off</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="stolen">Stolen</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="for_sale">For sale</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="sold">Sold</button>
                             <a class="btn btn-primary btn-sm" href="{{ route($url . 'create') }}"><i class="fa fa-plus"></i> Add {{ $singular }}</a>
                         </div>
                     </div>
@@ -40,6 +40,8 @@
                                         @php
                                             $carStatusLabel = ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent'));
                                             if ($carStatusLabel === 'Sorn') $carStatusLabel = 'SORN';
+                                            $isAvailableByPhv = $car->isAvailableForRent();
+                                            $isAwaitingPhv = $car->phvs->isEmpty();
                                             $latestInsurance = $car->insurances
                                                 ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->created_at)->timestamp ?? 0, $i->id])
                                                 ->first();
@@ -54,6 +56,9 @@
                                             data-model="{{ $car->carModel->name }}"
                                             data-color="{{ $car->color }}"
                                             data-car-status="{{ $carStatusLabel }}"
+                                            data-fleet-status="{{ $car->fleet_status ?? 'available_for_rent' }}"
+                                            data-available-by-phv="{{ $isAvailableByPhv ? '1' : '0' }}"
+                                            data-awaiting-phv="{{ $isAwaitingPhv ? '1' : '0' }}"
                                             data-council="{{ $phvCounselLabel }}"
                                             data-insurance-status="{{ $insuranceStatusLabel }}"
                                         >
@@ -343,6 +348,7 @@
                 model: '',
                 color: ''
             };
+            let quickFilter = '';
 
             const dataTable = $('#dataTable').DataTable({
                 processing: true,
@@ -368,8 +374,34 @@
                     && (!advancedFilters.insuranceStatus || row.dataset.insuranceStatus === advancedFilters.insuranceStatus)
                     && (!advancedFilters.carStatus || row.dataset.carStatus === advancedFilters.carStatus)
                     && (!advancedFilters.model || row.dataset.model === advancedFilters.model)
-                    && (!advancedFilters.color || row.dataset.color === advancedFilters.color);
+                    && (!advancedFilters.color || row.dataset.color === advancedFilters.color)
+                    && passesQuickFilter(row);
             });
+
+            function passesQuickFilter(row) {
+                if (!quickFilter) {
+                    return true;
+                }
+
+                if (quickFilter === 'available_by_phv') {
+                    return row.dataset.availableByPhv === '1';
+                }
+
+                if (quickFilter === 'awaiting_phv') {
+                    return row.dataset.awaitingPhv === '1';
+                }
+
+                return row.dataset.fleetStatus === quickFilter;
+            }
+
+            function updateQuickFilterButtons() {
+                $('.cars-quick-filter').each(function () {
+                    const isActive = $(this).data('quick-filter') === quickFilter;
+                    $(this)
+                        .toggleClass('btn-primary', isActive)
+                        .toggleClass('btn-outline-primary', !isActive);
+                });
+            }
 
             function setFilterPanelOpen(isOpen) {
                 $('#carsFilterPanel').toggleClass('is-open', isOpen).attr('aria-hidden', isOpen ? 'false' : 'true');
@@ -389,8 +421,18 @@
                 dataTable.draw();
             });
 
+            $('.cars-quick-filter').on('click', function () {
+                const selectedFilter = $(this).data('quick-filter');
+                quickFilter = quickFilter === selectedFilter ? '' : selectedFilter;
+                updateQuickFilterButtons();
+                dataTable.draw();
+            });
+
             $('#carsFilterReset').on('click', function () {
                 $('.cars-advanced-filter').val('').trigger('change');
+                quickFilter = '';
+                updateQuickFilterButtons();
+                dataTable.draw();
             });
         });
     </script>

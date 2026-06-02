@@ -181,6 +181,71 @@
     </div>
 </div>
 
+@if(($canManageDiscount ?? false) === true)
+<!-- Discount Information -->
+<div class="card mb-2">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fa fa-tag me-2"></i>
+            Discount
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="discount-layout">
+            <div class="discount-type-wrap">
+                <label class="form-label d-block">Discount Type</label>
+                @php
+                    $selectedDiscountType = old('discount_type') ?? (isset($model) ? $model->discount_type : '');
+                @endphp
+                <div class="discount-type-group" role="group" aria-label="Discount type">
+                    <input type="radio" class="discount-type-radio" name="discount_type" id="discount_type_percentage" value="percentage" autocomplete="off"
+                        {{ $selectedDiscountType === 'percentage' ? 'checked' : '' }}>
+                    <label class="discount-type-option mr-1 mb-1" for="discount_type_percentage">
+                        <span class="discount-type-icon"><i class="fa fa-percent"></i></span>
+                        <span>Percentage</span>
+                    </label>
+
+                    <input type="radio" class="discount-type-radio" name="discount_type" id="discount_type_fixed" value="fixed" autocomplete="off"
+                        {{ $selectedDiscountType === 'fixed' ? 'checked' : '' }}>
+                    <label class="discount-type-option mb-1" for="discount_type_fixed">
+                        <span class="discount-type-icon"><i class="fa fa-gbp"></i></span>
+                        <span>Fixed Amount</span>
+                    </label>
+                </div>
+                @error('discount_type')
+                <div class="text-danger">{{ $message }}</div>
+                @enderror
+            </div>
+
+            <div class="discount-value-wrap">
+                <label for="discount_value" class="form-label">Discount Value</label>
+                <div class="input-group">
+                    <span class="input-group-text" id="discount_value_prefix">%</span>
+                    <input type="number" name="discount_value" id="discount_value"
+                           class="form-control @error('discount_value') is-invalid @enderror"
+                           value="{{ old('discount_value') ?? (isset($model) ? $model->discount_value : '') }}"
+                           step="0.01" min="0" placeholder="0.00">
+                </div>
+                <small class="text-muted" id="discount_value_hint">Maximum 100%</small>
+                @error('discount_value')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+        </div>
+
+        <div class="form-group mt-2 mb-0">
+            <label for="discount_notes" class="form-label">Discount Notes</label>
+            <textarea name="discount_notes" id="discount_notes" rows="3"
+                      class="form-control @error('discount_notes') is-invalid @enderror"
+                      placeholder="Optional notes about this discount">{{ old('discount_notes', isset($model) ? $model->discount_notes : '') }}</textarea>
+            @error('discount_notes')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+</div>
+@endif
+
 <!-- NEW: Insurance Options Section -->
 <div class="card mb-2">
     <div class="card-header">
@@ -418,121 +483,75 @@
     </div>
 </div>
 
-<!-- Manual Collections (shown when auto schedule is disabled) -->
-<div class="card mb-2" id="manual-collections" style="display: none;">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<!-- Optional Payment -->
+<div class="card mb-2">
+    <div class="card-header">
         <h5 class="card-title mb-0">
-            <i class="fa fa-list me-2"></i>
-            Manual Collections
+            <i class="fa fa-credit-card me-2"></i>
+            Add Payment
         </h5>
-        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addCollection()">
-            <i class="fa fa-plus me-1"></i>
-            Add Collection
-        </button>
     </div>
     <div class="card-body">
-        <div id="collections-container">
-            @php
-                $collections = old('collections');
-                if (!$collections && isset($model) && $model->collections && !$model->auto_schedule_collections) {
-                    $collections = $model->collections->where('is_auto_generated', false)->toArray();
-                }
-                if (empty($collections)) {
-                    $collections = [[]];
-                }
-            @endphp
-
-            @foreach($collections as $index => $collection)
-                <div class="collection-item row border-bottom pb-3 mb-3" data-index="{{ $index }}">
-                    <div class="col-md-3">
-                        <label class="form-label">Collection Date *</label>
-                        @php
-                            $collectionDate = old('collections.'.$index.'.date');
-                            if (!$collectionDate && is_array($collection) && isset($collection['date'])) {
-                                $collectionDate = $collection['date'];
-                            } elseif (!$collectionDate && is_object($collection) && isset($collection->date)) {
-                                $collectionDate = $collection->date instanceof \Carbon\Carbon ? $collection->date->format('Y-m-d') : $collection->date;
-                            }
-                        @endphp
-                        <input type="date" name="collections[{{ $index }}][date]"
-                               class="form-control @error('collections.'.$index.'.date') is-invalid @enderror"
-                               value="{{ $collectionDate }}">
-                        @error('collections.'.$index.'.date')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Due Date *</label>
-                        @php
-                            $collectionDueDate = old('collections.'.$index.'.due_date');
-                            if (!$collectionDueDate && is_array($collection) && isset($collection['due_date'])) {
-                                $collectionDueDate = $collection['due_date'];
-                            } elseif (!$collectionDueDate && is_object($collection) && isset($collection->due_date)) {
-                                $collectionDueDate = $collection->due_date instanceof \Carbon\Carbon ? $collection->due_date->format('Y-m-d') : $collection->due_date;
-                            }
-                        @endphp
-                        <input type="date" name="collections[{{ $index }}][due_date]"
-                               class="form-control @error('collections.'.$index.'.due_date') is-invalid @enderror"
-                               value="{{ $collectionDueDate }}">
-                        @error('collections.'.$index.'.due_date')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Method *</label>
-                        @php
-                            $collectionMethod = old('collections.'.$index.'.method');
-                            if (!$collectionMethod && is_array($collection) && isset($collection['method'])) {
-                                $collectionMethod = $collection['method'];
-                            } elseif (!$collectionMethod && is_object($collection) && isset($collection->method)) {
-                                $collectionMethod = $collection->method;
-                            }
-                        @endphp
-                        <select name="collections[{{ $index }}][method]"
-                                class="form-control @error('collections.'.$index.'.method') is-invalid @enderror">
-                            <option value="">Select Method</option>
-                            <option value="Bank Transfer" {{ $collectionMethod == 'Bank Transfer' ? 'selected' : '' }}>Bank Transfer</option>
-                            <option value="Cash" {{ $collectionMethod == 'Cash' ? 'selected' : '' }}>Cash</option>
-                            <option value="Cheque" {{ $collectionMethod == 'Cheque' ? 'selected' : '' }}>Cheque</option>
-                            <option value="Card Payment" {{ $collectionMethod == 'Card Payment' ? 'selected' : '' }}>Card Payment</option>
-                            <option value="Direct Debit" {{ $collectionMethod == 'Direct Debit' ? 'selected' : '' }}>Direct Debit</option>
-                        </select>
-                        @error('collections.'.$index.'.method')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Amount *</label>
-                        @php
-                            $collectionAmount = old('collections.'.$index.'.amount');
-                            if (!$collectionAmount && is_array($collection) && isset($collection['amount'])) {
-                                $collectionAmount = $collection['amount'];
-                            } elseif (!$collectionAmount && is_object($collection) && isset($collection->amount)) {
-                                $collectionAmount = $collection->amount;
-                            }
-                        @endphp
-                        <div class="input-group">
-                            <span class="input-group-text">£</span>
-                            <input type="number" name="collections[{{ $index }}][amount]"
-                                   class="form-control @error('collections.'.$index.'.amount') is-invalid @enderror"
-                                   value="{{ $collectionAmount }}" step="0.01" min="0">
-                        </div>
-                        @error('collections.'.$index.'.amount')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    <div class="col-md-1">
-                        <label class="form-label">&nbsp;</label>
-                        <div>
-                            @if($index > 0)
-                                <button type="button" class="btn btn-danger btn-sm" onclick="removeCollection(this)">
-                                    <i class="fa fa-trash"></i>
-                                </button>
-                            @endif
-                        </div>
-                    </div>
+        <input type="hidden" name="add_payment" value="0">
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="add_payment" id="add_payment" value="1"
+                {{ old('add_payment') ? 'checked' : '' }}>
+            <label class="form-check-label" for="add_payment">
+                Add payment with this agreement
+            </label>
+        </div>
+        <div id="agreement-payment-fields" style="display: none;">
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <label for="agreement_payment_method" class="form-label">Payment Method</label>
+                    @php
+                        $selectedAgreementPaymentMethod = old('agreement_payment_method');
+                        $agreementPaymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
+                    @endphp
+                    <select name="agreement_payment_method" id="agreement_payment_method"
+                            class="form-control @error('agreement_payment_method') is-invalid @enderror">
+                        <option value="">Select Method</option>
+                        @foreach($agreementPaymentMethods as $paymentMethod)
+                            <option value="{{ $paymentMethod }}" {{ $selectedAgreementPaymentMethod === $paymentMethod ? 'selected' : '' }}>
+                                {{ $paymentMethod }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('agreement_payment_method')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
-            @endforeach
+                <div class="col-md-4 mb-2">
+                    <label for="agreement_payment_date" class="form-label">Payment Date</label>
+                    <input type="date" name="agreement_payment_date" id="agreement_payment_date"
+                           class="form-control @error('agreement_payment_date') is-invalid @enderror"
+                           value="{{ old('agreement_payment_date', now()->toDateString()) }}">
+                    @error('agreement_payment_date')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label for="agreement_payment_amount" class="form-label">Amount</label>
+                    <input type="number" name="agreement_payment_amount" id="agreement_payment_amount"
+                           class="form-control @error('agreement_payment_amount') is-invalid @enderror"
+                           value="{{ old('agreement_payment_amount') }}" min="0.01" step="0.01" placeholder="0.00">
+                    @error('agreement_payment_amount')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-12 mb-2">
+                    <label for="agreement_payment_notes" class="form-label">Payment Notes</label>
+                    <textarea name="agreement_payment_notes" id="agreement_payment_notes" rows="2"
+                              class="form-control @error('agreement_payment_notes') is-invalid @enderror"
+                              placeholder="Optional payment notes">{{ old('agreement_payment_notes') }}</textarea>
+                    @error('agreement_payment_notes')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+            <small class="text-muted">
+                Payment will be auto-managed against this driver's active invoices. Any extra amount will remain as driver credit.
+            </small>
         </div>
     </div>
 </div>
@@ -601,13 +620,88 @@
 @push('css')
     <link rel="stylesheet" type="text/css"
           href="{{ asset('app-assets/vendors/css/forms/select/select2.min.css') }}">
+    <style>
+        .discount-type-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .discount-layout {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 14px;
+        }
+
+        .discount-type-wrap {
+            flex: 0 1 auto;
+            min-width: 360px;
+        }
+
+        .discount-value-wrap {
+            flex: 0 1 320px;
+            min-width: 260px;
+            margin-bottom: 4px;
+        }
+
+        .discount-type-radio {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .discount-type-option {
+            min-width: 180px;
+            border: 1px solid #d9d8f3;
+            border-radius: 8px;
+            background: #fff;
+            color: #5f5b92;
+            padding: 10px 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .discount-type-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: #f3f2ff;
+            color: #7367f0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+        }
+
+        .discount-type-option:hover {
+            border-color: #7367f0;
+            box-shadow: 0 2px 10px rgba(115, 103, 240, 0.08);
+        }
+
+        .discount-type-radio:checked + .discount-type-option {
+            border-color: #7367f0;
+            background: #f8f7ff;
+            color: #4b4586;
+            box-shadow: 0 0 0 2px rgba(115, 103, 240, 0.15);
+        }
+
+        @media (max-width: 767.98px) {
+            .discount-type-wrap,
+            .discount-value-wrap {
+                min-width: 100%;
+                flex-basis: 100%;
+            }
+        }
+    </style>
 @endpush
 
 @push('js')
     <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
     <script>
-        let collectionIndex = {{ count($collections ?? []) }};
-
         // Store all insurance providers with their company IDs
         const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
             return [
@@ -647,18 +741,6 @@
             }
         }
 
-        // Toggle between auto and manual collection modes
-        function toggleCollectionMode() {
-            const autoScheduleCheckbox = document.getElementById('auto_schedule_collections');
-            const manualSection = document.getElementById('manual-collections');
-
-            if (autoScheduleCheckbox.checked) {
-                manualSection.style.display = 'none';
-            } else {
-                manualSection.style.display = 'block';
-            }
-        }
-
         // Toggle insurance sections based on Client's / Company's selection
         function toggleInsuranceSections() {
             const usingOwnInsuranceClient = document.getElementById('using_own_insurance_client');
@@ -677,6 +759,17 @@
             }
         }
 
+        function toggleAgreementPaymentFields() {
+            const addPaymentCheckbox = document.getElementById('add_payment');
+            const paymentFields = document.getElementById('agreement-payment-fields');
+
+            if (!addPaymentCheckbox || !paymentFields) {
+                return;
+            }
+
+            paymentFields.style.display = addPaymentCheckbox.checked ? 'block' : 'none';
+        }
+
         // Clear own insurance fields
         function clearOwnInsuranceFields() {
             document.getElementById('own_insurance_provider_name').value = '';
@@ -687,17 +780,56 @@
             document.getElementById('own_insurance_proof_document').value = '';
         }
 
+        function updateDiscountInputUI() {
+            const percentage = document.getElementById('discount_type_percentage');
+            const fixed = document.getElementById('discount_type_fixed');
+            const input = document.getElementById('discount_value');
+            const prefix = document.getElementById('discount_value_prefix');
+            const hint = document.getElementById('discount_value_hint');
+
+            if (!input || !prefix || !hint || !percentage || !fixed) {
+                return;
+            }
+
+            if (percentage.checked) {
+                prefix.textContent = '%';
+                input.max = '100';
+                hint.textContent = 'Maximum 100%';
+            } else if (fixed.checked) {
+                prefix.textContent = '£';
+                input.removeAttribute('max');
+                hint.textContent = 'Enter fixed discount amount';
+            } else {
+                prefix.textContent = '%';
+                input.removeAttribute('max');
+                hint.textContent = 'Select a discount type first';
+            }
+        }
+
         // Initialize toggle states
         document.addEventListener('DOMContentLoaded', function() {
-            toggleCollectionMode();
             toggleInsuranceSections();
+            toggleAgreementPaymentFields();
 
             filterInsuranceProviders();
 
-            document.getElementById('auto_schedule_collections').addEventListener('change', toggleCollectionMode);
+            document.getElementById('add_payment')?.addEventListener('change', toggleAgreementPaymentFields);
             document.getElementById('using_own_insurance_client').addEventListener('change', toggleInsuranceSections);
             document.getElementById('using_own_insurance_company').addEventListener('change', toggleInsuranceSections);
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
+            const discountPercentage = document.getElementById('discount_type_percentage');
+            const discountFixed = document.getElementById('discount_type_fixed');
+            const discountValue = document.getElementById('discount_value');
+            if (discountPercentage && discountFixed && discountValue) {
+                updateDiscountInputUI();
+                discountPercentage.addEventListener('change', updateDiscountInputUI);
+                discountFixed.addEventListener('change', updateDiscountInputUI);
+                discountValue.addEventListener('input', function() {
+                    if (discountPercentage.checked && this.value !== '' && Number(this.value) > 100) {
+                        this.value = '100';
+                    }
+                });
+            }
 
             if (typeof $ !== 'undefined' && $.fn.select2) {
                 $('#car_id, #driver_id').select2({
@@ -716,54 +848,6 @@
                 });
             }
         });
-
-        function addCollection() {
-            const container = document.getElementById('collections-container');
-            const newCollection = `
-                <div class="collection-item row border-bottom pb-3 mb-3" data-index="${collectionIndex}">
-                    <div class="col-md-3">
-                        <label class="form-label">Collection Date *</label>
-                        <input type="date" name="collections[${collectionIndex}][date]" class="form-control">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Due Date *</label>
-                        <input type="date" name="collections[${collectionIndex}][due_date]" class="form-control">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Method *</label>
-                        <select name="collections[${collectionIndex}][method]" class="form-control">
-                            <option value="">Select Method</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                            <option value="Cash">Cash</option>
-                            <option value="Cheque">Cheque</option>
-                            <option value="Card Payment">Card Payment</option>
-                            <option value="Direct Debit">Direct Debit</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Amount *</label>
-                        <div class="input-group">
-                            <span class="input-group-text">£</span>
-                            <input type="number" name="collections[${collectionIndex}][amount]" class="form-control" step="0.01" min="0">
-                        </div>
-                    </div>
-                    <div class="col-md-1">
-                        <label class="form-label">&nbsp;</label>
-                        <div>
-                            <button type="button" class="btn btn-danger btn-sm" onclick="removeCollection(this)">
-                                <i class="fa fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            container.insertAdjacentHTML('beforeend', newCollection);
-            collectionIndex++;
-        }
-
-        function removeCollection(button) {
-            button.closest('.collection-item').remove();
-        }
 
         // Enhanced form validation
         document.addEventListener('DOMContentLoaded', function() {

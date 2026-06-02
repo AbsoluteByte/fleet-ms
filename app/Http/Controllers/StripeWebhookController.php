@@ -3,7 +3,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Subscription;
 use App\Models\Invoice;
-use App\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -71,16 +70,17 @@ class StripeWebhookController extends Controller
 
         // Create Invoice record
         Invoice::create([
-            'tenant_id' => $subscription->tenant_id,
-            'subscription_id' => $subscription->id,
-            'stripe_invoice_id' => $invoice->id,
-            'invoice_number' => $invoice->number ?? 'INV-' . time(),
-            'amount' => $invoice->amount_due / 100, // Convert from cents
-            'tax' => $invoice->tax ?? 0,
-            'total' => $invoice->total / 100,
+            'invoice_no' => $invoice->number ?? null,
+            'source_id' => $subscription->id,
+            'invoice_type' => 'subscription',
+            'invoice_date' => now()->toDateString(),
+            'subtotal' => $invoice->subtotal / 100,
+            'tax_amount' => ($invoice->tax ?? 0) / 100,
+            'total_amount' => $invoice->total / 100,
+            'paid_amount' => $invoice->total / 100,
+            'balance_amount' => 0,
             'status' => 'paid',
-            'paid_at' => now(),
-            'currency' => $invoice->currency,
+            'due_date' => isset($invoice->due_date) ? \Carbon\Carbon::createFromTimestamp($invoice->due_date) : null,
         ]);
 
         // Update subscription status
@@ -112,15 +112,17 @@ class StripeWebhookController extends Controller
 
         // Create failed invoice record
         Invoice::create([
-            'tenant_id' => $subscription->tenant_id,
-            'subscription_id' => $subscription->id,
-            'stripe_invoice_id' => $invoice->id,
-            'invoice_number' => $invoice->number ?? 'INV-' . time(),
-            'amount' => $invoice->amount_due / 100,
-            'tax' => $invoice->tax ?? 0,
-            'total' => $invoice->total / 100,
+            'invoice_no' => $invoice->number ?? null,
+            'source_id' => $subscription->id,
+            'invoice_type' => 'subscription',
+            'invoice_date' => now()->toDateString(),
+            'subtotal' => $invoice->subtotal / 100,
+            'tax_amount' => ($invoice->tax ?? 0) / 100,
+            'total_amount' => $invoice->total / 100,
+            'paid_amount' => 0,
+            'balance_amount' => $invoice->total / 100,
             'status' => 'failed',
-            'currency' => $invoice->currency,
+            'due_date' => isset($invoice->due_date) ? \Carbon\Carbon::createFromTimestamp($invoice->due_date) : null,
         ]);
 
         // Update subscription status

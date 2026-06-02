@@ -1,277 +1,144 @@
-@extends('layouts.admin', ['title' => 'Payment Details'])
+@extends('layouts.admin', ['title' => 'Driver Payments'])
 
 @section('content')
-    <div class="container-fluid">
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h3 class="card-title mb-0">
-                            <i class="fa fa-credit-card"></i> Payment Details - {{ $payment->payment_type }}
-                        </h3>
-                        <div>
-                            <a href="{{ route($url . 'edit', $payment->id) }}" class="btn btn-primary btn-sm">
-                                <i class="fa fa-edit"></i> Edit
-                            </a>
-                            <a href="{{ route($url . 'index') }}" class="btn btn-secondary btn-sm">
-                                <i class="fa fa-arrow-left"></i> Back
-                            </a>
-                        </div>
+    @php
+        $creditAmount = max(($summary['total_paid'] ?? 0) - ($summary['total_allocated'] ?? 0), 0);
+    @endphp
+
+    <div class="row">
+        <div class="col-12">
+            @include('alerts')
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="card-title mb-0">{{ $driver->full_name ?: 'Driver' }}</h4>
+                        <small class="text-muted">{{ $driver->email }} {{ $driver->phone_number ? ' | '.$driver->phone_number : '' }}</small>
                     </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <!-- Basic Information -->
-                            <div class="col-12">
-                                <h4 class="border-bottom pb-2 mb-3">
-                                    <i class="fa fa-info-circle"></i> Basic Information
-                                </h4>
+                    <div>
+                        <a href="{{ route('payments.create', ['driver_id' => $driver->id]) }}" class="btn btn-primary btn-sm">
+                            <i class="fa fa-plus"></i> Add Payment
+                        </a>
+                        <a href="{{ route('payments.index') }}" class="btn btn-secondary btn-sm">
+                            <i class="fa fa-arrow-left"></i> Back
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-1">
+                            <div class="payment-summary-card border-danger">
+                                <span>Total Due</span>
+                                <strong>£{{ number_format($summary['total_due'], 2) }}</strong>
                             </div>
-
-                            <div class="col-md-6 mb-3">
-                                <div class="info-item">
-                                    <strong><i class="fa fa-money-check text-primary"></i> Payment Type:</strong>
-                                    <p class="mb-0 ml-4">
-                                        <span class="badge badge-primary badge-lg">{{ $payment->payment_type }}</span>
-                                    </p>
-                                </div>
+                        </div>
+                        <div class="col-md-3 mb-1">
+                            <div class="payment-summary-card border-warning">
+                                <span>Overdue</span>
+                                <strong>£{{ number_format($summary['overdue_due'], 2) }}</strong>
                             </div>
-
-                            <div class="col-md-6 mb-3">
-                                <div class="info-item">
-                                    <strong><i class="fa fa-building text-primary"></i> Company:</strong>
-                                    <p class="mb-0 ml-4">{{ $payment->company->name ?? 'N/A' }}</p>
-                                </div>
+                        </div>
+                        <div class="col-md-3 mb-1">
+                            <div class="payment-summary-card border-success">
+                                <span>Driver Credit</span>
+                                <strong>£{{ number_format($creditAmount, 2) }}</strong>
                             </div>
-
-                            <!-- Bank Transfer Details -->
-                            @if($payment->payment_type === 'Bank Transfer')
-                                <div class="col-12 mt-3">
-                                    <h4 class="border-bottom pb-2 mb-3">
-                                        <i class="fa fa-university"></i> Bank Transfer Details
-                                    </h4>
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <div class="info-item">
-                                        <strong><i class="fa fa-bank text-success"></i> Bank Name:</strong>
-                                        <p class="mb-0 ml-4">{{ $payment->bank_name }}</p>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <div class="info-item">
-                                        <strong><i class="fa fa-hashtag text-success"></i> Account Number:</strong>
-                                        <p class="mb-0 ml-4">
-                                            <code>{{ $payment->account_number }}</code>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <div class="info-item">
-                                        <strong><i class="fa fa-sort-numeric-down text-success"></i> Sort Code:</strong>
-                                        <p class="mb-0 ml-4">
-                                            <code>{{ $payment->sort_code }}</code>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                @if($payment->iban_number)
-                                    <div class="col-md-6 mb-3">
-                                        <div class="info-item">
-                                            <strong><i class="fa fa-globe text-success"></i> IBAN Number:</strong>
-                                            <p class="mb-0 ml-4">
-                                                <code>{{ $payment->iban_number }}</code>
-                                            </p>
-                                        </div>
-                                    </div>
-                                @endif
-
-                                <!-- Bank Transfer Summary Card -->
-                                <div class="col-12 mt-3">
-                                    <div class="card bg-light border-success">
-                                        <div class="card-header bg-success text-white">
-                                            <h5 class="mb-0"><i class="fa fa-university"></i> Bank Account Summary</h5>
-                                        </div>
-                                        <div class="card-body">
-                                            <table class="table table-borderless mb-0">
-                                                <tr>
-                                                    <th width="200">Bank Name:</th>
-                                                    <td>{{ $payment->bank_name }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <th>Account Number:</th>
-                                                    <td><code class="text-dark">{{ $payment->account_number }}</code></td>
-                                                </tr>
-                                                <tr>
-                                                    <th>Sort Code:</th>
-                                                    <td><code class="text-dark">{{ $payment->sort_code }}</code></td>
-                                                </tr>
-                                                @if($payment->iban_number)
-                                                    <tr>
-                                                        <th>IBAN:</th>
-                                                        <td><code class="text-dark">{{ $payment->iban_number }}</code></td>
-                                                    </tr>
-                                                @endif
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            @endif
-
-                            <!-- Stripe Details -->
-                            @if($payment->payment_type === 'Stripe')
-                                <div class="col-12 mt-3">
-                                    <h4 class="border-bottom pb-2 mb-3">
-                                        <i class="fab fa-stripe"></i> Stripe Configuration
-                                    </h4>
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <div class="info-item">
-                                        <strong><i class="fa fa-key text-info"></i> Public Key:</strong>
-                                        <p class="mb-0 ml-4">
-                                            <code class="text-break">{{ Str::limit($payment->stripe_public_key, 50) }}</code>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <div class="info-item">
-                                        <strong><i class="fa fa-lock text-info"></i> Secret Key:</strong>
-                                        <p class="mb-0 ml-4">
-                                            <code>{{ Str::mask($payment->stripe_secret_key, '*', 4, -4) }}</code>
-                                            <small class="text-muted d-block">(Masked for security)</small>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- Stripe Summary Card -->
-                                <div class="col-12 mt-3">
-                                    <div class="card bg-light border-info">
-                                        <div class="card-header bg-info text-white">
-                                            <h5 class="mb-0"><i class="fab fa-stripe"></i> Stripe API Configuration</h5>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="alert alert-info mb-3">
-                                                <i class="fa fa-info-circle"></i>
-                                                <strong>Note:</strong> Secret key is masked for security purposes.
-                                            </div>
-                                            <table class="table table-borderless mb-0">
-                                                <tr>
-                                                    <th width="200">Publishable Key:</th>
-                                                    <td><code class="text-dark text-break">{{ $payment->stripe_public_key }}</code></td>
-                                                </tr>
-                                                <tr>
-                                                    <th>Secret Key:</th>
-                                                    <td><code class="text-dark">{{ Str::mask($payment->stripe_secret_key, '*', 4, -4) }}</code></td>
-                                                </tr>
-                                                <tr>
-                                                    <th>Status:</th>
-                                                    <td><span class="badge badge-success">Active</span></td>
-                                                </tr>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            @endif
-
-                            <!-- PayPal Details -->
-                            @if($payment->payment_type === 'PayPal')
-                                <div class="col-12 mt-3">
-                                    <h4 class="border-bottom pb-2 mb-3">
-                                        <i class="fab fa-paypal"></i> PayPal Configuration
-                                    </h4>
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <div class="info-item">
-                                        <strong><i class="fa fa-id-card text-primary"></i> Client ID:</strong>
-                                        <p class="mb-0 ml-4">
-                                            <code class="text-break">{{ Str::limit($payment->paypal_client_id, 50) }}</code>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6 mb-3">
-                                    <div class="info-item">
-                                        <strong><i class="fa fa-lock text-primary"></i> Client Secret:</strong>
-                                        <p class="mb-0 ml-4">
-                                            <code>{{ Str::mask($payment->paypal_secret, '*', 4, -4) }}</code>
-                                            <small class="text-muted d-block">(Masked for security)</small>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- PayPal Summary Card -->
-                                <div class="col-12 mt-3">
-                                    <div class="card bg-light border-primary">
-                                        <div class="card-header bg-primary text-white">
-                                            <h5 class="mb-0"><i class="fab fa-paypal"></i> PayPal API Configuration</h5>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="alert alert-info mb-3">
-                                                <i class="fa fa-info-circle"></i>
-                                                <strong>Note:</strong> Client secret is masked for security purposes.
-                                            </div>
-                                            <table class="table table-borderless mb-0">
-                                                <tr>
-                                                    <th width="200">Client ID:</th>
-                                                    <td><code class="text-dark text-break">{{ $payment->paypal_client_id }}</code></td>
-                                                </tr>
-                                                <tr>
-                                                    <th>Client Secret:</th>
-                                                    <td><code class="text-dark">{{ Str::mask($payment->paypal_secret, '*', 4, -4) }}</code></td>
-                                                </tr>
-                                                <tr>
-                                                    <th>Status:</th>
-                                                    <td><span class="badge badge-success">Active</span></td>
-                                                </tr>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            @endif
-
-                            <!-- Timestamps -->
-                            <div class="col-12 mt-4">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <small class="text-muted">
-                                            <i class="fa fa-calendar-plus"></i>
-                                            <strong>Created:</strong> {{ $payment->created_at->format('d M, Y h:i A') }}
-                                        </small>
-                                    </div>
-                                    <div class="col-md-6 text-right">
-                                        <small class="text-muted">
-                                            <i class="fa fa-calendar-check"></i>
-                                            <strong>Last Updated:</strong> {{ $payment->updated_at->format('d M, Y h:i A') }}
-                                        </small>
-                                    </div>
-                                </div>
+                        </div>
+                        <div class="col-md-3 mb-1">
+                            <div class="payment-summary-card border-primary">
+                                <span>Total Paid</span>
+                                <strong>£{{ number_format($summary['total_paid'], 2) }}</strong>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Card Footer with Actions -->
-                    <div class="card-footer">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <a href="{{ route($url . 'edit', $payment->id) }}" class="btn btn-primary">
-                                    <i class="fa fa-edit"></i> Edit Payment Method
-                                </a>
-                            </div>
-                            <div class="col-md-6 text-right">
-                                <form action="{{ route($url . 'destroy', $payment->id) }}"
-                                      method="POST"
-                                      style="display: inline-block;"
-                                      onsubmit="return confirm('Are you sure you want to delete this payment method?');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn btn-danger">
-                                        <i class="fa fa-trash"></i> Delete Payment Method
-                                    </button>
-                                </form>
+                    <div class="alert {{ $summary['total_due'] > 0 ? 'alert-warning' : ($creditAmount > 0 ? 'alert-success' : 'alert-info') }} mb-0">
+                        @if($summary['total_due'] > 0)
+                            Driver has £{{ number_format($summary['total_due'], 2) }} outstanding.
+                        @elseif($creditAmount > 0)
+                            Driver has £{{ number_format($creditAmount, 2) }} credit with the company.
+                        @else
+                            Driver balance is clear.
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-toggle="tab" href="#all-invoices" role="tab">Invoices</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-toggle="tab" href="#active-invoices" role="tab">Active Invoices</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-toggle="tab" href="#due-invoices" role="tab">Due Invoices</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-toggle="tab" href="#payments" role="tab">Payments</a>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content pt-2">
+                        <div class="tab-pane active" id="all-invoices" role="tabpanel">
+                            <h5>Total Invoices: £{{ number_format($invoices->sum('total_amount'), 2) }}</h5>
+                            @include('backend.payments.partials.invoices-table', ['invoices' => $invoices])
+                        </div>
+
+                        <div class="tab-pane" id="active-invoices" role="tabpanel">
+                            <h5>Active Balance: £{{ number_format($activeInvoices->sum('balance_amount'), 2) }}</h5>
+                            @include('backend.payments.partials.invoices-table', ['invoices' => $activeInvoices])
+                        </div>
+
+                        <div class="tab-pane" id="due-invoices" role="tabpanel">
+                            <h5>Overdue Balance: £{{ number_format($dueInvoices->sum('balance_amount'), 2) }}</h5>
+                            @include('backend.payments.partials.invoices-table', ['invoices' => $dueInvoices])
+                        </div>
+
+                        <div class="tab-pane" id="payments" role="tabpanel">
+                            <h5>Total Payments: £{{ number_format($payments->sum('amount'), 2) }}</h5>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped">
+                                    <thead>
+                                    <tr>
+                                        <th>Payment No</th>
+                                        <th>Date</th>
+                                        <th>Method</th>
+                                        <th>Amount</th>
+                                        <th>Allocated</th>
+                                        <th>Credit</th>
+                                        <th>Notes</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @forelse($payments as $payment)
+                                        <tr>
+                                            <td><strong>{{ $payment->payment_no }}</strong></td>
+                                            <td>{{ optional($payment->payment_date)->format('d M Y') }}</td>
+                                            <td>{{ $payment->payment_method }}</td>
+                                            <td>£{{ number_format($payment->amount, 2) }}</td>
+                                            <td>£{{ number_format($payment->allocated_amount, 2) }}</td>
+                                            <td>£{{ number_format($payment->unallocated_amount, 2) }}</td>
+                                            <td>{{ $payment->notes ?: '-' }}</td>
+                                            <td>
+                                                <a href="{{ route('payments.show', $payment) }}" class="btn btn-sm btn-outline-info">
+                                                    <i class="fa fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted">No payments found.</td>
+                                        </tr>
+                                    @endforelse
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -281,27 +148,26 @@
     </div>
 @endsection
 
-@push('css')
+@section('css')
     <style>
-        .info-item {
-            padding: 10px 0;
-            border-bottom: 1px solid #f0f0f0;
+        .payment-summary-card {
+            border-left: 4px solid #7367f0;
+            border-radius: .25rem;
+            padding: 1rem;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(34, 41, 47, .08);
         }
-        .info-item:last-child {
-            border-bottom: none;
+
+        .payment-summary-card span {
+            display: block;
+            color: #6e6b7b;
+            font-size: .85rem;
         }
-        .badge-lg {
-            font-size: 1rem;
-            padding: 8px 15px;
-        }
-        code {
-            background: #f8f9fa;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.9rem;
-        }
-        .text-break {
-            word-break: break-all;
+
+        .payment-summary-card strong {
+            display: block;
+            margin-top: .25rem;
+            font-size: 1.25rem;
         }
     </style>
-@endpush
+@endsection

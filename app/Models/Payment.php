@@ -9,21 +9,54 @@ class Payment extends Model
     use HasFactory;
 
     protected $fillable = [
-        'payment_type',
-        'bank_name',
-        'account_number',
-        'sort_code',
-        'iban_number',
-        'company_id',
-        'stripe_public_key',
-        'stripe_secret_key',
-        'paypal_client_id',
-        'paypal_secret',
-        'tenant_id', 'createdBy', 'updatedBy'
+        'payment_no',
+        'driver_id',
+        'payment_method',
+        'payment_date',
+        'amount',
+        'notes',
     ];
 
-    public function company()
+    protected $casts = [
+        'payment_date' => 'date',
+        'amount' => 'decimal:2',
+    ];
+
+    protected static function booted()
     {
-        return $this->belongsTo(Company::class);
+        static::creating(function (Payment $payment) {
+            if (empty($payment->payment_no)) {
+                $payment->payment_no = self::generatePaymentNo();
+            }
+        });
+    }
+
+    public function driver()
+    {
+        return $this->belongsTo(Driver::class);
+    }
+
+    public function allocations()
+    {
+        return $this->hasMany(PaymentAllocation::class);
+    }
+
+    public function getAllocatedAmountAttribute()
+    {
+        return (float) $this->allocations()->sum('allocated_amount');
+    }
+
+    public function getUnallocatedAmountAttribute()
+    {
+        return max((float) $this->amount - $this->allocated_amount, 0);
+    }
+
+    public static function generatePaymentNo(): string
+    {
+        $lastPayment = self::query()->latest('id')->value('payment_no');
+        preg_match('/(\d+)$/', (string) $lastPayment, $matches);
+        $nextNumber = isset($matches[1]) ? ((int) $matches[1]) + 1 : 1;
+
+        return 'Payment #' . $nextNumber;
     }
 }
