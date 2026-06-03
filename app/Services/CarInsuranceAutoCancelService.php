@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Car;
 use App\Models\CarInsurance;
 use App\Models\Status;
 use Carbon\CarbonInterface;
@@ -9,6 +10,50 @@ use Illuminate\Support\Facades\DB;
 
 class CarInsuranceAutoCancelService
 {
+    public function __construct(
+        private readonly InsuranceStatusResolver $statusResolver,
+    ) {}
+
+    /**
+     * Cancel the latest active policy for one car when expiry has passed.
+     */
+    public function cancelExpiredActiveForCar(int $carId, ?CarbonInterface $asOf = null): bool
+    {
+        $asOfDate = ($asOf ?? now())->copy()->startOfDay();
+        $activeStatusId = $this->statusResolver->activeStatusId();
+        $cancelledStatusId = $this->statusResolver->cancelledStatusId();
+
+        $latestInsurance = CarInsurance::query()
+            ->where('car_id', $carId)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $latestInsurance) {
+            return false;
+        }
+
+        if ((int) $latestInsurance->status_id !== $activeStatusId) {
+            return false;
+        }
+
+        if (! $latestInsurance->expiry_date) {
+            return false;
+        }
+
+        if ($latestInsurance->expiry_date->copy()->startOfDay()->gte($asOfDate)) {
+            return false;
+        }
+
+        $latestInsurance->update([
+            'status_id' => $cancelledStatusId,
+            'canceled_date' => $latestInsurance->expiry_date->format('Y-m-d'),
+            'notify_before_expiry' => null,
+        ]);
+
+        return true;
+    }
+
     /**
      * Cancel latest active car insurance policies whose expiry date has passed.
      * Sets canceled_date to the policy expiry_date (same as manual cancel lifecycle).
@@ -17,16 +62,8 @@ class CarInsuranceAutoCancelService
     {
         $asOfDate = ($asOf ?? now())->copy()->startOfDay();
 
-        $activeStatusId = Status::query()
-            ->where('type', 'insurance')
-            ->where('name', 'Active')
-            ->value('id');
-
-        $cancelledStatusId = Status::query()
-            ->where('type', 'insurance')
-            ->whereIn('name', ['Cancelled', 'Canceled'])
-            ->orderByRaw("CASE name WHEN 'Cancelled' THEN 0 ELSE 1 END")
-            ->value('id');
+        $activeStatusId = $this->statusResolver->activeStatusId();
+        $cancelledStatusId = $this->statusResolver->cancelledStatusId();
 
         if (! $activeStatusId || ! $cancelledStatusId) {
             return 0;
@@ -40,35 +77,9 @@ class CarInsuranceAutoCancelService
                 ->pluck('car_id');
 
             foreach ($carIds as $carId) {
-                $latestInsurance = CarInsurance::query()
-                    ->where('car_id', $carId)
-                    ->orderByDesc('created_at')
-                    ->orderByDesc('id')
-                    ->first();
-
-                if (! $latestInsurance) {
-                    continue;
+                if ($this->cancelExpiredActiveForCar((int) $carId, $asOfDate)) {
+                    $cancelledCount++;
                 }
-
-                if ((int) $latestInsurance->status_id !== (int) $activeStatusId) {
-                    continue;
-                }
-
-                if (! $latestInsurance->expiry_date) {
-                    continue;
-                }
-
-                if ($latestInsurance->expiry_date->copy()->startOfDay()->gte($asOfDate)) {
-                    continue;
-                }
-
-                $latestInsurance->update([
-                    'status_id' => $cancelledStatusId,
-                    'canceled_date' => $latestInsurance->expiry_date->format('Y-m-d'),
-                    'notify_before_expiry' => null,
-                ]);
-
-                $cancelledCount++;
             }
         });
 

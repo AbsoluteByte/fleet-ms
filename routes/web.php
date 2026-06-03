@@ -109,6 +109,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('car-status', [App\Http\Controllers\Backend\CarStatusController::class, 'create'])->name('car-status.create');
     Route::post('car-status', [App\Http\Controllers\Backend\CarStatusController::class, 'store'])->name('car-status.store');
 
+    Route::get('car-insurance-import', [App\Http\Controllers\Backend\CarInsuranceImportController::class, 'index'])->name('car-insurance-import.index');
+    Route::post('car-insurance-import', [App\Http\Controllers\Backend\CarInsuranceImportController::class, 'store'])->name('car-insurance-import.store');
+    Route::get('car-insurance-import/report', [App\Http\Controllers\Backend\CarInsuranceImportController::class, 'report'])->name('car-insurance-import.report');
+
     Route::resource('reservations', App\Http\Controllers\Backend\ReservationController::class)->except(['show']);
     Route::resource('vehicle-swaps', App\Http\Controllers\Backend\VehicleSwapController::class)->except(['show']);
     Route::resource('drivers', App\Http\Controllers\Backend\DriverController::class);
