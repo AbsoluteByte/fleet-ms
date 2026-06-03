@@ -119,8 +119,8 @@
                                                 : '—';
                                         @endphp
                                         <tr>
-                                            <td><strong>{{ $reservation->customer_name }}</strong></td>
-                                            <td>{{ $reservation->customer_phone ?: '—' }}</td>
+                                            <td><strong>{{ $reservation->clientName() ?: '—' }}</strong></td>
+                                            <td>{{ $reservation->clientPhone() ?: '—' }}</td>
                                             <td class="text-nowrap-muted" title="{{ $carLabel !== '—' ? $carLabel : '' }}">{{ $carLabel }}</td>
                                             <td data-order="{{ $reservation->reservation_date?->timestamp ?? 0 }}">{{ $reservation->reservation_date?->format('d/m/Y') ?? '—' }}</td>
                                             <td data-order="{{ $pickUp?->timestamp ?? 0 }}">{{ $pickUp?->format('d/m/Y') ?? '—' }}</td>

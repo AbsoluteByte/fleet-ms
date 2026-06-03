@@ -49,6 +49,11 @@ class Driver extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function reservations()
+    {
+        return $this->hasMany(CarReservation::class);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

@@ -15,9 +15,7 @@ class CarReservation extends Model
     protected $fillable = [
         'tenant_id',
         'car_id',
-        'customer_name',
-        'customer_phone',
-        'customer_email',
+        'driver_id',
         'reservation_date',
         'pick_up_date',
         'available_from_date',
@@ -124,6 +122,54 @@ class CarReservation extends Model
     public function car()
     {
         return $this->belongsTo(Car::class);
+    }
+
+    public function driver()
+    {
+        return $this->belongsTo(Driver::class);
+    }
+
+    public function clientName(): string
+    {
+        if ($this->relationLoaded('driver') || $this->driver_id) {
+            $name = trim($this->driver?->full_name ?? '');
+
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        return (string) ($this->attributes['customer_name'] ?? '');
+    }
+
+    public function clientPhone(): ?string
+    {
+        if ($this->relationLoaded('driver') || $this->driver_id) {
+            $phone = trim($this->driver?->phone_number ?? '');
+
+            if ($phone !== '') {
+                return $phone;
+            }
+        }
+
+        $legacy = $this->attributes['customer_phone'] ?? null;
+
+        return $legacy !== null && $legacy !== '' ? (string) $legacy : null;
+    }
+
+    public function clientEmail(): ?string
+    {
+        if ($this->relationLoaded('driver') || $this->driver_id) {
+            $email = trim($this->driver?->email ?? '');
+
+            if ($email !== '') {
+                return $email;
+            }
+        }
+
+        $legacy = $this->attributes['customer_email'] ?? null;
+
+        return $legacy !== null && $legacy !== '' ? (string) $legacy : null;
     }
 
     public function createdBy()

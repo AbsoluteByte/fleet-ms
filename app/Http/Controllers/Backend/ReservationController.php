@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Car;
 use App\Models\CarReservation;
+use App\Models\Driver;
+use App\Services\DriverPersistenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +33,7 @@ class ReservationController extends Controller
 
         $reservations = CarReservation::query()
             ->forCurrentTenant()
-            ->with(['car.company', 'car.carModel'])
+            ->with(['car.company', 'car.carModel', 'driver'])
             ->orderByDesc('reservation_date')
             ->orderByDesc('id')
             ->get();
@@ -54,7 +56,17 @@ class ReservationController extends Controller
             ->orderBy('registration')
             ->get();
 
-        return view('backend.reservations.create', compact('cars'));
+        $drivers = Driver::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        $driver = null;
+        $selectedDriverId = null;
+        $driverMode = old('driver_mode', 'existing');
+
+        return view('backend.reservations.create', compact('cars', 'drivers', 'driver', 'selectedDriverId', 'driverMode'));
     }
 
     public function edit(CarReservation $reservation)
@@ -74,10 +86,21 @@ class ReservationController extends Controller
             ->orderBy('registration')
             ->get();
 
-        return view('backend.reservations.edit', compact('cars', 'reservation'));
+        $drivers = Driver::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        $reservation->load('driver');
+        $driver = $reservation->driver ?? $this->legacyDriverStub($reservation);
+        $selectedDriverId = $reservation->driver_id;
+        $driverMode = old('driver_mode', $reservation->driver_id ? 'existing' : 'new');
+
+        return view('backend.reservations.edit', compact('cars', 'drivers', 'reservation', 'driver', 'selectedDriverId', 'driverMode'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, DriverPersistenceService $driverPersistence)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -86,7 +109,7 @@ class ReservationController extends Controller
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        $validated = $this->validatedReservationPayload($request);
+        $validated = $this->validatedReservationPayload($request, $driverPersistence);
 
         $carId = $validated['car_id'] ?? null;
         if ($carId !== null) {
@@ -100,13 +123,13 @@ class ReservationController extends Controller
             (float) $validated['amount_paid']
         );
 
-        DB::transaction(function () use ($validated, $balance, $carId, $tenant) {
+        DB::transaction(function () use ($request, $validated, $balance, $carId, $tenant, $driverPersistence) {
+            $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence);
+
             $reservation = CarReservation::create([
                 'tenant_id' => $tenant->id,
                 'car_id' => $carId,
-                'customer_name' => $validated['customer_name'],
-                'customer_phone' => $validated['customer_phone'],
-                'customer_email' => $validated['customer_email'],
+                'driver_id' => $driverId,
                 'reservation_date' => $validated['reservation_date'],
                 'pick_up_date' => $validated['pick_up_date'],
                 'available_from_date' => $validated['pick_up_date'],
@@ -126,16 +149,24 @@ class ReservationController extends Controller
         return redirect()->route('reservations.index')->with('success', 'Reservation created.');
     }
 
-    public function update(Request $request, CarReservation $reservation)
+    public function update(Request $request, CarReservation $reservation, DriverPersistenceService $driverPersistence)
     {
         $this->authorizeTenant($reservation);
 
-        if (! Auth::user()->currentTenant()) {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        $validated = $this->validatedReservationPayload($request);
+        $reservation->load('driver');
+
+        $validated = $this->validatedReservationPayload(
+            $request,
+            $driverPersistence,
+            null
+        );
 
         $carId = $validated['car_id'] ?? null;
         if ($carId !== null) {
@@ -151,12 +182,12 @@ class ReservationController extends Controller
 
         $oldCarId = $reservation->car_id;
 
-        DB::transaction(function () use ($reservation, $validated, $balance, $carId, $oldCarId) {
+        DB::transaction(function () use ($request, $reservation, $validated, $balance, $carId, $oldCarId, $tenant, $driverPersistence) {
+            $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence);
+
             $reservation->update([
                 'car_id' => $carId,
-                'customer_name' => $validated['customer_name'],
-                'customer_phone' => $validated['customer_phone'],
-                'customer_email' => $validated['customer_email'],
+                'driver_id' => $driverId,
                 'reservation_date' => $validated['reservation_date'],
                 'pick_up_date' => $validated['pick_up_date'],
                 'available_from_date' => $validated['pick_up_date'],
@@ -197,16 +228,19 @@ class ReservationController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function validatedReservationPayload(Request $request): array
-    {
+    private function validatedReservationPayload(
+        Request $request,
+        DriverPersistenceService $driverPersistence,
+        ?Driver $existingDriver = null
+    ): array {
         $tenant = Auth::user()->currentTenant();
 
         abort_if(! $tenant, 403);
 
-        return $request->validate([
-            'customer_name' => 'required|string|max:255',
-            'customer_phone' => 'nullable|string|max:50',
-            'customer_email' => 'nullable|email|max:255',
+        $driverMode = $request->input('driver_mode', 'new');
+
+        $rules = [
+            'driver_mode' => 'required|in:existing,new',
             'car_id' => [
                 'nullable',
                 Rule::exists('cars', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
@@ -216,7 +250,51 @@ class ReservationController extends Controller
             'agreed_rent' => 'required|numeric|min:0',
             'agreed_advance' => 'required|numeric|min:0',
             'amount_paid' => 'required|numeric|min:0',
-        ]);
+        ];
+
+        if ($driverMode === 'existing') {
+            $rules['driver_id'] = [
+                'required',
+                Rule::exists('drivers', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+            ];
+        } else {
+            $rules = array_merge($rules, $driverPersistence->validationRules($existingDriver));
+        }
+
+        return $request->validate($rules);
+    }
+
+    private function resolveDriverId(
+        Request $request,
+        array $validated,
+        $tenant,
+        DriverPersistenceService $driverPersistence
+    ): int {
+        if (($validated['driver_mode'] ?? 'new') === 'existing') {
+            return (int) $validated['driver_id'];
+        }
+
+        $driverAttributes = $driverPersistence->attributesFromValidated($request, $validated);
+        $driver = $driverPersistence->createFromValidatedAttributes($driverAttributes, $tenant);
+
+        return $driver->id;
+    }
+
+    private function legacyDriverStub(CarReservation $reservation): Driver
+    {
+        $driver = new Driver();
+        $name = trim((string) ($reservation->attributes['customer_name'] ?? ''));
+
+        if ($name !== '') {
+            $parts = preg_split('/\s+/', $name, 2);
+            $driver->first_name = $parts[0] ?? '';
+            $driver->last_name = $parts[1] ?? '';
+        }
+
+        $driver->phone_number = $reservation->attributes['customer_phone'] ?? null;
+        $driver->email = $reservation->attributes['customer_email'] ?? null;
+
+        return $driver;
     }
 
     private function computeBalance(float $agreedRent, float $agreedAdvance, float $amountPaid): string
