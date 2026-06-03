@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('invoices:generate-agreements')->daily();
+Schedule::command('insurance:auto-cancel-expired')->daily();
