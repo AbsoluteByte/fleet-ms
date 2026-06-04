@@ -7,7 +7,11 @@
             Agreement Details
         </h1>
         <div class="btn-group">
-            <a href="{{ route('agreements.pdf', $agreement) }}" class="btn btn-danger" target="_blank">
+            <a href="{{ route('agreements.pdf.preview', $agreement) }}" class="btn btn-outline-danger" target="_blank" rel="noopener noreferrer">
+                <i class="fa fa-eye me-2"></i>
+                Preview
+            </a>
+            <a href="{{ route('agreements.pdf', $agreement) }}" class="btn btn-danger">
                 <i class="fa fa-file-pdf-o me-2"></i>
                 Generate PDF
             </a>
@@ -48,7 +52,7 @@
                                 </tr>
                                 <tr>
                                     <td><strong>Start Date:</strong></td>
-                                    <td>{{ $agreement->start_date->format('M d, Y') }}</td>
+                                    <td>{{ $agreement->start_date->format('M d, Y g:i A') }}</td>
                                 </tr>
                                 <tr>
                                     <td><strong>End Date:</strong></td>

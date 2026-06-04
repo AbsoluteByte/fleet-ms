@@ -418,9 +418,29 @@
     </div>
 
     {{-- Written off --}}
+    @php
+        $writtenOffDisposalOld = old('payload.disposal_outcome');
+        $writtenOffDisposalOptions = \App\Services\CarStatusChangeService::WRITTEN_OFF_DISPOSAL_OUTCOMES;
+    @endphp
     <div class="fleet-status-panel {{ old('target_status') === 'written_off' ? '' : 'd-none' }}"
          data-status="written_off">
         <div class="row">
+            <div class="col-md-6 form-group">
+                <label for="fleet_written_disposal_outcome">Vehicle outcome <span class="text-danger">*</span></label>
+                <select name="payload[disposal_outcome]" id="fleet_written_disposal_outcome"
+                        class="form-control @error('payload.disposal_outcome') is-invalid @enderror">
+                    <option value="">— Select —</option>
+                    @foreach($writtenOffDisposalOptions as $outcomeValue => $outcomeLabel)
+                        <option value="{{ $outcomeValue }}"
+                            {{ $writtenOffDisposalOld === $outcomeValue ? 'selected' : '' }}>
+                            {{ $outcomeLabel }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('payload.disposal_outcome')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
             <div class="col-md-6 form-group">
                 <label for="fleet_written_driver_id">Driver</label>
                 <select name="payload[driver_id]" id="fleet_written_driver_id"

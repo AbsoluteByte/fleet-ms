@@ -200,7 +200,7 @@
         <div class="field"><span class="lbl">PHD Licence No:</span> {{ $driver->phd_license_number ?? '' }}</div>
         <div class="field"><span class="lbl">DOB:</span> {{ $driver->dob ? \Carbon\Carbon::parse($driver->dob)->format('d.m.Y') : '' }}</div>
         <div class="field"><span class="lbl">Phone N.O:</span> {{ $driver->phone_number ?? '' }}</div>
-        <div class="field"><span class="lbl">ADDRESS:</span> {{ $driver->address1 ?? '' }}{{ isset($driver->address2) && $driver->address2 ? ', '.$driver->address2 : '' }}{{ isset($driver->post_code) && $driver->post_code ? ', '.$driver->post_code : '' }}</div>
+        <div class="field"><span class="lbl">ADDRESS:</span> @include('backend.agreements._driver_address_pdf', ['driver' => $driver])</div>
     </div>
 
     {{-- RIGHT: Vehicle Details --}}
@@ -210,21 +210,22 @@
         <div class="field"><span class="lbl">Vehicle REG:</span> {{ strtoupper($car->registration) }}</div>
         <div class="field"><span class="lbl">Mileage Out:</span> {{ $agreement->mileage_out ? number_format($agreement->mileage_out) : '' }}</div>
         <div class="field"><span class="lbl">Date/Time Out:</span> {{ $agreement->start_date->format('d.m.Y') }} {{ $agreement->start_date->format('H:i') }} HRS</div>
-        <div class="field"><span class="lbl">Date/Time Due:</span> {{ $agreement->end_date->format('d.m.Y') }} {{ $agreement->end_date->format('H:i') }} HRS</div>
+        <div class="field"><span class="lbl">Date/Time Due:</span> {{ $agreement->end_date->format('d.m.Y') }} {{ \App\Models\Agreement::PDF_END_TIME }} HRS</div>
         <div class="field"><span class="lbl">Hire Charge:</span> £{{ number_format($agreement->agreed_rent, 0) }} P/W</div>
         <div class="field"><span class="lbl">Deposit:</span> £{{ number_format($agreement->deposit_amount, 0) }}</div>
-        <div class="field"><span class="lbl">Vehicle Return date:</span> {{ $agreement->end_date->format('d/m/Y') }}</div>
     </div>
 </div>
 
 {{-- ── CONDITIONS HEADER ── --}}
 <div class="cond-header">
-    Conditions of Hire Agreement: MIN 4 WEEKS CONTRACT &nbsp; £1000 EXCESS IN CASE OF ACCIDENT
+    Conditions of Hire Agreement: MIN 4 WEEKS CONTRACT{{ $agreement->using_own_insurance ? '' : ' £1000 EXCESS IN CASE OF ACCIDENT' }}
 </div>
 
 {{-- ── CONDITIONS LIST ── --}}
 <ol class="cond-list">
+    @if($agreement->using_own_insurance)
     <li>I am responsible for insuring the vehicle.</li>
+    @endif
     <li>I am over 21 and less than 86 years of age, suffer from the no physical or mental impairment affecting my ability to drive, and have held a valid UK licence applicable to the vehicle for at least 12 months. I have not accumulated more than 9 penalty points in the last 3 years, nor have I been disqualified from the driving in the last 5 years. I will pay any charges for the loss/damage as a result of not using the correct fuel (<strong>This is a {{ $car->fuel_type ?? 'Petrol' }} Vehicle</strong>).</li>
     <li>I will accept full responsibility for any uninsured loss or damage however such loss or damage is caused. In the event of an accident I will report the incident immediately to {{ $company->name ?? 'SAMORE TRADERS LTD' }} and will complete an accident report form with {{ $company->name ?? 'SAMORE TRADERS LTD' }}. Any necessary repair work will be carried out by {{ $company->name ?? 'SAMORE TRADERS LTD' }} and paid by me upon receipt of the invoice.</li>
     <li>I accept that any motoring or traffic offences, toll charges, congestion charges, penalties and fines arising in relation to the vehicle for the duration of the loan are my sole responsibility under the Road Traffic Regulations Act 1984, the Road Traffic Offenders Act 1988, and/or any subsequent relevant legislation. I will indemnify {{ $company->name ?? 'SAMORE TRADERS LTD' }} forthwith for any penalties, fines, legal fees, costs, interest or other charges paid by them in relation to any such motoring or traffic offences or toll charges. I hereby irrevocably consent to any such charges including an administration fee of £35 being charged to me.</li>
@@ -310,10 +311,12 @@
         STATEMENT OF UNDERSTANDING
     </div>
 
+    @if(!$agreement->using_own_insurance)
     <div style="margin-bottom:12px;">
         <p style="font-weight:bold; margin-bottom:4px;">EXCESS FEE:</p>
         <p style="text-align:justify; margin-left:15px;">I HEREBY ACKNOWLEDGE AND AGREE THAT IN THE EVENT OF A MOTOR ACCIDENT, I AM RESPONSIBLE FOR PAYING THE APPLICABLE INSURANCE EXCESS FEE IN ORDER TO PROCEED WITH THE CLAIM PROCESS. IF, UPON CONCLUSION OF THE INVESTIGATION, THE ACCIDENT IS DETERMINED TO BE NON-FAULT, THE EXCESS FEE PAID BY ME SHALL BE REIMBURSED IN FULL. HOWEVER, IF THE OUTCOME OF THE CLAIM ESTABLISHES THAT I AM AT FAULT, I ACKNOWLEDGE THAT I SHALL HAVE NO RIGHT OR ENTITLEMENT TO RECOVER OR REQUEST REIMBURSEMENT OF THE EXCESS FEE, AS IT WILL BE DEEMED DULY PAYABLE. FURTHERMORE, I UNDERSTAND AND AGREE THAT IN CASES WHERE THE ACCIDENT INVOLVES AN UNINSURED THIRD PARTY, A STOLEN VEHICLE, OR IF THE VEHICLE I AM DRIVING IS STOLEN, I SHALL BE LIABLE TO PAY THE FULL EXCESS AMOUNT REGARDLESS OF FAULT, AS SUCH CIRCUMSTANCES MAY PREVENT RECOVERY OF COSTS FROM THE THIRD PARTY.</p>
     </div>
+    @endif
 
     <div style="margin-bottom:12px;">
         <p style="font-weight:bold; margin-bottom:4px;">TYRES &amp; HEADLIGHT BULB:</p>
@@ -400,7 +403,7 @@
         </tr>
         <tr>
             <td style="padding:5px 0;"><strong>HIRER ADDRESS:</strong></td>
-            <td style="padding:5px 0; border-bottom:1px solid #000;">{{ $driver->address1 ?? '' }}{{ isset($driver->address2) && $driver->address2 ? ', '.$driver->address2 : '' }}{{ isset($driver->post_code) && $driver->post_code ? ', '.$driver->post_code : '' }}</td>
+            <td style="padding:5px 0; border-bottom:1px solid #000;">@include('backend.agreements._driver_address_pdf', ['driver' => $driver])</td>
         </tr>
         <tr>
             <td style="padding:5px 0;"><strong>MAKE AND MODEL:</strong></td>
@@ -416,7 +419,7 @@
         </tr>
         <tr>
             <td style="padding:5px 0;"><strong>DATE/TIME DUE:</strong></td>
-            <td style="padding:5px 0; border-bottom:1px solid #000;">{{ $agreement->end_date->format('d/m/Y H:i') }}</td>
+            <td style="padding:5px 0; border-bottom:1px solid #000;">{{ $agreement->end_date->format('d/m/Y') }} {{ \App\Models\Agreement::PDF_END_TIME }}</td>
         </tr>
     </table>
 

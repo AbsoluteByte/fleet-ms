@@ -83,6 +83,10 @@ class DriverPersistenceService
     {
         $driverAttributes = Arr::only($validated, array_keys($this->validationRules($existing)));
 
+        if (! filled($driverAttributes['county'] ?? null)) {
+            $driverAttributes['county'] = null;
+        }
+
         return $this->mergeUploadedDocuments($request, $driverAttributes, $existing);
     }
 

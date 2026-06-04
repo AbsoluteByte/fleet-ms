@@ -130,10 +130,12 @@
                                 <strong>Town:</strong>
                                 <p class="mb-0">{{ $driver->town }}</p>
                             </div>
-                            <div class="col-md-3 mb-3">
-                                <strong>County:</strong>
-                                <p class="mb-0">{{ $driver->county }}</p>
-                            </div>
+                            @if(filled($driver->county))
+                                <div class="col-md-3 mb-3">
+                                    <strong>County:</strong>
+                                    <p class="mb-0">{{ $driver->county }}</p>
+                                </div>
+                            @endif
                             <div class="col-md-3 mb-3">
                                 <strong>Country:</strong>
                                 <p class="mb-0">{{ $driver->country->name ?? 'N/A' }}</p>

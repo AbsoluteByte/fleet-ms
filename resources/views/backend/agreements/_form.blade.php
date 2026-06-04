@@ -79,10 +79,10 @@
 
             <div class="col-md-6">
                 <div class="mb-3">
-                    <label for="start_date" class="form-label">Start Date *</label>
-                    <input type="date" name="start_date" id="start_date"
+                    <label for="start_date" class="form-label">Start Date &amp; Time *</label>
+                    <input type="datetime-local" name="start_date" id="start_date"
                            class="form-control @error('start_date') is-invalid @enderror"
-                           value="{{ old('start_date') ?? (isset($model) ? $model->start_date?->format('Y-m-d') : '') }}" required>
+                           value="{{ old('start_date') ?? (isset($model) && $model->start_date ? $model->start_date->format('Y-m-d\TH:i') : '') }}" required>
                     @error('start_date')
                     <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
@@ -903,9 +903,10 @@
             ownInsuranceEndDate.addEventListener('blur', validateInsuranceDates);
             mileageInInput.addEventListener('change', validateMileage);
 
-            // Set minimum date for start date (today)
-            const today = new Date().toISOString().split('T')[0];
-            startDateInput.setAttribute('min', today);
+            // Set minimum date/time for start (now)
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            startDateInput.setAttribute('min', now.toISOString().slice(0, 16));
 
             // Auto populate agreed rent in collection amounts
             document.getElementById('agreed_rent').addEventListener('change', function() {

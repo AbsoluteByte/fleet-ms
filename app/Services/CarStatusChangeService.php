@@ -16,6 +16,11 @@ use Illuminate\Validation\ValidationException;
 
 class CarStatusChangeService
 {
+    public const WRITTEN_OFF_DISPOSAL_OUTCOMES = [
+        'disposed_by_insurer' => 'Disposed of by the insurer',
+        'retained_for_parts' => 'Retained for parts',
+    ];
+
     /** @var list<string> */
     public const TARGET_STATUSES = [
         'available_for_rent',
@@ -344,6 +349,10 @@ class CarStatusChangeService
         $tenantId = $tenant->id;
 
         $validated = $request->validate([
+            'payload.disposal_outcome' => [
+                'required',
+                Rule::in(array_keys(self::WRITTEN_OFF_DISPOSAL_OUTCOMES)),
+            ],
             'payload.driver_id' => [
                 'nullable',
                 Rule::exists('drivers', 'id')->where(fn ($q) => $q->where('tenant_id', $tenantId)),

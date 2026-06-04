@@ -117,7 +117,7 @@ class DriverDashboardController extends Controller
             'address2' => 'nullable|string|max:255',
             'post_code' => 'required|string|max:20',
             'town' => 'required|string|max:100',
-            'county' => 'required|string|max:100',
+            'county' => 'nullable|string|max:100',
             'next_of_kin' => 'required|string|max:255',
             'next_of_kin_phone' => 'required|string|max:20',
         ]);

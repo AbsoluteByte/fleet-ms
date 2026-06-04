@@ -5,6 +5,7 @@
 @if(in_array($entry->new_status, $step2Statuses, true))
     @php
         $sd = $entry->status_data ?? [];
+        $writtenOffDisposalLabels = \App\Services\CarStatusChangeService::WRITTEN_OFF_DISPOSAL_OUTCOMES;
     @endphp
     <div class="modal fade" id="carStatusHistoryModal{{ $entry->id }}" tabindex="-1" role="dialog"
          aria-labelledby="carStatusHistoryModalLabel{{ $entry->id }}" aria-hidden="true">
@@ -70,6 +71,8 @@
                                              style="max-height:200px;overflow:auto;font-size:0.8rem;">{{ json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                     @elseif(is_bool($value))
                                         {{ $value ? 'Yes' : 'No' }}
+                                    @elseif($key === 'disposal_outcome' && isset($writtenOffDisposalLabels[$value]))
+                                        {{ $writtenOffDisposalLabels[$value] }}
                                     @else
                                         {{ $value }}
                                     @endif

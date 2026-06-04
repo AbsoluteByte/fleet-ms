@@ -9,6 +9,8 @@ class Agreement extends Model
 {
     use HasFactory;
 
+    public const PDF_END_TIME = '11:00';
+
     protected $fillable = [
         'tenant_id', 'company_id', 'start_date', 'end_date', 'driver_id',
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
@@ -34,7 +36,7 @@ class Agreement extends Model
     ];
 
     protected $casts = [
-        'start_date' => 'date',
+        'start_date' => 'datetime',
         'end_date' => 'date',
         'next_collection_date' => 'date',
         'agreed_rent' => 'decimal:2',

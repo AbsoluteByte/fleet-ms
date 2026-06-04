@@ -169,11 +169,11 @@
 
                 <div class="col-md-3">
                     <div class="mb-2">
-                        <label for="county" class="form-label">County </label>
+                        <label for="county" class="form-label">County</label>
                         <input type="text" name="county" id="county"
                                class="form-control @error('county') is-invalid @enderror"
                                value="{{ old('county') ?? ($model->county ?? '') }}"
-                               placeholder="Enter County">
+                               placeholder="Enter County (Optional)">
                         @error('county')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror

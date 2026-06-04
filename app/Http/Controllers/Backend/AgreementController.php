@@ -86,7 +86,7 @@ class AgreementController extends Controller
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
+            'end_date' => 'required|date',
             'driver_id' => 'required|exists:drivers,id',
             'car_id' => 'required|exists:cars,id',
             'agreed_rent' => 'required|numeric|min:0',
@@ -127,6 +127,7 @@ class AgreementController extends Controller
             'agreement_payment_amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
             'agreement_payment_notes' => 'nullable|string',
         ]);
+        $this->assertEndDateOnOrAfterStartDate($validated);
         $validated['auto_schedule_collections'] = $request->boolean('auto_schedule_collections');
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request);
         try {
@@ -234,7 +235,7 @@ class AgreementController extends Controller
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
+            'end_date' => 'required|date',
             'driver_id' => 'required|exists:drivers,id',
             'car_id' => 'required|exists:cars,id',
             'agreed_rent' => 'required|numeric|min:0',
@@ -275,6 +276,7 @@ class AgreementController extends Controller
             'agreement_payment_amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
             'agreement_payment_notes' => 'nullable|string',
         ]);
+        $this->assertEndDateOnOrAfterStartDate($validated);
         $validated['auto_schedule_collections'] = $request->boolean('auto_schedule_collections');
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request);
         try {
@@ -416,6 +418,21 @@ class AgreementController extends Controller
         $validated['own_insurance_proof_document'] = $names === [] ? null : array_values(array_unique($names));
 
         return $validated;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function assertEndDateOnOrAfterStartDate(array $validated): void
+    {
+        $startDay = Carbon::parse($validated['start_date'])->startOfDay();
+        $endDay = Carbon::parse($validated['end_date'])->startOfDay();
+
+        if ($endDay->lt($startDay)) {
+            throw ValidationException::withMessages([
+                'end_date' => ['The end date must be on or after the start date.'],
+            ]);
+        }
     }
 
     private function canManageDiscount(): bool
@@ -568,28 +585,48 @@ class AgreementController extends Controller
     public function generatePDF(Agreement $agreement)
     {
         try {
-            $agreement->load([
-                'company', 'driver', 'car', 'car.carModel', 'status', 'insuranceProvider',
-            ]);
-
-            $data = [
-                'agreement' => $agreement,
-                'driver' => $agreement->driver,
-                'car' => $agreement->car,
-                'company' => $agreement->company,
-                'currentDate' => Carbon::now()->format('d/m/Y'),
-            ];
-
-            $pdf = PDF::loadView($this->dir.'.agreement_pdf', $data);
-            $pdf->setPaper('A4', 'portrait');
-
-            $filename = 'Agreement_'.$agreement->id.'_'.str_replace(' ', '_', $agreement->driver->full_name).'.pdf';
+            [$pdf, $filename] = $this->makeAgreementPdf($agreement);
 
             return $pdf->download($filename);
-
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to generate PDF: '.$e->getMessage());
         }
+    }
+
+    public function previewPDF(Agreement $agreement)
+    {
+        try {
+            [$pdf, $filename] = $this->makeAgreementPdf($agreement);
+
+            return $pdf->stream($filename);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to preview PDF: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * @return array{0: \Barryvdh\DomPDF\PDF, 1: string}
+     */
+    private function makeAgreementPdf(Agreement $agreement): array
+    {
+        $agreement->load([
+            'company', 'driver', 'car', 'car.carModel', 'status', 'insuranceProvider',
+        ]);
+
+        $data = [
+            'agreement' => $agreement,
+            'driver' => $agreement->driver,
+            'car' => $agreement->car,
+            'company' => $agreement->company,
+            'currentDate' => Carbon::now()->format('d/m/Y'),
+        ];
+
+        $pdf = PDF::loadView($this->dir.'.agreement_pdf', $data);
+        $pdf->setPaper('A4', 'portrait');
+
+        $filename = 'Agreement_'.$agreement->id.'_'.str_replace(' ', '_', $agreement->driver->full_name).'.pdf';
+
+        return [$pdf, $filename];
     }
 
     /**
