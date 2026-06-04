@@ -903,11 +903,6 @@
             ownInsuranceEndDate.addEventListener('blur', validateInsuranceDates);
             mileageInInput.addEventListener('change', validateMileage);
 
-            // Set minimum date/time for start (now)
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            startDateInput.setAttribute('min', now.toISOString().slice(0, 16));
-
             // Auto populate agreed rent in collection amounts
             document.getElementById('agreed_rent').addEventListener('change', function() {
                 const agreedRent = this.value;
