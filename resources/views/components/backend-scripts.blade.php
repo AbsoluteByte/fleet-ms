@@ -1,4 +1,11 @@
 <!-- BEGIN: Vendor JS-->
+<script>
+window.paceOptions = {
+    ajax: {
+        trackWebSockets: false
+    }
+};
+</script>
 <script src="{{ asset('app-assets/vendors/js/vendors.min.js') }}"></script>
 <!-- BEGIN Vendor JS-->
 
@@ -7,6 +14,12 @@
 <script src="{{ asset('app-assets/vendors/js/ui/jquery.sticky.js') }}"></script>
 <script src="{{ asset('app-assets/vendors/js/extensions/tether.min.js') }}"></script>
 <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
+<script>
+window.fleetiqScannerAssets = {
+    js: @json(asset('app-assets/vendors/js/scannerjs/scanner.js')),
+    css: @json(asset('app-assets/vendors/js/scannerjs/scanner.css'))
+};
+</script>
 {{--
 <script src="{{ asset('app-assets/vendors/js/extensions/shepherd.min.js') }}"></script>
 --}}
@@ -18,6 +31,7 @@
 <script src="{{ asset('app-assets/js/scripts/components.js') }}"></script>
 <script src="{{ asset('app-assets/js/scripts/navs/navs.js') }}"></script>
 <script src="{{ asset('app-assets/js/scripts/extensions/toastr.js') }}"></script>
+<script src="{{ asset('app-assets/js/scripts/fleetiq-scanner-uploads.js') }}"></script>
 <!-- END: Theme JS-->
 
 <script>

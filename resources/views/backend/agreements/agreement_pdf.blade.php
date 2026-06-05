@@ -9,7 +9,7 @@
         body {
             font-family: Arial, sans-serif;
             font-size: 10.5px;
-            line-height: 1.45;
+            line-height: 1.20;
             color: #000;
             padding: 25px 30px;
         }
@@ -83,8 +83,8 @@
             background-color: #b0b0b0;
             font-weight: bold;
             font-style: italic;
-            font-size: 11px;
-            padding: 5px 8px;
+            font-size: 10px;
+            padding: 4px 7px;
             margin: 8px 0;
             border: 1px solid #888;
         }
@@ -92,19 +92,19 @@
         /* ── CONDITIONS LIST ── */
         .cond-list {
             padding-left: 20px;
-            margin: 6px 0;
+            margin: 5px 0;
         }
         .cond-list li {
-            margin-bottom: 4px;
+            margin-bottom: 3px;
             text-align: justify;
-            font-size: 10.5px;
+            font-size: 10.2px;
         }
 
         /* DEPOSITS note */
         .deposit-note {
             text-align: center;
-            font-size: 10.5px;
-            margin: 8px 0;
+            font-size: 10.2px;
+            margin: 6px 0;
         }
 
         /* ── VEHICLE CONDITION ── gray left-aligned header */

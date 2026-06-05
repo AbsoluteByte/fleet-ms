@@ -39,6 +39,7 @@
 
 <!-- BEGIN: Footer-->
 <x-backend-footer/><!-- END: Footer-->
+<x-backend-scanner-modal/>
 
 <x-backend-scripts/>
 @stack('jsFiles')

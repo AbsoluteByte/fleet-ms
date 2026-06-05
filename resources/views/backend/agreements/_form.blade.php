@@ -713,33 +713,94 @@
             ];
         }));
 
+        function setSelectValue(selectOrId, value) {
+            const select = typeof selectOrId === 'string'
+                ? document.getElementById(selectOrId.replace(/^#/, ''))
+                : selectOrId;
+
+            if (!select) {
+                return;
+            }
+
+            const normalizedValue = value == null ? '' : String(value);
+
+            if (typeof $ !== 'undefined' && $.fn.select2 && $(select).hasClass('select2-hidden-accessible')) {
+                $(select).val(normalizedValue).trigger('change');
+                return;
+            }
+
+            select.value = normalizedValue;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function syncCompanyFromVehicle() {
+            const carSelect = document.getElementById('car_id');
+
+            if (!carSelect) {
+                return;
+            }
+
+            const selectedOption = carSelect.options[carSelect.selectedIndex];
+            const companyId = selectedOption ? selectedOption.getAttribute('data-company-id') : null;
+
+            if (companyId) {
+                setSelectValue('company_id', companyId);
+            }
+        }
+
         // Filter insurance providers based on selected company
         function filterInsuranceProviders() {
             const companyId = document.getElementById('company_id').value;
             const insuranceProviderSelect = document.getElementById('insurance_provider_id');
-            const selectedProviderId = insuranceProviderSelect.value; // Store current selection
+            const selectedProviderId = insuranceProviderSelect.value;
+            const $insuranceProviderSelect = typeof $ !== 'undefined' ? $(insuranceProviderSelect) : null;
+            const usesSelect2 = $insuranceProviderSelect
+                && $.fn.select2
+                && $insuranceProviderSelect.hasClass('select2-hidden-accessible');
 
-            // Clear existing options except the first one
+            if (usesSelect2) {
+                $insuranceProviderSelect.empty().append(new Option('Select Insurance Provider', '', false, false));
+
+                if (companyId) {
+                    allInsuranceProviders
+                        .filter(provider => provider.company_id == companyId)
+                        .forEach(provider => {
+                            const option = new Option(
+                                provider.provider_name,
+                                provider.id,
+                                false,
+                                provider.id == selectedProviderId
+                            );
+                            option.setAttribute('data-company-id', provider.company_id);
+                            $insuranceProviderSelect.append(option);
+                        });
+                }
+
+                const stillValid = companyId && allInsuranceProviders.some(function (provider) {
+                    return provider.company_id == companyId && provider.id == selectedProviderId;
+                });
+
+                $insuranceProviderSelect.val(stillValid ? selectedProviderId : '').trigger('change.select2');
+                return;
+            }
+
             insuranceProviderSelect.innerHTML = '<option value="">Select Insurance Provider</option>';
 
             if (companyId) {
-                // Filter providers by company_id
-                const filteredProviders = allInsuranceProviders.filter(provider => provider.company_id == companyId);
+                allInsuranceProviders
+                    .filter(provider => provider.company_id == companyId)
+                    .forEach(provider => {
+                        const option = document.createElement('option');
+                        option.value = provider.id;
+                        option.textContent = provider.provider_name;
+                        option.setAttribute('data-company-id', provider.company_id);
 
-                // Add filtered options
-                filteredProviders.forEach(provider => {
-                    const option = document.createElement('option');
-                    option.value = provider.id;
-                    option.textContent = provider.provider_name;
-                    option.setAttribute('data-company-id', provider.company_id);
+                        if (provider.id == selectedProviderId) {
+                            option.selected = true;
+                        }
 
-                    // Restore selection if it matches
-                    if (provider.id == selectedProviderId) {
-                        option.selected = true;
-                    }
-
-                    insuranceProviderSelect.appendChild(option);
-                });
+                        insuranceProviderSelect.appendChild(option);
+                    });
             }
         }
 
@@ -753,7 +814,7 @@
             if (usingOwnInsuranceClient.checked) {
                 providerSection.style.display = 'none';
                 ownSection.style.display = 'block';
-                document.getElementById('insurance_provider_id').value = '';
+                setSelectValue('insurance_provider_id', '');
             } else if (usingOwnInsuranceCompany.checked) {
                 providerSection.style.display = 'block';
                 ownSection.style.display = 'none';
@@ -991,21 +1052,10 @@
                 });
             }
 
-            if (typeof $ !== 'undefined' && $.fn.select2) {
-                $('#car_id, #driver_id').select2({
-                    width: '100%',
-                    placeholder: 'Search…',
-                });
-
-                $('#car_id').on('change', function() {
-                    const selectedOption = this.options[this.selectedIndex];
-                    const companyId = selectedOption ? selectedOption.getAttribute('data-company-id') : null;
-
-                    if (companyId) {
-                        document.getElementById('company_id').value = companyId;
-                        filterInsuranceProviders();
-                    }
-                });
+            if (typeof $ !== 'undefined') {
+                $('#car_id').on('change', syncCompanyFromVehicle);
+            } else {
+                document.getElementById('car_id')?.addEventListener('change', syncCompanyFromVehicle);
             }
         });
 
