@@ -1,7 +1,5 @@
 @extends('layouts.admin', ['title' => 'Edit vehicle swap'])
 @section('css')
-    <link rel="stylesheet" type="text/css"
-          href="{{ asset('app-assets/vendors/css/forms/select/select2.min.css') }}">
     <style>
         .vehicle-swap-form-card > .card-header {
             padding-bottom: 1.25rem;
@@ -44,7 +42,6 @@
 @endsection
 @section('js')
     @php use App\Models\VehicleSwap; @endphp
-    <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
     <script>
         $(document).ready(function () {
             const SWAP_REASON_PHVL = @json(VehicleSwap::REASON_PHVL_ISSUES);

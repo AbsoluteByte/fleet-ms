@@ -148,8 +148,9 @@
         </h5>
     </div>
     <div class="card-body">
+        <input type="hidden" name="auto_schedule_collections" value="0">
         <div class="row">
-            <div class="col-md-6">
+            <div class="col-md-3">
                 <div class="mb-3">
                     <label for="agreed_rent" class="form-label">Agreed Rent *</label>
                     <div class="input-group">
@@ -163,7 +164,36 @@
                     @enderror
                 </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="collection_type" class="form-label">Collection Type *</label>
+                    <select name="collection_type" id="collection_type" class="form-control @error('collection_type') is-invalid @enderror" required>
+                        <option value="">Select Collection Type</option>
+                        <option value="weekly" {{ (old('collection_type') ?? (isset($model) ? $model->collection_type : '')) == 'weekly' ? 'selected' : '' }}>Weekly</option>
+                        <option value="monthly" {{ (old('collection_type') ?? (isset($model) ? $model->collection_type : '')) == 'monthly' ? 'selected' : '' }}>Monthly</option>
+                        <option value="static" {{ (old('collection_type') ?? (isset($model) ? $model->collection_type : '')) == 'static' ? 'selected' : '' }}>One-time</option>
+                    </select>
+                    @error('collection_type')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="rent_interval" class="form-label">Rent Interval *</label>
+                    <select name="rent_interval" id="rent_interval" class="form-control @error('rent_interval') is-invalid @enderror" required>
+                        <option value="">Select Interval</option>
+                        <option value="Weekly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Weekly' ? 'selected' : '' }}>Weekly</option>
+                        <option value="Monthly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Monthly' ? 'selected' : '' }}>Monthly</option>
+                        <option value="Quarterly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Quarterly' ? 'selected' : '' }}>Quarterly</option>
+                        <option value="Yearly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Yearly' ? 'selected' : '' }}>Yearly</option>
+                    </select>
+                    @error('rent_interval')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+            <div class="col-md-3">
                 <div class="mb-3">
                     <label for="deposit_amount" class="form-label">Deposit Amount *</label>
                     <div class="input-group">
@@ -441,116 +471,109 @@
     </div>
 </div>
 
-<!-- Collection Schedule -->
-<div class="card mb-2">
-    <div class="card-header">
-        <h5 class="card-title mb-0">
-            <i class="fa fa-calendar-alt me-2"></i>
-            Collection Schedule
-        </h5>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label for="collection_type" class="form-label">Collection Type *</label>
-                    <select name="collection_type" id="collection_type" class="form-control @error('collection_type') is-invalid @enderror" required>
-                        <option value="">Select Collection Type</option>
-                        <option value="weekly" {{ (old('collection_type') ?? (isset($model) ? $model->collection_type : '')) == 'weekly' ? 'selected' : '' }}>Weekly (Every 7 days)</option>
-                        <option value="monthly" {{ (old('collection_type') ?? (isset($model) ? $model->collection_type : '')) == 'monthly' ? 'selected' : '' }}>Monthly</option>
-                        <option value="static" {{ (old('collection_type') ?? (isset($model) ? $model->collection_type : '')) == 'static' ? 'selected' : '' }}>One-time Payment</option>
-                    </select>
-                    @error('collection_type')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-            </div>
-
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <div class="form-check form-switch mt-4">
-                        <input class="form-check-input" type="checkbox" name="auto_schedule_collections"
-                               id="auto_schedule_collections" value="1"
-                            {{ (old('auto_schedule_collections') ?? (isset($model) ? $model->auto_schedule_collections : true)) ? 'checked' : '' }}>
-                        <label class="form-check-label" for="auto_schedule_collections">
-                            Auto Schedule Collections
-                        </label>
-                    </div>
-                    <small class="text-muted">Automatically create payment schedules based on collection type</small>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Optional Payment -->
+@php
+    $agreementPaymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
+    $agreementPaymentRows = old('agreement_payments', [
+        ['payment_method' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
+    ]);
+    $agreementPaymentRows = is_array($agreementPaymentRows) && $agreementPaymentRows !== [] ? array_values($agreementPaymentRows) : [
+        ['payment_method' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
+    ];
+    $agreementPaymentAllowed = $agreementPaymentAllowed ?? true;
+    $agreementPaymentLimit = $agreementPaymentLimit ?? null;
+@endphp
 <div class="card mb-2">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
             <i class="fa fa-credit-card me-2"></i>
             Add Payment
         </h5>
-    </div>
-    <div class="card-body">
-        <input type="hidden" name="add_payment" value="0">
-        <div class="form-check mb-2">
+        <div class="form-check mb-0">
+            <input type="hidden" name="add_payment" value="0">
             <input class="form-check-input" type="checkbox" name="add_payment" id="add_payment" value="1"
-                {{ old('add_payment') ? 'checked' : '' }}>
+                {{ old('add_payment') ? 'checked' : '' }}
+                {{ $agreementPaymentAllowed ? '' : 'disabled' }}>
             <label class="form-check-label" for="add_payment">
                 Add payment with this agreement
             </label>
         </div>
-        <div id="agreement-payment-fields" style="display: none;">
-            <div class="row">
-                <div class="col-md-4 mb-2">
-                    <label for="agreement_payment_method" class="form-label">Payment Method</label>
-                    @php
-                        $selectedAgreementPaymentMethod = old('agreement_payment_method');
-                        $agreementPaymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
-                    @endphp
-                    <select name="agreement_payment_method" id="agreement_payment_method"
-                            class="form-control @error('agreement_payment_method') is-invalid @enderror">
-                        <option value="">Select Method</option>
-                        @foreach($agreementPaymentMethods as $paymentMethod)
-                            <option value="{{ $paymentMethod }}" {{ $selectedAgreementPaymentMethod === $paymentMethod ? 'selected' : '' }}>
-                                {{ $paymentMethod }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('agreement_payment_method')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-                <div class="col-md-4 mb-2">
-                    <label for="agreement_payment_date" class="form-label">Payment Date</label>
-                    <input type="date" name="agreement_payment_date" id="agreement_payment_date"
-                           class="form-control @error('agreement_payment_date') is-invalid @enderror"
-                           value="{{ old('agreement_payment_date', now()->toDateString()) }}">
-                    @error('agreement_payment_date')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-                <div class="col-md-4 mb-2">
-                    <label for="agreement_payment_amount" class="form-label">Amount</label>
-                    <input type="number" name="agreement_payment_amount" id="agreement_payment_amount"
-                           class="form-control @error('agreement_payment_amount') is-invalid @enderror"
-                           value="{{ old('agreement_payment_amount') }}" min="0.01" step="0.01" placeholder="0.00">
-                    @error('agreement_payment_amount')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-                <div class="col-12 mb-2">
-                    <label for="agreement_payment_notes" class="form-label">Payment Notes</label>
-                    <textarea name="agreement_payment_notes" id="agreement_payment_notes" rows="2"
-                              class="form-control @error('agreement_payment_notes') is-invalid @enderror"
-                              placeholder="Optional payment notes">{{ old('agreement_payment_notes') }}</textarea>
-                    @error('agreement_payment_notes')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
+    </div>
+    <div class="card-body">
+        @if(! $agreementPaymentAllowed)
+            <div class="alert alert-info mb-0">
+                Payments can only be added when this agreement has an unpaid invoice balance.
             </div>
+        @endif
+        <div id="agreement-payment-fields"
+             data-edit-mode="{{ isset($model->id) ? '1' : '0' }}"
+             data-server-limit="{{ $agreementPaymentLimit !== null ? number_format((float) $agreementPaymentLimit, 2, '.', '') : '' }}"
+             style="display: none;">
+            <div class="alert alert-info py-2" id="agreement-payment-limit-message"></div>
+            <div id="agreement-payment-rows">
+                @foreach($agreementPaymentRows as $paymentIndex => $paymentRow)
+                    <div class="agreement-payment-row border rounded p-2 mb-2" data-payment-row>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Payment Method <span class="text-danger">*</span></label>
+                                <select name="agreement_payments[{{ $paymentIndex }}][payment_method]"
+                                        class="form-control @error('agreement_payments.'.$paymentIndex.'.payment_method') is-invalid @enderror"
+                                        data-payment-method>
+                                    <option value="">Select Method</option>
+                                    @foreach($agreementPaymentMethods as $paymentMethod)
+                                        <option value="{{ $paymentMethod }}" {{ ($paymentRow['payment_method'] ?? '') === $paymentMethod ? 'selected' : '' }}>
+                                            {{ $paymentMethod }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('agreement_payments.'.$paymentIndex.'.payment_method')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Payment Date <span class="text-danger">*</span></label>
+                                <input type="date" name="agreement_payments[{{ $paymentIndex }}][payment_date]"
+                                       class="form-control @error('agreement_payments.'.$paymentIndex.'.payment_date') is-invalid @enderror"
+                                       value="{{ $paymentRow['payment_date'] ?? now()->toDateString() }}"
+                                       data-payment-date>
+                                @error('agreement_payments.'.$paymentIndex.'.payment_date')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Amount <span class="text-danger">*</span></label>
+                                <input type="number" name="agreement_payments[{{ $paymentIndex }}][amount]"
+                                       class="form-control agreement-payment-amount @error('agreement_payments.'.$paymentIndex.'.amount') is-invalid @enderror"
+                                       value="{{ $paymentRow['amount'] ?? '' }}" min="0.01" step="0.01" placeholder="0.00"
+                                       data-payment-amount>
+                                @error('agreement_payments.'.$paymentIndex.'.amount')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+                            <div class="col-md-3 mb-2 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-danger btn-sm agreement-payment-remove" data-remove-payment>
+                                    Remove
+                                </button>
+                            </div>
+                            <div class="col-12 mb-2">
+                                <label class="form-label">Payment Notes</label>
+                                <textarea name="agreement_payments[{{ $paymentIndex }}][notes]" rows="2"
+                                          class="form-control @error('agreement_payments.'.$paymentIndex.'.notes') is-invalid @enderror"
+                                          placeholder="Optional payment notes"
+                                          data-payment-notes>{{ $paymentRow['notes'] ?? '' }}</textarea>
+                                @error('agreement_payments.'.$paymentIndex.'.notes')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="agreement-payment-add-more">
+                <i class="fa fa-plus"></i> Add More
+            </button>
             <small class="text-muted">
-                Payment will be auto-managed against this driver's active invoices. Any extra amount will remain as driver credit.
+                Payments from this form will only be applied to this agreement's unpaid rent/deposit invoices.
             </small>
         </div>
     </div>
@@ -565,24 +588,6 @@
         </h5>
     </div>
     <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label for="rent_interval" class="form-label">Rent Interval *</label>
-                    <select name="rent_interval" id="rent_interval" class="form-control @error('rent_interval') is-invalid @enderror" required>
-                        <option value="">Select Interval</option>
-                        <option value="Weekly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Weekly' ? 'selected' : '' }}>Weekly</option>
-                        <option value="Monthly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Monthly' ? 'selected' : '' }}>Monthly</option>
-                        <option value="Quarterly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Quarterly' ? 'selected' : '' }}>Quarterly</option>
-                        <option value="Yearly" {{ (old('rent_interval') ?? (isset($model) ? $model->rent_interval : '')) == 'Yearly' ? 'selected' : '' }}>Yearly</option>
-                    </select>
-                    @error('rent_interval')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-            </div>
-        </div>
-
         <div class="mb-3">
             <label for="condition_report" class="form-label">Condition Report</label>
             <textarea name="condition_report" id="condition_report"
@@ -618,8 +623,6 @@
 </div>
 
 @push('css')
-    <link rel="stylesheet" type="text/css"
-          href="{{ asset('app-assets/vendors/css/forms/select/select2.min.css') }}">
     <style>
         .discount-type-group {
             display: flex;
@@ -700,7 +703,6 @@
 @endpush
 
 @push('js')
-    <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
     <script>
         // Store all insurance providers with their company IDs
         const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
@@ -768,6 +770,129 @@
             }
 
             paymentFields.style.display = addPaymentCheckbox.checked ? 'block' : 'none';
+            updateAgreementPaymentLimits();
+        }
+
+        const agreementPaymentMethods = @json($agreementPaymentMethods);
+        const defaultAgreementPaymentDate = @json(now()->toDateString());
+
+        function money(value) {
+            return '£' + Number(value || 0).toFixed(2);
+        }
+
+        function agreementPaymentRows() {
+            return Array.from(document.querySelectorAll('[data-payment-row]'));
+        }
+
+        function agreementPaymentTotal(exceptInput = null) {
+            return agreementPaymentRows().reduce(function(total, row) {
+                const input = row.querySelector('[data-payment-amount]');
+
+                if (!input || input === exceptInput) {
+                    return total;
+                }
+
+                return total + Number(input.value || 0);
+            }, 0);
+        }
+
+        function agreementPaymentLimit() {
+            const fields = document.getElementById('agreement-payment-fields');
+
+            if (!fields) {
+                return 0;
+            }
+
+            const serverLimit = fields.dataset.serverLimit;
+
+            if (serverLimit !== '') {
+                return Number(serverLimit || 0);
+            }
+
+            return Number(document.getElementById('agreed_rent')?.value || 0)
+                + Number(document.getElementById('deposit_amount')?.value || 0);
+        }
+
+        function paymentRowTemplate(index) {
+            const methodOptions = agreementPaymentMethods.map(function(method) {
+                return '<option value="' + method + '">' + method + '</option>';
+            }).join('');
+
+            return '<div class="agreement-payment-row border rounded p-2 mb-2" data-payment-row>' +
+                '<div class="row">' +
+                    '<div class="col-md-3 mb-2">' +
+                        '<label class="form-label">Payment Method <span class="text-danger">*</span></label>' +
+                        '<select name="agreement_payments[' + index + '][payment_method]" class="form-control" data-payment-method>' +
+                            '<option value="">Select Method</option>' + methodOptions +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="col-md-3 mb-2">' +
+                        '<label class="form-label">Payment Date <span class="text-danger">*</span></label>' +
+                        '<input type="date" name="agreement_payments[' + index + '][payment_date]" class="form-control" value="' + defaultAgreementPaymentDate + '" data-payment-date>' +
+                    '</div>' +
+                    '<div class="col-md-3 mb-2">' +
+                        '<label class="form-label">Amount <span class="text-danger">*</span></label>' +
+                        '<input type="number" name="agreement_payments[' + index + '][amount]" class="form-control agreement-payment-amount" min="0.01" step="0.01" placeholder="0.00" data-payment-amount>' +
+                    '</div>' +
+                    '<div class="col-md-3 mb-2 d-flex align-items-end">' +
+                        '<button type="button" class="btn btn-outline-danger btn-sm agreement-payment-remove" data-remove-payment>Remove</button>' +
+                    '</div>' +
+                    '<div class="col-12 mb-2">' +
+                        '<label class="form-label">Payment Notes</label>' +
+                        '<textarea name="agreement_payments[' + index + '][notes]" rows="2" class="form-control" placeholder="Optional payment notes" data-payment-notes></textarea>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function reindexAgreementPaymentRows() {
+            agreementPaymentRows().forEach(function(row, index) {
+                row.querySelectorAll('[name]').forEach(function(input) {
+                    input.name = input.name.replace(/agreement_payments\[\d+\]/, 'agreement_payments[' + index + ']');
+                });
+            });
+        }
+
+        function updateAgreementPaymentLimits(changedInput = null) {
+            const fields = document.getElementById('agreement-payment-fields');
+            const addMore = document.getElementById('agreement-payment-add-more');
+            const message = document.getElementById('agreement-payment-limit-message');
+            const limit = agreementPaymentLimit();
+            const rows = agreementPaymentRows();
+            let total = agreementPaymentTotal();
+
+            rows.forEach(function(row) {
+                const amountInput = row.querySelector('[data-payment-amount]');
+
+                if (!amountInput) {
+                    return;
+                }
+
+                const otherTotal = agreementPaymentTotal(amountInput);
+                const maxAllowed = Math.max(limit - otherTotal, 0);
+                amountInput.max = maxAllowed.toFixed(2);
+
+                if ((!changedInput || changedInput === amountInput) && Number(amountInput.value || 0) > maxAllowed) {
+                    amountInput.value = maxAllowed > 0 ? maxAllowed.toFixed(2) : '';
+                }
+            });
+
+            total = agreementPaymentTotal();
+            const remaining = Math.max(limit - total, 0);
+
+            if (message) {
+                message.textContent = 'Payment limit: ' + money(limit) + '. Added: ' + money(total) + '. Remaining: ' + money(remaining) + '.';
+            }
+
+            if (addMore) {
+                addMore.style.display = remaining > 0.009 ? '' : 'none';
+            }
+
+            if (fields) {
+                fields.querySelectorAll('[data-remove-payment]').forEach(function(button) {
+                    button.style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+                });
+            }
         }
 
         // Clear own insurance fields
@@ -814,6 +939,41 @@
             filterInsuranceProviders();
 
             document.getElementById('add_payment')?.addEventListener('change', toggleAgreementPaymentFields);
+            document.getElementById('agreed_rent')?.addEventListener('input', function() {
+                updateAgreementPaymentLimits();
+            });
+            document.getElementById('deposit_amount')?.addEventListener('input', function() {
+                updateAgreementPaymentLimits();
+            });
+            document.getElementById('agreement-payment-add-more')?.addEventListener('click', function() {
+                const rowsContainer = document.getElementById('agreement-payment-rows');
+
+                if (!rowsContainer) {
+                    return;
+                }
+
+                rowsContainer.insertAdjacentHTML('beforeend', paymentRowTemplate(agreementPaymentRows().length));
+                updateAgreementPaymentLimits();
+            });
+            document.getElementById('agreement-payment-rows')?.addEventListener('input', function(event) {
+                if (event.target.matches('[data-payment-amount]')) {
+                    updateAgreementPaymentLimits(event.target);
+                }
+            });
+            document.getElementById('agreement-payment-rows')?.addEventListener('click', function(event) {
+                if (!event.target.matches('[data-remove-payment]')) {
+                    return;
+                }
+
+                const row = event.target.closest('[data-payment-row]');
+
+                if (row && agreementPaymentRows().length > 1) {
+                    row.remove();
+                    reindexAgreementPaymentRows();
+                    updateAgreementPaymentLimits();
+                }
+            });
+            updateAgreementPaymentLimits();
             document.getElementById('using_own_insurance_client').addEventListener('change', toggleInsuranceSections);
             document.getElementById('using_own_insurance_company').addEventListener('change', toggleInsuranceSections);
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
@@ -903,15 +1063,8 @@
             ownInsuranceEndDate.addEventListener('blur', validateInsuranceDates);
             mileageInInput.addEventListener('change', validateMileage);
 
-            // Auto populate agreed rent in collection amounts
-            document.getElementById('agreed_rent').addEventListener('change', function() {
-                const agreedRent = this.value;
-                const amountInputs = document.querySelectorAll('input[name*="[amount]"]');
-                amountInputs.forEach(input => {
-                    if (!input.value) {
-                        input.value = agreedRent;
-                    }
-                });
+            document.getElementById('agreed_rent')?.addEventListener('change', function() {
+                updateAgreementPaymentLimits();
             });
         });
 

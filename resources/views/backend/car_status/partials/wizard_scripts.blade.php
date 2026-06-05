@@ -1,5 +1,4 @@
 @php use App\Models\VehicleSwap; @endphp
-<script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
 <script>
     $(document).ready(function () {
         const SWAP_REASON_PHVL = @json(VehicleSwap::REASON_PHVL_ISSUES);

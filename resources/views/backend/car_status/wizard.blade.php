@@ -13,11 +13,6 @@
 
 @extends('layouts.admin', ['title' => 'Car Status'])
 
-@section('css')
-    <link rel="stylesheet" type="text/css"
-          href="{{ asset('app-assets/vendors/css/forms/select/select2.min.css') }}">
-@endsection
-
 @section('content')
     <section>
         <div class="row">

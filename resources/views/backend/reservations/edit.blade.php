@@ -1,7 +1,5 @@
 @extends('layouts.admin', ['title' => 'Edit reservation'])
 @section('css')
-    <link rel="stylesheet" type="text/css"
-          href="{{ asset('app-assets/vendors/css/forms/select/select2.min.css') }}">
     <style>
         .reservation-form-card > .card-header {
             padding-bottom: 1.25rem;
@@ -140,7 +138,6 @@
     </section>
 @endsection
 @section('js')
-    <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
     <script>
         $(document).ready(function () {
             $('#reservation_car_id').select2({

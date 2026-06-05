@@ -36,7 +36,7 @@ class AgreementInvoiceService
         $throughDate = $throughDate?->copy()->startOfDay() ?? now()->startOfDay();
         $currentDate = $agreement->start_date->copy()->startOfDay();
         $endDate = $agreement->end_date->copy()->startOfDay()->min($throughDate);
-        $generated = 0;
+        $generated = $this->syncDepositInvoice($agreement) ? 1 : 0;
 
         while ($currentDate <= $endDate) {
             if ($this->createInvoiceForDate($agreement, $currentDate)) {
@@ -47,6 +47,77 @@ class AgreementInvoiceService
         }
 
         return $generated;
+    }
+
+    private function syncDepositInvoice(Agreement $agreement): bool
+    {
+        $depositAmount = round((float) $agreement->deposit_amount, 2);
+
+        if ($depositAmount <= 0) {
+            $invoice = Invoice::query()
+                ->where('invoice_type', 'agreement_deposit')
+                ->where('source_id', $agreement->id)
+                ->first();
+
+            if ($invoice && (float) $invoice->paid_amount <= 0 && $invoice->paymentAllocations()->count() === 0) {
+                $invoice->delete();
+            }
+
+            return false;
+        }
+
+        $invoiceDate = $agreement->start_date->copy()->startOfDay();
+        $dueDate = $invoiceDate->copy()->addDays(5);
+
+        $invoice = Invoice::query()
+            ->where('invoice_type', 'agreement_deposit')
+            ->where('source_id', $agreement->id)
+            ->first();
+
+        if ($invoice) {
+            if ((float) $invoice->paid_amount > 0) {
+                return false;
+            }
+
+            $invoice->update([
+                'driver_id' => $agreement->driver_id,
+                'invoice_date' => $invoiceDate->toDateString(),
+                'due_date' => $dueDate->toDateString(),
+                'subtotal' => $depositAmount,
+                'discount_amount' => 0,
+                'discount_description' => null,
+                'tax_amount' => 0,
+                'total_amount' => $depositAmount,
+                'balance_amount' => $depositAmount,
+                'status' => $dueDate->lt(now()->startOfDay()) ? 'overdue' : 'pending',
+                'notes' => 'Auto-generated agreement deposit invoice',
+            ]);
+
+            app(PaymentAllocationService::class)->allocateAvailableCreditToInvoice($invoice);
+
+            return false;
+        }
+
+        $invoice = Invoice::create([
+            'driver_id' => $agreement->driver_id,
+            'source_id' => $agreement->id,
+            'invoice_type' => 'agreement_deposit',
+            'invoice_date' => $invoiceDate->toDateString(),
+            'due_date' => $dueDate->toDateString(),
+            'subtotal' => $depositAmount,
+            'discount_amount' => 0,
+            'discount_description' => null,
+            'tax_amount' => 0,
+            'total_amount' => $depositAmount,
+            'paid_amount' => 0,
+            'balance_amount' => $depositAmount,
+            'status' => $dueDate->lt(now()->startOfDay()) ? 'overdue' : 'pending',
+            'notes' => 'Auto-generated agreement deposit invoice',
+        ]);
+
+        app(PaymentAllocationService::class)->allocateAvailableCreditToInvoice($invoice);
+
+        return true;
     }
 
     private function createInvoiceForDate(Agreement $agreement, Carbon $invoiceDate): bool

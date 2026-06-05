@@ -2,8 +2,6 @@
 
 @section('css')
     @unless($selectedCar)
-        <link rel="stylesheet" type="text/css"
-              href="{{ asset('app-assets/vendors/css/forms/select/select2.min.css') }}">
         <style>
             .car-service-select-wrap {
                 min-width: 280px;
@@ -176,7 +174,6 @@
 
 @section('js')
     @unless($selectedCar)
-        <script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
         <script>
             $(function () {
                 $('#car_id').select2({

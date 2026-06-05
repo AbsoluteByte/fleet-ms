@@ -189,7 +189,8 @@
                             @php
                                 try {
                                     $countries = \App\Models\Country::select('name', 'id')->get()->pluck('name', 'id');
-                                    $selectedCountry = old('country_id') ?? ($model->country_id ?? '');
+                                    $defaultCountryId = $countries->search('United Kingdom');
+                                    $selectedCountry = old('country_id') ?? ($model->country_id ?? ($defaultCountryId ?: ''));
                                 } catch (\Exception $e) {
                                      $countries = collect();
                                      $selectedCountry = old('country_id') ?? '';

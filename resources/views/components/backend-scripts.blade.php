@@ -6,6 +6,7 @@
 
 <script src="{{ asset('app-assets/vendors/js/ui/jquery.sticky.js') }}"></script>
 <script src="{{ asset('app-assets/vendors/js/extensions/tether.min.js') }}"></script>
+<script src="{{ asset('app-assets/vendors/js/forms/select/select2.full.min.js') }}"></script>
 {{--
 <script src="{{ asset('app-assets/vendors/js/extensions/shepherd.min.js') }}"></script>
 --}}
@@ -46,5 +47,53 @@
         e.preventDefault();
         scrollFromWheel(e.deltaY, e.deltaX, el);
     }, { passive: false });
+})();
+</script>
+
+<script>
+(function () {
+    function initBackendSelect2(root) {
+        if (!window.jQuery || !jQuery.fn.select2) {
+            return;
+        }
+
+        const scope = root || document;
+        jQuery(scope)
+            .find('select.form-control, select.custom-select')
+            .not('.select2-hidden-accessible, .no-select2')
+            .each(function () {
+                const $select = jQuery(this);
+                const placeholder = $select.find('option[value=""]').first().text() || 'Select';
+
+                $select.select2({
+                    width: '100%',
+                    placeholder: placeholder,
+                    allowClear: !$select.prop('required')
+                });
+            });
+    }
+
+    window.initBackendSelect2 = initBackendSelect2;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        initBackendSelect2(document);
+
+        if (window.MutationObserver) {
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    mutation.addedNodes.forEach(function (node) {
+                        if (node.nodeType === 1) {
+                            initBackendSelect2(node);
+                        }
+                    });
+                });
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
+    });
 })();
 </script>

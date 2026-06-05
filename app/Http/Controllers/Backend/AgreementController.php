@@ -7,6 +7,7 @@ use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
+use App\Models\Invoice;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
 use App\Services\AgreementInvoiceService;
@@ -72,7 +73,10 @@ class AgreementController extends Controller
 
         $canManageDiscount = $this->canManageDiscount();
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount'));
+        $agreementPaymentLimit = null;
+        $agreementPaymentAllowed = true;
+
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed'));
     }
 
     public function store(Request $request)
@@ -122,14 +126,20 @@ class AgreementController extends Controller
             'collections.*.method' => 'required_if:auto_schedule_collections,0|nullable|string',
             'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
             'add_payment' => 'boolean',
-            'agreement_payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
-            'agreement_payment_date' => 'required_if:add_payment,1|nullable|date',
-            'agreement_payment_amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
-            'agreement_payment_notes' => 'nullable|string',
+            'agreement_payments' => 'required_if:add_payment,1|array',
+            'agreement_payments.*.payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
+            'agreement_payments.*.payment_date' => 'required_if:add_payment,1|nullable|date',
+            'agreement_payments.*.amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
+            'agreement_payments.*.notes' => 'nullable|string',
         ]);
         $this->assertEndDateOnOrAfterStartDate($validated);
-        $validated['auto_schedule_collections'] = $request->boolean('auto_schedule_collections');
+        $validated['auto_schedule_collections'] = false;
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request);
+        $this->assertAgreementPaymentLimit(
+            $agreementPaymentData,
+            round(((float) $validated['agreed_rent']) + ((float) $validated['deposit_amount']), 2),
+            'The total payment cannot be greater than agreed rent plus deposit amount.'
+        );
         try {
             $agreement = DB::transaction(function () use ($validated, $request, $tenant, $agreementPaymentData) {
                 $validated = $this->mergeInsuranceData($request, $validated);
@@ -160,12 +170,18 @@ class AgreementController extends Controller
 
                 app(AgreementInvoiceService::class)->generateForAgreement($agreement->fresh());
 
-                if ($agreementPaymentData) {
-                    app(PaymentAllocationService::class)->createPayment(
-                        $agreement->driver()->firstOrFail(),
-                        $agreementPaymentData,
-                        true
-                    );
+                if ($agreementPaymentData !== []) {
+                    $driver = $agreement->driver()->firstOrFail();
+                    $paymentService = app(PaymentAllocationService::class);
+
+                    foreach ($agreementPaymentData as $paymentData) {
+                        $paymentService->createPaymentForInvoices(
+                            $driver,
+                            $paymentData,
+                            $agreement->id,
+                            ['agreement', 'agreement_deposit']
+                        );
+                    }
                 }
 
                 return $agreement;
@@ -220,8 +236,10 @@ class AgreementController extends Controller
         $statuses = Status::where('type', 'agreement')->get();
 
         $canManageDiscount = $this->canManageDiscount();
+        $agreementPaymentLimit = $this->unpaidAgreementInvoiceBalance($agreement);
+        $agreementPaymentAllowed = $agreementPaymentLimit > 0;
 
-        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount'));
+        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed'));
     }
 
     public function update(Request $request, Agreement $agreement)
@@ -271,14 +289,20 @@ class AgreementController extends Controller
             'collections.*.method' => 'required_if:auto_schedule_collections,0|nullable|string',
             'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
             'add_payment' => 'boolean',
-            'agreement_payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
-            'agreement_payment_date' => 'required_if:add_payment,1|nullable|date',
-            'agreement_payment_amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
-            'agreement_payment_notes' => 'nullable|string',
+            'agreement_payments' => 'required_if:add_payment,1|array',
+            'agreement_payments.*.payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
+            'agreement_payments.*.payment_date' => 'required_if:add_payment,1|nullable|date',
+            'agreement_payments.*.amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
+            'agreement_payments.*.notes' => 'nullable|string',
         ]);
         $this->assertEndDateOnOrAfterStartDate($validated);
-        $validated['auto_schedule_collections'] = $request->boolean('auto_schedule_collections');
+        $validated['auto_schedule_collections'] = false;
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request);
+        $this->assertAgreementPaymentLimit(
+            $agreementPaymentData,
+            $this->unpaidAgreementInvoiceBalance($agreement),
+            'Payments can only be added up to this agreement\'s unpaid invoice balance.'
+        );
         try {
             $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant, $agreementPaymentData) {
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
@@ -316,12 +340,18 @@ class AgreementController extends Controller
 
                 app(AgreementInvoiceService::class)->generateForAgreement($agreement->fresh());
 
-                if ($agreementPaymentData) {
-                    app(PaymentAllocationService::class)->createPayment(
-                        $agreement->driver()->firstOrFail(),
-                        $agreementPaymentData,
-                        true
-                    );
+                if ($agreementPaymentData !== []) {
+                    $driver = $agreement->driver()->firstOrFail();
+                    $paymentService = app(PaymentAllocationService::class);
+
+                    foreach ($agreementPaymentData as $paymentData) {
+                        $paymentService->createPaymentForInvoices(
+                            $driver,
+                            $paymentData,
+                            $agreement->id,
+                            ['agreement', 'agreement_deposit']
+                        );
+                    }
                 }
 
                 return $agreement;
@@ -442,26 +472,62 @@ class AgreementController extends Controller
 
     private function prepareAgreementPaymentData(array $validated, Request $request): array
     {
-        $paymentData = null;
+        $paymentData = [];
 
         if ($request->boolean('add_payment')) {
-            $paymentData = [
-                'payment_method' => $validated['agreement_payment_method'],
-                'payment_date' => $validated['agreement_payment_date'],
-                'amount' => $validated['agreement_payment_amount'],
-                'notes' => $validated['agreement_payment_notes'] ?? null,
-            ];
+            foreach (($validated['agreement_payments'] ?? []) as $index => $paymentRow) {
+                if (! is_array($paymentRow) || empty($paymentRow['amount'])) {
+                    continue;
+                }
+
+                $paymentData[] = [
+                    'payment_method' => $paymentRow['payment_method'] ?? null,
+                    'payment_date' => $paymentRow['payment_date'] ?? null,
+                    'amount' => round((float) $paymentRow['amount'], 2),
+                    'notes' => $paymentRow['notes'] ?? null,
+                ];
+            }
+
+            if ($paymentData === []) {
+                throw ValidationException::withMessages([
+                    'agreement_payments.0.amount' => 'Add at least one payment amount.',
+                ]);
+            }
         }
 
         unset(
             $validated['add_payment'],
-            $validated['agreement_payment_method'],
-            $validated['agreement_payment_date'],
-            $validated['agreement_payment_amount'],
-            $validated['agreement_payment_notes']
+            $validated['agreement_payments']
         );
 
         return [$validated, $paymentData];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $payments
+     */
+    private function assertAgreementPaymentLimit(array $payments, float $limit, string $message): void
+    {
+        if ($payments === []) {
+            return;
+        }
+
+        $total = round(array_sum(array_map(fn ($payment) => (float) $payment['amount'], $payments)), 2);
+
+        if ($limit <= 0 || $total > round($limit, 2)) {
+            throw ValidationException::withMessages([
+                'agreement_payments.0.amount' => $message,
+            ]);
+        }
+    }
+
+    private function unpaidAgreementInvoiceBalance(Agreement $agreement): float
+    {
+        return round((float) Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->whereIn('invoice_type', ['agreement', 'agreement_deposit'])
+            ->where('balance_amount', '>', 0)
+            ->sum('balance_amount'), 2);
     }
 
     private function applyDiscountData(array $validated, Request $request, ?Agreement $existing = null): array
