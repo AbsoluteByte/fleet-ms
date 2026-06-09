@@ -151,7 +151,7 @@
                 <label for="fleet_swap_old_car_id">Old car (driver’s previous vehicle) <span
                             class="text-danger">*</span></label>
                 <select name="old_car_id" id="fleet_swap_old_car_id"
-                        class="form-control @error('old_car_id') is-invalid @enderror">
+                        class="form-control select-search @error('old_car_id') is-invalid @enderror">
                     <option value="">— Select —</option>
                     @foreach($cars as $car)
                         <option value="{{ $car->id }}"
@@ -314,7 +314,7 @@
             <div class="col-md-6 form-group">
                 <label for="fleet_damaged_driver_id">Driver</label>
                 <select name="payload[driver_id]" id="fleet_damaged_driver_id"
-                        class="form-control fleet-driver-select @error('payload.driver_id') is-invalid @enderror">
+                        class="form-control select-search @error('payload.driver_id') is-invalid @enderror">
                     <option value="">— Optional —</option>
                     @foreach($drivers as $driver)
                         <option value="{{ $driver->id }}"
@@ -444,7 +444,7 @@
             <div class="col-md-6 form-group">
                 <label for="fleet_written_driver_id">Driver</label>
                 <select name="payload[driver_id]" id="fleet_written_driver_id"
-                        class="form-control fleet-driver-select @error('payload.driver_id') is-invalid @enderror">
+                        class="form-control select-search @error('payload.driver_id') is-invalid @enderror">
                     <option value="">— Optional —</option>
                     @foreach($drivers as $driver)
                         <option value="{{ $driver->id }}"
@@ -544,7 +544,7 @@
             <div class="col-md-6 form-group">
                 <label for="fleet_stolen_driver_id">Driver</label>
                 <select name="payload[driver_id]" id="fleet_stolen_driver_id"
-                        class="form-control fleet-driver-select @error('payload.driver_id') is-invalid @enderror">
+                        class="form-control select-search @error('payload.driver_id') is-invalid @enderror">
                     <option value="">— Optional —</option>
                     @foreach($drivers as $driver)
                         <option value="{{ $driver->id }}"

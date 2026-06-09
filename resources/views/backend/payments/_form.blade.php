@@ -8,7 +8,7 @@
         <div class="row">
             <div class="col-md-6 mb-2">
                 <label for="driver_id" class="form-label">Driver <span class="text-danger">*</span></label>
-                <select name="driver_id" id="driver_id" class="form-control @error('driver_id') is-invalid @enderror" required>
+                <select name="driver_id" id="driver_id" class="form-control select-search @error('driver_id') is-invalid @enderror" required>
                     <option value="">Select Driver</option>
                     @foreach($drivers as $driver)
                         <option value="{{ $driver->id }}" {{ (string) old('driver_id', optional($selectedDriver)->id) === (string) $driver->id ? 'selected' : '' }}>

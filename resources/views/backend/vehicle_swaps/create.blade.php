@@ -45,11 +45,6 @@
             const SWAP_REASON_PHVL = @json(VehicleSwap::REASON_PHVL_ISSUES);
             const SWAP_REASON_OTHERS = @json(VehicleSwap::REASON_OTHERS);
 
-            $('#swap_old_car_id, #swap_new_car_id').select2({
-                width: '100%',
-                placeholder: 'Search cars',
-            });
-
             function parseMoney(id) {
                 const v = parseFloat(String($(id).val()).replace(',', '.'));
                 return isNaN(v) ? 0 : v;

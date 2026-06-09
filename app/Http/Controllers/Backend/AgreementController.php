@@ -66,7 +66,7 @@ class AgreementController extends Controller
         }
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
-        $cars = Car::where('tenant_id', $tenant->id)->with('carModel')->get();
+        $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'insurances.status'])->get();
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $model = new Agreement;
         $statuses = Status::where('type', 'agreement')->get();
@@ -231,7 +231,7 @@ class AgreementController extends Controller
         $model = $agreement->load('collections');
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
-        $cars = Car::where('tenant_id', $tenant->id)->with('carModel')->get();
+        $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'insurances.status'])->get();
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
         $statuses = Status::where('type', 'agreement')->get();
 

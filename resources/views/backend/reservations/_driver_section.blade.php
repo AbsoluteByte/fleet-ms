@@ -29,7 +29,7 @@
             <div class="form-group mb-0">
                 <label for="reservation_driver_id">Select driver <span class="text-danger">*</span></label>
                 <select name="driver_id" id="reservation_driver_id"
-                        class="form-control @error('driver_id') is-invalid @enderror">
+                        class="form-control select-search @error('driver_id') is-invalid @enderror">
                     <option value="">— Select driver —</option>
                     @foreach($drivers as $existingDriver)
                         <option value="{{ $existingDriver->id }}"

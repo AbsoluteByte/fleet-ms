@@ -35,7 +35,7 @@
                                 <form method="get" action="{{ route('car-services.index') }}" class="form-inline flex-wrap align-items-end">
                                     <div class="form-group mr-2 mb-2 car-service-select-wrap">
                                         <label for="car_id" class="mr-2">Select car</label>
-                                        <select name="car_id" id="car_id" class="form-control" required>
+                                        <select name="car_id" id="car_id" class="form-control select-search" required>
                                             <option value="">— Choose —</option>
                                             @foreach($cars as $car)
                                                 <option value="{{ $car->id }}">
@@ -173,16 +173,6 @@
 @endsection
 
 @section('js')
-    @unless($selectedCar)
-        <script>
-            $(function () {
-                $('#car_id').select2({
-                    width: '100%',
-                    placeholder: 'Search or select car',
-                });
-            });
-        </script>
-    @endunless
     @if($selectedCar && $services->count() > $initialHistoryLimit)
         <script>
             document.getElementById('service-history-show-more').addEventListener('click', function () {

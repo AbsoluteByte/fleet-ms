@@ -73,7 +73,7 @@ window.fleetiqScannerAssets = {
 
         const scope = root || document;
         jQuery(scope)
-            .find('select.form-control, select.custom-select')
+            .find('select.select-search')
             .not('.select2-hidden-accessible, .no-select2')
             .each(function () {
                 const $select = jQuery(this);

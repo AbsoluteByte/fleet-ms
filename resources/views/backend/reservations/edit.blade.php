@@ -45,7 +45,7 @@
                                             <div class="col-md-6 form-group">
                                                 <label for="reservation_car_id">Car</label>
                                                 <select name="car_id" id="reservation_car_id"
-                                                        class="form-control @error('car_id') is-invalid @enderror">
+                                                        class="form-control select-search @error('car_id') is-invalid @enderror">
                                                     <option value="">— Optional —</option>
                                                     @foreach($cars as $car)
                                                         <option value="{{ $car->id }}"
@@ -140,18 +140,6 @@
 @section('js')
     <script>
         $(document).ready(function () {
-            $('#reservation_car_id').select2({
-                width: '100%',
-                placeholder: 'Search or leave empty',
-                allowClear: true,
-            });
-
-            $('#reservation_driver_id').select2({
-                width: '100%',
-                placeholder: 'Search driver',
-                allowClear: true,
-            });
-
             function parseMoney(id) {
                 const v = parseFloat(String($(id).val()).replace(',', '.'));
                 return isNaN(v) ? 0 : v;

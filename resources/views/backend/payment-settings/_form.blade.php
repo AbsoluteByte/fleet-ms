@@ -8,7 +8,7 @@
         <div class="row">
             <div class="col-md-6 mb-2">
                 <label for="company_id" class="form-label">Select Company <span class="text-danger">*</span></label>
-                <select name="company_id" id="company_id" class="form-control @error('company_id') is-invalid @enderror" required>
+                <select name="company_id" id="company_id" class="form-control select-search @error('company_id') is-invalid @enderror" required>
                     <option value="">-- Select Company --</option>
                     @foreach($companies as $id => $name)
                         <option value="{{ $id }}" {{ (string) old('company_id', $model->company_id ?? '') === (string) $id ? 'selected' : '' }}>

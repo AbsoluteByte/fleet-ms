@@ -179,23 +179,35 @@ class Car extends Model
     }
 
     /**
-     * Insurance is shown as Active when the latest-by-expiry policy has status "Active" and is not past its expiry date.
+     * Latest-by-expiry policy when it is Active and not past expiry; otherwise null.
      */
-    public function isInsuranceCurrentlyActive(): bool
+    public function currentActiveInsurance(): ?CarInsurance
     {
         $insurance = $this->insurances
             ->sortByDesc(fn (CarInsurance $i) => [optional($i->expiry_date)->timestamp ?? 0, $i->id])
             ->first();
 
         if (! $insurance?->status || ! $insurance->expiry_date) {
-            return false;
+            return null;
         }
 
         if (strcasecmp($insurance->status->name, 'Active') !== 0) {
-            return false;
+            return null;
         }
 
-        return $insurance->expiry_date->copy()->startOfDay()->gte(now()->startOfDay());
+        if ($insurance->expiry_date->copy()->startOfDay()->lt(now()->startOfDay())) {
+            return null;
+        }
+
+        return $insurance;
+    }
+
+    /**
+     * Insurance is shown as Active when the latest-by-expiry policy has status "Active" and is not past its expiry date.
+     */
+    public function isInsuranceCurrentlyActive(): bool
+    {
+        return $this->currentActiveInsurance() !== null;
     }
 
     public function latestService()

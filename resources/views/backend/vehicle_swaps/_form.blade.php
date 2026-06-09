@@ -11,7 +11,7 @@
     <div class="col-md-6 form-group">
         <label for="swap_old_car_id">Old car <span class="text-danger">*</span></label>
         <select name="old_car_id" id="swap_old_car_id"
-                class="form-control @error('old_car_id') is-invalid @enderror" required>
+                class="form-control select-search @error('old_car_id') is-invalid @enderror" required>
             <option value="">— Select —</option>
             @foreach($cars as $car)
                 <option value="{{ $car->id }}"
@@ -26,7 +26,7 @@
     <div class="col-md-6 form-group">
         <label for="swap_new_car_id">Swapped with <span class="text-danger">*</span></label>
         <select name="swapped_with_car_id" id="swap_new_car_id"
-                class="form-control @error('swapped_with_car_id') is-invalid @enderror" required>
+                class="form-control select-search @error('swapped_with_car_id') is-invalid @enderror" required>
             <option value="">— Select —</option>
             @foreach($cars as $car)
                 <option value="{{ $car->id }}"

@@ -19,11 +19,6 @@
             }
         }
 
-        $('#fleet_wizard_car_id').select2({
-            width: '100%',
-            placeholder: 'Search cars',
-        });
-
         /**
          * Hide the target status that matches the selected car's current fleet_status (no-op change).
          */
@@ -51,17 +46,6 @@
 
         refreshTargetStatusOptionsForCar();
         $('#fleet_wizard_car_id').on('change', refreshTargetStatusOptionsForCar);
-
-        $('#fleet_swap_old_car_id').select2({
-            width: '100%',
-            placeholder: 'Search cars',
-        });
-
-        $('.fleet-driver-select').select2({
-            width: '100%',
-            placeholder: 'Search drivers',
-            allowClear: true,
-        });
 
         function parseMoney(sel) {
             const v = parseFloat(String($(sel).val()).replace(',', '.'));

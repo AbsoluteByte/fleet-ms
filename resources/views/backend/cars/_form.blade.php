@@ -8,7 +8,7 @@
     <div class="col-md-6">
         <div class="form-group">
             <label for="company_id">Select Company <span class="text-danger">*</span></label>
-            <select name="company_id" id="company_id" class="form-control @error('company_id') is-invalid @enderror" required>
+            <select name="company_id" id="company_id" class="form-control select-search @error('company_id') is-invalid @enderror" required>
                 <option value="">Select Company</option>
                 @foreach($companies as $company)
                     <option value="{{ $company->id }}"
@@ -27,7 +27,7 @@
     <div class="col-md-6">
         <div class="form-group">
             <label for="car_model_id">Make/Model <span class="text-danger">*</span></label>
-            <select name="car_model_id" id="car_model_id" class="form-control @error('car_model_id') is-invalid @enderror" required>
+            <select name="car_model_id" id="car_model_id" class="form-control select-search @error('car_model_id') is-invalid @enderror" required>
                 <option value="">Select Model</option>
                 @foreach($carModels as $carModel)
                     <option value="{{ $carModel->id }}"
@@ -1337,7 +1337,7 @@
                     <div class="col-md-6">
                         <div class="form-group">
                             <label for="insurance_provider_id">Insurance Provider</label>
-                            <select name="insurance_provider_id" id="insurance_provider_id" class="form-control @error('insurance_provider_id') is-invalid @enderror">
+                            <select name="insurance_provider_id" id="insurance_provider_id" class="form-control select-search @error('insurance_provider_id') is-invalid @enderror">
                                 <option value="">Select Provider</option>
                                 @foreach($insuranceProviders as $provider)
                                     <option value="{{ $provider->id }}"

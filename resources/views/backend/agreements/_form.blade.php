@@ -11,11 +11,13 @@
             <div class="col-md-6">
                 <div class="mb-3">
                     <label for="car_id" class="form-label">Vehicle *</label>
-                    <select name="car_id" id="car_id" class="form-control @error('car_id') is-invalid @enderror" required>
+                    <select name="car_id" id="car_id" class="form-control select-search @error('car_id') is-invalid @enderror" required>
                         <option value="">Select Vehicle</option>
                         @foreach($cars as $car)
                             <option value="{{ $car->id }}"
                                     data-company-id="{{ $car->company_id }}"
+                                    data-has-active-insurance="{{ $car->isInsuranceCurrentlyActive() ? '1' : '0' }}"
+                                    data-active-insurance-provider-id="{{ optional($car->currentActiveInsurance())->insurance_provider_id }}"
                                 {{ (old('car_id') ?? (isset($model) ? $model->car_id : '')) == $car->id ? 'selected' : '' }}>
                                 {{ $car->registration }} - {{ $car->carModel->name }}
                             </option>
@@ -29,7 +31,7 @@
             <div class="col-md-6">
                 <div class="mb-3">
                     <label for="company_id" class="form-label">Company *</label>
-                    <select name="company_id" id="company_id" class="form-control @error('company_id') is-invalid @enderror" required>
+                    <select name="company_id" id="company_id" class="form-control select-search @error('company_id') is-invalid @enderror" required>
                         <option value="">Select Company</option>
                         @foreach($companies as $company)
                             <option value="{{ $company->id }}" {{ (old('company_id') ?? (isset($model) ? $model->company_id : '')) == $company->id ? 'selected' : '' }}>
@@ -46,7 +48,7 @@
             <div class="col-md-6">
                 <div class="mb-3">
                     <label for="driver_id" class="form-label">Driver *</label>
-                    <select name="driver_id" id="driver_id" class="form-control @error('driver_id') is-invalid @enderror" required>
+                    <select name="driver_id" id="driver_id" class="form-control select-search @error('driver_id') is-invalid @enderror" required>
                         <option value="">Select Driver</option>
                         @foreach($drivers as $driver)
                             <option value="{{ $driver->id }}" {{ (old('driver_id') ?? (isset($model) ? $model->driver_id : '')) == $driver->id ? 'selected' : '' }}>
@@ -318,7 +320,7 @@
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label for="insurance_provider_id" class="form-label">Insurance Provider *</label>
-                        <select name="insurance_provider_id" id="insurance_provider_id" class="form-control @error('insurance_provider_id') is-invalid @enderror">
+                        <select name="insurance_provider_id" id="insurance_provider_id" class="form-control select-search @error('insurance_provider_id') is-invalid @enderror">
                             <option value="">Select Insurance Provider</option>
                             @foreach($insuranceProviders as $provider)
                                 <option value="{{ $provider->id }}"
@@ -733,7 +735,7 @@
             select.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        function syncCompanyFromVehicle() {
+        function syncFromVehicle() {
             const carSelect = document.getElementById('car_id');
 
             if (!carSelect) {
@@ -742,17 +744,39 @@
 
             const selectedOption = carSelect.options[carSelect.selectedIndex];
             const companyId = selectedOption ? selectedOption.getAttribute('data-company-id') : null;
+            const hasActiveInsurance = selectedOption
+                && selectedOption.getAttribute('data-has-active-insurance') === '1';
+            const activeProviderId = selectedOption
+                ? selectedOption.getAttribute('data-active-insurance-provider-id')
+                : null;
+
+            if (hasActiveInsurance) {
+                const companyRadio = document.getElementById('using_own_insurance_company');
+
+                if (companyRadio) {
+                    companyRadio.checked = true;
+                }
+
+                toggleInsuranceSections();
+            }
 
             if (companyId) {
                 setSelectValue('company_id', companyId);
             }
+
+            if (hasActiveInsurance && activeProviderId) {
+                filterInsuranceProviders(activeProviderId);
+                setSelectValue('insurance_provider_id', activeProviderId);
+            }
         }
 
         // Filter insurance providers based on selected company
-        function filterInsuranceProviders() {
+        function filterInsuranceProviders(preferredProviderId = null) {
             const companyId = document.getElementById('company_id').value;
             const insuranceProviderSelect = document.getElementById('insurance_provider_id');
-            const selectedProviderId = insuranceProviderSelect.value;
+            const selectedProviderId = preferredProviderId != null && preferredProviderId !== ''
+                ? preferredProviderId
+                : insuranceProviderSelect.value;
             const $insuranceProviderSelect = typeof $ !== 'undefined' ? $(insuranceProviderSelect) : null;
             const usesSelect2 = $insuranceProviderSelect
                 && $.fn.select2
@@ -1053,9 +1077,9 @@
             }
 
             if (typeof $ !== 'undefined') {
-                $('#car_id').on('change', syncCompanyFromVehicle);
+                $('#car_id').on('change', syncFromVehicle);
             } else {
-                document.getElementById('car_id')?.addEventListener('change', syncCompanyFromVehicle);
+                document.getElementById('car_id')?.addEventListener('change', syncFromVehicle);
             }
         });
 

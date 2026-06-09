@@ -184,7 +184,7 @@
                     <div class="mb-2">
                         <label for="country" class="form-label">Country *</label>
                         <select name="country_id" id="country"
-                                class="form-control @error('country') is-invalid @enderror" required>
+                                class="form-control select-search @error('country') is-invalid @enderror" required>
                             <option value="">Select Country</option>
                             @php
                                 try {

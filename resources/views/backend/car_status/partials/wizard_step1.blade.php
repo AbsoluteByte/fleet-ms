@@ -4,7 +4,7 @@
         <div class="col-md-6 form-group">
             <label for="fleet_wizard_car_id">Car <span class="text-danger">*</span></label>
             <select name="car_id" id="fleet_wizard_car_id" required
-                    class="form-control @error('car_id') is-invalid @enderror">
+                    class="form-control select-search @error('car_id') is-invalid @enderror">
                 <option value="">— Select car —</option>
                 @foreach($cars as $car)
                     <option value="{{ $car->id }}"

@@ -130,7 +130,7 @@
         <div class="col-sm-6">
             <div class="form-group">
                 <label for="package_id">Change Package</label>
-                <select name="package_id" id="package_id" class="form-control">
+                <select name="package_id" id="package_id" class="form-control select-search">
                     <option value="">-- Keep Current Package --</option>
                     @foreach($packages as $package)
                         <option value="{{ $package->id }}"

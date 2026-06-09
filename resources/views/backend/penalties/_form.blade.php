@@ -6,7 +6,7 @@
         <div class="form-group">
             <label for="agreement_id">Select Agreement <span class="text-danger">*</span></label>
             <select name="agreement_id" id="agreement_id"
-                    class="form-control @error('agreement_id') is-invalid @enderror" required>
+                    class="form-control select-search @error('agreement_id') is-invalid @enderror" required>
                 <option value="">Select Agreement</option>
                 @foreach($agreements as $agreement)
                     <option value="{{ $agreement->id }}"
