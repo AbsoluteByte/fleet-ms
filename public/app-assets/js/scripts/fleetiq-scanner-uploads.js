@@ -28,6 +28,15 @@
         return Boolean(window.scanner && typeof window.scanner.scan === 'function');
     }
 
+    function ensureScannerConfig() {
+        var assets = scannerAssets();
+        var downloadUrl = assets.scanAppDownloadUrl || 'https://cdn.asprise.com/scanapp/scan-setup.exe';
+
+        window.scannerjs_scan_app_download_url = downloadUrl;
+        window.scannerjs_config = window.scannerjs_config || {};
+        window.scannerjs_config.scan_app_download_url = downloadUrl;
+    }
+
     function ensureScannerStyles() {
         if (document.getElementById('fleetiq-scanner-css')) {
             return;
@@ -73,6 +82,7 @@
         }
 
         scannerLoading = true;
+        ensureScannerConfig();
         ensureScannerStyles();
 
         var script = document.createElement('script');

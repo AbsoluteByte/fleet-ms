@@ -17,8 +17,10 @@ window.paceOptions = {
 <script>
 window.fleetiqScannerAssets = {
     js: @json(asset('app-assets/vendors/js/scannerjs/scanner.js')),
-    css: @json(asset('app-assets/vendors/js/scannerjs/scanner.css'))
+    css: @json(asset('app-assets/vendors/js/scannerjs/scanner.css')),
+    scanAppDownloadUrl: 'https://cdn.asprise.com/scanapp/scan-setup.exe'
 };
+window.scannerjs_scan_app_download_url = window.fleetiqScannerAssets.scanAppDownloadUrl;
 </script>
 {{--
 <script src="{{ asset('app-assets/vendors/js/extensions/shepherd.min.js') }}"></script>
