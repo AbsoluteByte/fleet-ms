@@ -146,7 +146,8 @@
                                 </div>
                             @endif
                             @php
-                                $hasV5Doc = filled($car->v5_document);
+                                $v5DocumentFiles = $car->v5DocumentFileNames();
+                                $hasV5Doc = $v5DocumentFiles !== [];
                                 $oldLogBookFiles = $car->oldLogBookFileNames();
                                 $hasOldLogBookFile = $oldLogBookFiles !== [];
                                 $logBookApplied = $car->log_book_applied;
@@ -235,9 +236,11 @@
                                 <div class="col-md-6 mb-3">
                                     <strong>V5 Document:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ route('cars.view.v5', $car) }}" target="_blank" class="btn btn-sm btn-outline-primary" rel="noopener">
-                                            <i class="fa fa-file"></i> View Document
-                                        </a>
+                                        @foreach($v5DocumentFiles as $v5Name)
+                                            <a href="{{ route('cars.view.v5', [$car, $loop->index]) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1" rel="noopener">
+                                                <i class="fa fa-file"></i> View @if(count($v5DocumentFiles) > 1)#{{ $loop->iteration }}@endif
+                                            </a>
+                                        @endforeach
                                     </p>
                                 </div>
                             @endif

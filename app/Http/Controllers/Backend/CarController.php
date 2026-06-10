@@ -110,7 +110,8 @@ class CarController extends Controller
             'registration' => 'required|string|unique:cars',
             'color' => 'required|string',
             'vin' => 'required|string',
-            'v5_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'v5_document' => 'nullable|array',
+            'v5_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
             'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
@@ -201,11 +202,8 @@ class CarController extends Controller
 
         try {
             $car = DB::transaction(function () use ($validated, $request, $tenant) {
-                if ($request->hasFile('v5_document')) {
-                    $validated['v5_document'] = $this->uploadFile($request->file('v5_document'), 'uploads/cars');
-                }
-
                 $carData = $this->carMassAssignmentFromValidated($validated, $request, null);
+                $carData = $this->mergeV5DocumentCarData($request, $carData, null);
                 $carData = $this->mergeLogBookCarData($request, $carData, null);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['createdBy'] = Auth::id();
@@ -397,7 +395,8 @@ class CarController extends Controller
             'registration' => 'required|string|unique:cars,registration,'.$car->id,
             'color' => 'required|string',
             'vin' => 'required|string',
-            'v5_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'v5_document' => 'nullable|array',
+            'v5_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
             'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
@@ -521,18 +520,8 @@ class CarController extends Controller
         try {
             $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant) {
 
-                if ($request->hasFile('v5_document')) {
-                    $oldV5Document = $car->v5_document;
-                    $validated['v5_document'] = $this->uploadFile(
-                        $request->file('v5_document'),
-                        'uploads/cars'
-                    );
-                    if ($oldV5Document) {
-                        $this->deleteFile($oldV5Document, 'uploads/cars');
-                    }
-                }
-
                 $carData = $this->carMassAssignmentFromValidated($validated, $request, $car);
+                $carData = $this->mergeV5DocumentCarData($request, $carData, $car);
                 $carData = $this->mergeLogBookCarData($request, $carData, $car);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['updatedBy'] = Auth::id();
@@ -899,17 +888,33 @@ class CarController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function destroyV5Document(Car $car)
+    public function destroyV5Document(Car $car, ?int $v5_index = null)
     {
         $this->authorizeCarTenant($car);
 
-        if ($car->v5_document) {
-            $this->deleteFile($car->v5_document, 'uploads/cars');
-            $car->update([
-                'v5_document' => null,
-                'updatedBy' => Auth::id(),
-            ]);
+        $names = $car->v5DocumentFileNames();
+        if ($names === []) {
+            return response()->json(['ok' => true]);
         }
+
+        if ($v5_index !== null) {
+            if (! isset($names[$v5_index])) {
+                abort(404);
+            }
+            $this->deleteFile($names[$v5_index], 'uploads/cars');
+            unset($names[$v5_index]);
+            $names = array_values($names);
+        } else {
+            foreach ($names as $name) {
+                $this->deleteFile($name, 'uploads/cars');
+            }
+            $names = [];
+        }
+
+        $car->update([
+            'v5_document' => $names === [] ? null : $names,
+            'updatedBy' => Auth::id(),
+        ]);
 
         return response()->json(['ok' => true]);
     }
@@ -1068,14 +1073,14 @@ class CarController extends Controller
         ]);
     }
 
-    public function viewV5(Car $car)
+    public function viewV5(Car $car, ?int $v5_index = null)
     {
-        return $this->viewCarFileInline($car, 'uploads/cars', $car->v5_document);
+        return $this->viewCarFileInline($car, 'uploads/cars', $this->resolveV5DocumentFilename($car, $v5_index));
     }
 
-    public function downloadV5(Car $car)
+    public function downloadV5(Car $car, ?int $v5_index = null)
     {
-        return $this->downloadCarFile($car, 'uploads/cars', $car->v5_document, 'v5');
+        return $this->downloadCarFile($car, 'uploads/cars', $this->resolveV5DocumentFilename($car, $v5_index), 'v5');
     }
 
     public function downloadMot(Car $car, int $car_mot)
@@ -1100,7 +1105,7 @@ class CarController extends Controller
     private function carMassAssignmentFromValidated(array $validated, Request $request, ?Car $forUpdate = null): array
     {
         $keys = [
-            'company_id', 'car_model_id', 'registration', 'color', 'vin', 'v5_document',
+            'company_id', 'car_model_id', 'registration', 'color', 'vin',
             'manufacture_year', 'registration_year', 'purchase_date', 'purchase_price',
             'purchase_type', 'seller_name', 'seller_notes', 'damaged_notes',
             'phv_status', 'phv_applied_date', 'available_from_date',
@@ -1363,6 +1368,50 @@ class CarController extends Controller
             ->all();
     }
 
+    private function mergeV5DocumentCarData(Request $request, array $carData, ?Car $existing): array
+    {
+        $names = $existing?->v5DocumentFileNames() ?? [];
+
+        foreach ($this->collectV5DocumentUploads($request) as $file) {
+            $names[] = $this->uploadFile($file, 'uploads/cars');
+        }
+
+        $carData['v5_document'] = $names === [] ? null : array_values(array_unique($names));
+
+        return $carData;
+    }
+
+    /**
+     * @return list<\Illuminate\Http\UploadedFile>
+     */
+    private function collectV5DocumentUploads(Request $request): array
+    {
+        if (! $request->hasFile('v5_document')) {
+            return [];
+        }
+
+        $files = $request->file('v5_document');
+
+        return collect(is_array($files) ? $files : [$files])
+            ->filter(fn ($file) => $file && $file->isValid())
+            ->values()
+            ->all();
+    }
+
+    private function resolveV5DocumentFilename(Car $car, ?int $index = null): ?string
+    {
+        $names = $car->v5DocumentFileNames();
+        if ($names === []) {
+            return null;
+        }
+
+        if ($index === null) {
+            return $names[0];
+        }
+
+        return $names[$index] ?? null;
+    }
+
     // ✅ Keep your existing helper methods
     private function uploadFile($file, $directory)
     {
@@ -1522,9 +1571,10 @@ class CarController extends Controller
 
     private function deleteCarFiles($car)
     {
-        $filesToDelete = [
-            $car->v5_document ? public_path('uploads/cars/'.$car->v5_document) : null,
-        ];
+        $filesToDelete = [];
+        foreach ($car->v5DocumentFileNames() as $v5Name) {
+            $filesToDelete[] = public_path('uploads/cars/'.$v5Name);
+        }
         foreach ($car->oldLogBookFileNames() as $lbName) {
             $filesToDelete[] = public_path('uploads/cars/log_book/'.$lbName);
         }

@@ -91,13 +91,13 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
     Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');
     Route::get('cars/reports/awaiting-phv', [App\Http\Controllers\Backend\CarController::class, 'awaitingPhv'])->name('cars.reports.awaiting-phv');
-    Route::get('cars/{car}/view/v5', [App\Http\Controllers\Backend\CarController::class, 'viewV5'])->name('cars.view.v5');
-    Route::get('cars/{car}/download/v5', [App\Http\Controllers\Backend\CarController::class, 'downloadV5'])->name('cars.download.v5');
+    Route::get('cars/{car}/view/v5/{v5_index?}', [App\Http\Controllers\Backend\CarController::class, 'viewV5'])->name('cars.view.v5')->whereNumber('v5_index');
+    Route::get('cars/{car}/download/v5/{v5_index?}', [App\Http\Controllers\Backend\CarController::class, 'downloadV5'])->name('cars.download.v5')->whereNumber('v5_index');
     Route::get('cars/{car}/mots/{car_mot}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadMot'])->name('cars.mots.download');
     Route::get('cars/{car}/phvs/{car_phv}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadPhv'])->name('cars.phvs.download');
     Route::post('cars/{car}/apply-sorn', [App\Http\Controllers\Backend\CarController::class, 'applySorn'])->name('cars.apply-sorn');
     Route::post('cars/{car}/end-sorn', [App\Http\Controllers\Backend\CarController::class, 'endSorn'])->name('cars.end-sorn');
-    Route::delete('cars/{car}/v5-document', [App\Http\Controllers\Backend\CarController::class, 'destroyV5Document'])->name('cars.v5-document.destroy');
+    Route::delete('cars/{car}/v5-document/{v5_index?}', [App\Http\Controllers\Backend\CarController::class, 'destroyV5Document'])->name('cars.v5-document.destroy')->whereNumber('v5_index');
     Route::delete('cars/{car}/mots/{car_mot}/document', [App\Http\Controllers\Backend\CarController::class, 'destroyMotDocument'])->name('cars.mots.document.destroy');
     Route::delete('cars/{car}/phvs/{car_phv}/document', [App\Http\Controllers\Backend\CarController::class, 'destroyPhvDocument'])->name('cars.phvs.document.destroy');
     Route::delete('cars/{car}/insurance-document', [App\Http\Controllers\Backend\CarController::class, 'destroyInsuranceDocument'])->name('cars.insurance-document.destroy');

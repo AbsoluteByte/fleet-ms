@@ -33,6 +33,7 @@ class Car extends Model
         'log_book_applied' => 'boolean',
         'log_book_applied_date' => 'date',
         'old_log_book' => 'array',
+        'v5_document' => 'array',
         'sorn_applied' => 'boolean',
         'sorn_applied_at' => 'datetime',
         'available_from_date' => 'date',
@@ -147,6 +148,19 @@ class Car extends Model
     public function oldLogBookFileNames(): array
     {
         $names = $this->old_log_book;
+
+        return array_values(array_filter(
+            is_array($names) ? $names : [],
+            fn ($n) => is_string($n) && $n !== ''
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function v5DocumentFileNames(): array
+    {
+        $names = $this->v5_document;
 
         return array_values(array_filter(
             is_array($names) ? $names : [],

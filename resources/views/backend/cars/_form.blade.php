@@ -93,19 +93,25 @@
     {{-- V5 Document --}}
     <div class="col-md-6">
         <div class="form-group">
-            <label for="v5_document">V5 Document</label>
-            <input type="file" name="v5_document" id="v5_document"
+            <label for="v5_document">V5 Document <span class="text-muted font-weight-normal">(multiple files)</span></label>
+            <input type="file" name="v5_document[]" id="v5_document"
                    class="form-control @error('v5_document') is-invalid @enderror"
                    accept=".pdf,.jpg,.jpeg,.png"
-                   data-has-v5="{{ isset($model) && $model->id && $model->v5_document ? '1' : '0' }}">
-            @if(isset($model) && $model->id && $model->v5_document)
-                <x-car-document-actions
-                    :view-url="route('cars.view.v5', $model)"
-                    :remove-url="route('cars.v5-document.destroy', $model)"
-                    label="V5 document"
-                />
+                   multiple
+                   data-has-v5="{{ isset($model) && $model->id && $model->v5DocumentFileNames() !== [] ? '1' : '0' }}">
+            @if(isset($model) && $model->id)
+                @foreach($model->v5DocumentFileNames() as $v5Name)
+                    <x-car-document-actions
+                        :view-url="route('cars.view.v5', [$model, $loop->index])"
+                        :remove-url="route('cars.v5-document.destroy', [$model, $loop->index])"
+                        :label="'V5 document' . (count($model->v5DocumentFileNames()) > 1 ? ' #' . $loop->iteration : '')"
+                    />
+                @endforeach
             @endif
             @error('v5_document')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+            @error('v5_document.*')
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
         </div>
@@ -274,7 +280,7 @@
             old('log_book_applied', (isset($model) && $model->id) ? ($model->log_book_applied ?? false) : false),
             FILTER_VALIDATE_BOOLEAN
         );
-        $carHasV5Document = isset($model) && $model->id && $model->v5_document;
+        $carHasV5Document = isset($model) && $model->id && $model->v5DocumentFileNames() !== [];
     @endphp
     <div class="col-12 @if($carHasV5Document) d-none @endif" id="log-book-ui-wrapper">
         <div class="form-group mb-2">
