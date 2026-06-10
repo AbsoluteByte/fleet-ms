@@ -188,7 +188,9 @@
 
     {{-- Seller Name --}}
     @php
-        $fleetStatus = isset($model) && $model->id ? ($model->fleet_status ?? 'available_for_rent') : 'available_for_rent';
+        $fleetStatus = isset($model) && $model->id
+            ? ($model->fleet_status ?? \App\Models\Car::FLEET_STATUS_AVAILABLE_FOR_RENT)
+            : \App\Models\Car::FLEET_STATUS_PREPARATION_FOR_PHVL;
     @endphp
     <div class="col-md-6">
         <input type="hidden" id="car_current_fleet_status" value="{{ $fleetStatus }}" autocomplete="off">

@@ -11,6 +11,10 @@ class Car extends Model
 {
     use HasFactory;
 
+    public const FLEET_STATUS_PREPARATION_FOR_PHVL = 'preparation_for_phvl';
+
+    public const FLEET_STATUS_AVAILABLE_FOR_RENT = 'available_for_rent';
+
     protected $fillable = [
         'tenant_id', 'company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
@@ -150,6 +154,33 @@ class Car extends Model
         ));
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function fleetStatusLabels(): array
+    {
+        return [
+            self::FLEET_STATUS_PREPARATION_FOR_PHVL => 'Preparation for PHVL',
+            self::FLEET_STATUS_AVAILABLE_FOR_RENT => 'Available for Rent',
+            'reserved' => 'Reserved',
+            'vehicle_swap' => 'Vehicle Swap',
+            'damaged' => 'Damaged',
+            'written_off' => 'Written Off',
+            'stolen' => 'Stolen',
+            'for_sale' => 'For Sale',
+            'sold' => 'Sold',
+            'sorn' => 'SORN',
+        ];
+    }
+
+    public function fleetStatusLabel(): string
+    {
+        $status = $this->fleet_status ?? self::FLEET_STATUS_AVAILABLE_FOR_RENT;
+
+        return self::fleetStatusLabels()[$status]
+            ?? ucwords(str_replace('_', ' ', $status));
+    }
+
     // ==================== SCOPES ====================
 
     // ✅ Scope for specific tenant
@@ -247,7 +278,17 @@ class Car extends Model
             return false;
         }
 
-        if (in_array($this->fleet_status, ['damaged', 'written_off', 'stolen', 'for_sale', 'sold', 'reserved', 'vehicle_swap', 'sorn'], true)) {
+        if (in_array($this->fleet_status, [
+            self::FLEET_STATUS_PREPARATION_FOR_PHVL,
+            'damaged',
+            'written_off',
+            'stolen',
+            'for_sale',
+            'sold',
+            'reserved',
+            'vehicle_swap',
+            'sorn',
+        ], true)) {
             return false;
         }
 

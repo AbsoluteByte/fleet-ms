@@ -33,7 +33,15 @@ class CarStatusChangeService
         'sold',
     ];
 
-    private const BLOCKED_FLEET_STATUSES = ['damaged', 'written_off', 'stolen', 'for_sale', 'sold', 'sorn'];
+    private const BLOCKED_FLEET_STATUSES = [
+        Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
+        'damaged',
+        'written_off',
+        'stolen',
+        'for_sale',
+        'sold',
+        'sorn',
+    ];
 
     public function apply(Request $request, Tenant $tenant, Car $car, string $target): void
     {

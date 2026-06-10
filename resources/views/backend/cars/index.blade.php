@@ -9,6 +9,7 @@
                         <div class="float-right">
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="available_by_phv">Available by PHV</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="awaiting_phv">Awaiting PHV</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="preparation_for_phvl">Preparation for PHVL</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="damaged">Damaged</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="written_off">Written off</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="stolen">Stolen</button>
@@ -38,8 +39,7 @@
                                     <tbody>
                                     @forelse($cars as $car)
                                         @php
-                                            $carStatusLabel = ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent'));
-                                            if ($carStatusLabel === 'Sorn') $carStatusLabel = 'SORN';
+                                            $carStatusLabel = $car->fleetStatusLabel();
                                             $isAvailableByPhv = $car->isAvailableForRent();
                                             $isAwaitingPhv = $car->phvs->isEmpty();
                                             $latestInsurance = $car->insurances

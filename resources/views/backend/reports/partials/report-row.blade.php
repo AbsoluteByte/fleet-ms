@@ -1,8 +1,5 @@
 @php
-    $carStatusLabel = ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent'));
-    if ($carStatusLabel === 'Sorn') {
-        $carStatusLabel = 'SORN';
-    }
+    $carStatusLabel = $car->fleetStatusLabel();
     $latestInsurance = $car->insurances
         ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->created_at)->timestamp ?? 0, $i->id])
         ->first();

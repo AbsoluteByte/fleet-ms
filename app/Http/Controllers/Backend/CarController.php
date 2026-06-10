@@ -261,6 +261,7 @@ class CarController extends Controller
                 }
 
                 $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
+                $this->promoteFleetStatusWhenPhvSaved($car);
                 $this->syncReservation($request, $car, $tenant);
 
                 if ($lastNewPhv) {
@@ -654,6 +655,7 @@ class CarController extends Controller
                 }
 
                 $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
+                $this->promoteFleetStatusWhenPhvSaved($car);
                 $this->syncReservation($request, $car, $tenant);
 
                 if ($lastNewPhv) {
@@ -1092,8 +1094,8 @@ class CarController extends Controller
 
     /**
      * Only pass real car columns to create/update (not nested mots/phvs/insurance keys from validate()).
-     * Fleet status is not editable on the car form: new cars default to available_for_rent; updates keep the DB value
-     * (changed only via Car Status wizard, reservations, swaps, etc.).
+     * Fleet status is not editable on the car form: new cars default to preparation_for_phvl; updates keep the DB value
+     * (changed only via Car Status wizard, reservations, swaps, PHV save promotion, etc.).
      */
     private function carMassAssignmentFromValidated(array $validated, Request $request, ?Car $forUpdate = null): array
     {
@@ -1119,7 +1121,7 @@ class CarController extends Controller
         }
 
         if ($forUpdate === null) {
-            $data['fleet_status'] = 'available_for_rent';
+            $data['fleet_status'] = Car::FLEET_STATUS_PREPARATION_FOR_PHVL;
         }
 
         if (($data['available_from_date'] ?? '') === '') {
@@ -1219,6 +1221,13 @@ class CarController extends Controller
         }
 
         return Carbon::parse($phvData['expiry_date'])->startOfDay()->gte(now()->startOfDay());
+    }
+
+    private function promoteFleetStatusWhenPhvSaved(Car $car): void
+    {
+        if ($car->fleet_status === Car::FLEET_STATUS_PREPARATION_FOR_PHVL && $car->phvs()->exists()) {
+            $car->update(['fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT]);
+        }
     }
 
     private function syncCarPhvStatus(Request $request, Car $car, bool $newFuturePhvAdded): void

@@ -15,7 +15,14 @@ use Illuminate\Validation\ValidationException;
 
 class ReservationController extends Controller
 {
-    private const BLOCKED_FLEET_STATUSES = ['damaged', 'written_off', 'stolen', 'for_sale', 'sold'];
+    private const BLOCKED_FLEET_STATUSES = [
+        Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
+        'damaged',
+        'written_off',
+        'stolen',
+        'for_sale',
+        'sold',
+    ];
 
     public function __construct()
     {

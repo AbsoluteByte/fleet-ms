@@ -73,7 +73,7 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <strong>Fleet Status:</strong>
-                                <p class="mb-0">{{ ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent')) }}</p>
+                                <p class="mb-0">{{ $car->fleetStatusLabel() }}</p>
                             </div>
                             @if($car->statusHistories->isNotEmpty())
                                 @php
