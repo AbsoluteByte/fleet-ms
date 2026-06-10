@@ -12,6 +12,7 @@ use App\Models\InsuranceProvider;
 use App\Models\Status;
 use App\Services\AgreementInvoiceService;
 use App\Services\PaymentAllocationService;
+use App\Services\PermissionLetterService;
 // Add this
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -700,6 +701,8 @@ class AgreementController extends Controller
             ? $agreement->own_insurance_policy_number
             : optional($agreement->insuranceProvider)->policy_number;
 
+        $letterMeta = app(PermissionLetterService::class)->resolveLetterMeta($agreement->company);
+
         $data = [
             'agreement' => $agreement,
             'company' => $agreement->company,
@@ -707,6 +710,7 @@ class AgreementController extends Controller
             'car' => $agreement->car,
             'policyNumber' => $policyNumber,
             'letterDate' => $agreement->start_date->format('d.m.Y'),
+            'letterMeta' => $letterMeta,
         ];
 
         $pdf = PDF::loadView($this->dir.'.permission_letter_pdf', $data);

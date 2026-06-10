@@ -7,32 +7,50 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: Arial, sans-serif;
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
-            line-height: 1.35;
+            line-height: 1.45;
             color: #000;
-            padding: 30px 40px;
+            padding: 36px 42px 90px;
         }
 
-        .letter-date {
-            margin-bottom: 18px;
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 22px;
+        }
+
+        .header-table td {
+            vertical-align: top;
+            width: 50%;
+        }
+
+        .header-date {
+            font-size: 11px;
+            padding-top: 4px;
+        }
+
+        .header-date.left { text-align: left; }
+        .header-date.right { text-align: right; }
+
+        .logo-wrap {
+            line-height: 0;
+        }
+
+        .logo-wrap.left { text-align: left; }
+        .logo-wrap.right { text-align: right; }
+        .logo-wrap.center { text-align: center; }
+
+        .logo-wrap img {
+            max-height: 72px;
+            max-width: 220px;
         }
 
         .doc-title {
             text-align: center;
-            font-size: 18px;
+            font-size: 20px;
             font-weight: bold;
-            margin-bottom: 18px;
-        }
-
-        .logo-wrap {
-            text-align: center;
-            margin-bottom: 12px;
-        }
-
-        .logo-wrap img {
-            max-height: 60px;
-            max-width: 180px;
+            margin: 8px 0 20px;
         }
 
         p {
@@ -41,25 +59,59 @@
         }
 
         .section-title {
+            color: #2f6fad;
             font-weight: bold;
-            margin: 14px 0 6px 0;
-            text-decoration: underline;
+            font-size: 11px;
+            margin: 16px 0 8px;
+            text-transform: uppercase;
         }
 
         .field {
-            margin-bottom: 4px;
+            margin-bottom: 5px;
+            line-height: 1.5;
         }
 
         .field .lbl {
             font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .field .val {
+            text-transform: uppercase;
+        }
+
+        .policy-field {
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .driver-field {
+            font-weight: bold;
+            text-transform: uppercase;
         }
 
         .sig-block {
-            margin-top: 28px;
+            margin-top: 26px;
+        }
+
+        .sig-image {
+            margin-bottom: 4px;
+        }
+
+        .sig-image img {
+            max-height: 58px;
+            max-width: 180px;
+        }
+
+        .sig-line {
+            width: 180px;
+            border-top: 1px solid #000;
+            margin: 2px 0 6px;
         }
 
         .sig-name {
             font-weight: bold;
+            text-transform: uppercase;
             margin-bottom: 2px;
         }
 
@@ -69,15 +121,16 @@
 
         .sig-company {
             font-weight: bold;
+            text-transform: uppercase;
         }
 
         .footer {
             position: fixed;
-            bottom: 25px;
-            left: 40px;
-            right: 40px;
+            bottom: 24px;
+            left: 42px;
+            right: 42px;
             font-size: 9px;
-            line-height: 1.4;
+            line-height: 1.45;
             text-align: center;
             color: #333;
         }
@@ -85,43 +138,77 @@
 </head>
 <body>
 
-@if($company->logo)
-    <div class="logo-wrap">
-        <img src="{{ public_path('uploads/companies/' . $company->logo) }}" alt="{{ $company->name }}">
-    </div>
-@endif
+@php
+    $logoUri = $letterMeta['logo_uri'] ?? null;
+    $signatureUri = $letterMeta['signature_uri'] ?? null;
+    $logoAlign = $letterMeta['logo_align'] ?? 'center';
+    $dateAlign = $letterMeta['date_align'] ?? 'left';
+    $directorName = trim($letterMeta['director_intro_name'] ?? $company->director_name ?? '');
+    $directorIntro = $directorName !== '' ? 'Mr. '.$directorName : 'the Company Director';
+@endphp
 
-<div class="letter-date">Date: {{ $letterDate }}</div>
+<table class="header-table">
+    <tr>
+        @if($logoAlign === 'right')
+            <td class="header-date {{ $dateAlign }}">Date: {{ $letterDate }}</td>
+            <td>
+                @if($logoUri)
+                    <div class="logo-wrap right">
+                        <img src="{{ $logoUri }}" alt="{{ $company->name }}">
+                    </div>
+                @endif
+            </td>
+        @elseif($logoAlign === 'left')
+            <td>
+                @if($logoUri)
+                    <div class="logo-wrap left">
+                        <img src="{{ $logoUri }}" alt="{{ $company->name }}">
+                    </div>
+                @endif
+            </td>
+            <td class="header-date {{ $dateAlign }}">Date: {{ $letterDate }}</td>
+        @else
+            <td colspan="2">
+                @if($logoUri)
+                    <div class="logo-wrap center">
+                        <img src="{{ $logoUri }}" alt="{{ $company->name }}">
+                    </div>
+                @endif
+                <div class="header-date {{ $dateAlign }}" style="margin-top: 10px;">Date: {{ $letterDate }}</div>
+            </td>
+        @endif
+    </tr>
+</table>
 
 <div class="doc-title">Permission Letter</div>
 
 <p>Hello Sir/Madam</p>
 
 <p>
-    I, Mr. {{ $company->director_name }} (Company Director, {{ $company->name }}) confirm that the below vehicle
-    is owned by the company {{ strtoupper($company->name) }}.
+    I, {{ $directorIntro }} (Company Director, {{ $letterMeta['intro_company_short'] }}) confirm that the below vehicle
+    is owned by the company {{ $letterMeta['owned_by_name'] }}.
 </p>
 
-<div class="section-title">VEHICLE DETAILS</div>
-<div class="field"><span class="lbl">MAKE AND MODEL:</span> {{ strtoupper($car->carModel->name ?? '') }}</div>
-<div class="field"><span class="lbl">REGISTRATION NO:</span> {{ strtoupper($car->registration) }}</div>
-<div class="field"><span class="lbl">COLOUR:</span> {{ strtoupper($car->color ?? '') }}</div>
-<div class="field"><span class="lbl">INSURANCE POLICY NO:</span> {{ $policyNumber ?: '—' }}</div>
+<div class="section-title">Vehicle Details</div>
+<div class="field"><span class="lbl">Make and Model:</span> <span class="val">{{ strtoupper($car->carModel->name ?? '') }}</span></div>
+<div class="field"><span class="lbl">Registration No:</span> <span class="val">{{ strtoupper($car->registration) }}</span></div>
+<div class="field"><span class="lbl">Colour:</span> <span class="val">{{ strtoupper($car->color ?? '') }}</span></div>
+<div class="policy-field">{{ $letterMeta['policy_label'] }} {{ $policyNumber ?: '—' }}</div>
 
-<div class="section-title">CONTRACT COMMENCING FROM</div>
-<div class="field"><span class="lbl">COMMENCING DATE:</span> {{ $agreement->start_date->format('d.m.Y') }}</div>
-<div class="field"><span class="lbl">CONTRACT ENDING DATE:</span> {{ $agreement->end_date->format('d.m.Y') }}</div>
+<div class="section-title">Contract Commencing From</div>
+<div class="field"><span class="lbl">Commencing Date:</span> <span class="val">{{ $agreement->start_date->format('d.m.Y') }}</span></div>
+<div class="field"><span class="lbl">Contract Ending Date:</span> <span class="val">{{ $agreement->end_date->format('d.m.Y') }}</span></div>
 
-<p style="margin-top: 12px;">
+<p style="margin-top: 14px;">
     I have authorized and given permission to the following individual to use this vehicle on a
     temporary basis.
 </p>
 
-<div class="field"><span class="lbl">DRIVER NAME:</span> MR {{ strtoupper($driver->full_name) }}</div>
-<div class="field"><span class="lbl">DRIVER LICENSE NO:</span> {{ strtoupper($driver->driver_license_number ?? '') }}</div>
-<div class="field"><span class="lbl">DRIVER ADDRESS:</span> @include('backend.agreements._driver_address_pdf', ['driver' => $driver])</div>
+<div class="driver-field">Driver Name: MR {{ strtoupper($driver->full_name) }}</div>
+<div class="driver-field">Driver License No: {{ strtoupper($driver->driver_license_number ?? '') }}</div>
+<div class="driver-field">Driver Address: @include('backend.agreements._driver_address_pdf', ['driver' => $driver])</div>
 
-<p style="margin-top: 12px;">
+<p style="margin-top: 14px;">
     The above-mentioned person is fully insured to use this vehicle for carriage of passenger and hire
     and reward insurance purposes.
 </p>
@@ -131,15 +218,38 @@
 <p>Yours faithfully.</p>
 
 <div class="sig-block">
-    <div class="sig-name">{{ strtoupper($company->director_name) }}</div>
+    @if($signatureUri)
+        <div class="sig-image">
+            <img src="{{ $signatureUri }}" alt="Signature">
+        </div>
+    @endif
+    <div class="sig-line"></div>
+    <div class="sig-name">{{ $letterMeta['signatory_name'] }}</div>
     <div class="sig-title">Company Director</div>
-    <div class="sig-company">{{ strtoupper($company->name) }}</div>
+    <div class="sig-company">{{ $letterMeta['owned_by_name'] }}</div>
 </div>
 
 <div class="footer">
-    {{ $company->name }}, {{ $company->address_line_1 }}, {{ $company->town }} {{ $company->postcode }} {{ $company->phone }} | {{ $company->email }}.
-    @if($company->company_registration_number)
-        <br>{{ $company->name }} is Registered in England and Wales with Company No. {{ $company->company_registration_number }}
+    @if(($letterMeta['footer_style'] ?? 'generic') === 'proactive')
+        {{ $company->name }}<br>
+        Address: {{ $company->address_line_1 }} {{ $company->town }} {{ $company->postcode }}
+        Tel: {{ $company->phone }} | Email: {{ $company->email }}
+        @if($company->company_registration_number)
+            <br>{{ $company->name }} is registered in England and Wales with Company No. {{ $company->company_registration_number }}
+            @if($company->address_line_1 || $company->town || $company->postcode)
+                Registered Office Address: {{ $company->address_line_1 }}@if($company->address_line_2), {{ $company->address_line_2 }}@endif, {{ $company->town }}, {{ $company->postcode }}
+            @endif
+        @endif
+    @elseif(($letterMeta['footer_style'] ?? 'generic') === 'samore')
+        {{ $company->name }}, {{ $company->address_line_1 }}, {{ $company->town }} {{ $company->postcode }} {{ $company->phone }} | {{ $company->email }}.
+        @if($company->company_registration_number)
+            <br>{{ $company->name }} is Registered in England and Wales with Company No. {{ $company->company_registration_number }}
+        @endif
+    @else
+        {{ $company->name }}, {{ $company->address_line_1 }}, {{ $company->town }} {{ $company->postcode }} {{ $company->phone }} | {{ $company->email }}.
+        @if($company->company_registration_number)
+            <br>{{ $company->name }} is Registered in England and Wales with Company No. {{ $company->company_registration_number }}
+        @endif
     @endif
 </div>
 
