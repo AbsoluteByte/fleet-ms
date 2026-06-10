@@ -701,6 +701,10 @@ class AgreementController extends Controller
             ? $agreement->own_insurance_policy_number
             : optional($agreement->insuranceProvider)->policy_number;
 
+        $insuranceExpiryDate = $agreement->using_own_insurance
+            ? $agreement->own_insurance_end_date
+            : optional($agreement->insuranceProvider)->expiry_date;
+
         $letterMeta = app(PermissionLetterService::class)->resolveLetterMeta($agreement->company);
 
         $data = [
@@ -710,6 +714,7 @@ class AgreementController extends Controller
             'car' => $agreement->car,
             'policyNumber' => $policyNumber,
             'letterDate' => $agreement->start_date->format('d.m.Y'),
+            'contractEndingDate' => $insuranceExpiryDate?->format('d.m.Y') ?? '—',
             'letterMeta' => $letterMeta,
         ];
 

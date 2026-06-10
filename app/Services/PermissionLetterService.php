@@ -19,7 +19,7 @@ class PermissionLetterService
      *     owned_by_name: string,
      *     signatory_name: string,
      *     director_intro_name: ?string,
-     *     footer_style: string
+     *     footer_html: string
      * }
      */
     public function resolveLetterMeta(Company $company): array
@@ -36,7 +36,10 @@ class PermissionLetterService
             'owned_by_name' => strtoupper($company->name),
             'signatory_name' => strtoupper($company->director_name ?? ''),
             'director_intro_name' => null,
-            'footer_style' => 'generic',
+            'footer_html' => e($company->name).', '.e($company->address_line_1).', '.e($company->town).' '.e($company->postcode).' '.e($company->phone).' | '.e($company->email).'.'
+                .($company->company_registration_number
+                    ? '<br>'.e($company->name).' is Registered in England and Wales with Company No. '.e($company->company_registration_number)
+                    : ''),
         ];
 
         $presets = [
@@ -50,7 +53,9 @@ class PermissionLetterService
                 'owned_by_name' => 'SAMORE TRADERS LTD',
                 'signatory_name' => 'JAWAD SAMORE',
                 'director_intro_name' => 'Jawad Ahmed Samore',
-                'footer_style' => 'samore',
+                'footer_html' => 'SAMORE TRADERS LIMITED<br>'
+                    .'Company number 08741649<br>'
+                    .'337b New Summer Street, Birmingham, England, B19 3RD',
             ],
             'proactive' => [
                 'logo_uri' => $this->imageDataUri(public_path('uploads/companies/permission-letters/proactive-logo.png')),
@@ -62,7 +67,9 @@ class PermissionLetterService
                 'owned_by_name' => 'PROACTIVE HYBRID CORPORATE LTD',
                 'signatory_name' => 'JAWAD SAMORE',
                 'director_intro_name' => 'Jawad Samore',
-                'footer_style' => 'proactive',
+                'footer_html' => 'PROACTIVE HYBRID CORPORATE LTD<br>'
+                    .'Company number 12298619<br>'
+                    .'30 Brewery Street, Birmingham, B6 4JB',
             ],
         ];
 

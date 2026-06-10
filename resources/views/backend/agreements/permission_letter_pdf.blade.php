@@ -197,7 +197,7 @@
 
 <div class="section-title">Contract Commencing From</div>
 <div class="field"><span class="lbl">Commencing Date:</span> <span class="val">{{ $agreement->start_date->format('d.m.Y') }}</span></div>
-<div class="field"><span class="lbl">Contract Ending Date:</span> <span class="val">{{ $agreement->end_date->format('d.m.Y') }}</span></div>
+<div class="field"><span class="lbl">Contract Ending Date:</span> <span class="val">{{ $contractEndingDate }}</span></div>
 
 <p style="margin-top: 14px;">
     I have authorized and given permission to the following individual to use this vehicle on a
@@ -230,27 +230,7 @@
 </div>
 
 <div class="footer">
-    @if(($letterMeta['footer_style'] ?? 'generic') === 'proactive')
-        {{ $company->name }}<br>
-        Address: {{ $company->address_line_1 }} {{ $company->town }} {{ $company->postcode }}
-        Tel: {{ $company->phone }} | Email: {{ $company->email }}
-        @if($company->company_registration_number)
-            <br>{{ $company->name }} is registered in England and Wales with Company No. {{ $company->company_registration_number }}
-            @if($company->address_line_1 || $company->town || $company->postcode)
-                Registered Office Address: {{ $company->address_line_1 }}@if($company->address_line_2), {{ $company->address_line_2 }}@endif, {{ $company->town }}, {{ $company->postcode }}
-            @endif
-        @endif
-    @elseif(($letterMeta['footer_style'] ?? 'generic') === 'samore')
-        {{ $company->name }}, {{ $company->address_line_1 }}, {{ $company->town }} {{ $company->postcode }} {{ $company->phone }} | {{ $company->email }}.
-        @if($company->company_registration_number)
-            <br>{{ $company->name }} is Registered in England and Wales with Company No. {{ $company->company_registration_number }}
-        @endif
-    @else
-        {{ $company->name }}, {{ $company->address_line_1 }}, {{ $company->town }} {{ $company->postcode }} {{ $company->phone }} | {{ $company->email }}.
-        @if($company->company_registration_number)
-            <br>{{ $company->name }} is Registered in England and Wales with Company No. {{ $company->company_registration_number }}
-        @endif
-    @endif
+    {!! $letterMeta['footer_html'] !!}
 </div>
 
 </body>
