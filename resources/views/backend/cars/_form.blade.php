@@ -63,7 +63,7 @@
             <select name="color" id="color" class="form-control @error('color') is-invalid @enderror" required>
                 <option value="">Select Color</option>
                 @php
-                    $colors = ['Black', 'White', 'Silver', 'Blue', 'Red', 'Grey', 'Green', 'Yellow', 'Orange', 'Purple', 'Brown', 'Gold'];
+                    $colors = ['Black', 'White', 'Silver', 'Blue', 'Red', 'Grey', 'Green', 'Yellow', 'Orange', 'Purple', 'Brown', 'Gold', 'Bronze'];
                     $selectedColor = old('color') ?? (isset($model) && $model->id ? $model->color : '');
                 @endphp
                 @foreach($colors as $color)
