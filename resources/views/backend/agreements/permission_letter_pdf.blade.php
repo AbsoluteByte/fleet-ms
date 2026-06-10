@@ -17,40 +17,58 @@
         .header-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 22px;
+            margin-bottom: 0;
+            table-layout: fixed;
         }
 
         .header-table td {
-            vertical-align: top;
             width: 50%;
+            vertical-align: top;
+            padding: 0;
         }
 
         .header-date {
             font-size: 11px;
-            padding-top: 4px;
+            line-height: 1.2;
         }
 
-        .header-date.left { text-align: left; }
-        .header-date.right { text-align: right; }
-
-        .logo-wrap {
-            line-height: 0;
+        .header-date-left {
+            text-align: left;
+            padding-top: 10px;
         }
 
-        .logo-wrap.left { text-align: left; }
-        .logo-wrap.right { text-align: right; }
-        .logo-wrap.center { text-align: center; }
+        .header-date-right {
+            text-align: right;
+            padding-top: 10px;
+        }
 
-        .logo-wrap img {
-            max-height: 72px;
-            max-width: 220px;
+        .header-logo-left {
+            text-align: left;
+        }
+
+        .header-logo-right {
+            text-align: right;
+        }
+
+        .header-logo-left img,
+        .header-logo-right img {
+            max-height: 70px;
+            max-width: 200px;
+        }
+
+        .header-logo-row td {
+            padding-bottom: 0;
+        }
+
+        .header-date-row td {
+            padding-top: 6px;
         }
 
         .doc-title {
             text-align: center;
             font-size: 20px;
             font-weight: bold;
-            margin: 8px 0 20px;
+            margin: 34px 0 20px;
         }
 
         p {
@@ -141,43 +159,46 @@
 @php
     $logoUri = $letterMeta['logo_uri'] ?? null;
     $signatureUri = $letterMeta['signature_uri'] ?? null;
-    $logoAlign = $letterMeta['logo_align'] ?? 'center';
-    $dateAlign = $letterMeta['date_align'] ?? 'left';
+    $logoAlign = $letterMeta['logo_align'] ?? 'left';
     $directorName = trim($letterMeta['director_intro_name'] ?? $company->director_name ?? '');
-    $directorIntro = $directorName !== '' ? 'Mr. '.$directorName : 'the Company Director';
+    $directorSalutation = $letterMeta['director_salutation'] ?? 'Mr.';
+    $directorIntro = $directorName !== '' ? $directorSalutation.' '.$directorName : 'the Company Director';
 @endphp
 
-<table class="header-table">
-    <tr>
-        @if($logoAlign === 'right')
-            <td class="header-date {{ $dateAlign }}">Date: {{ $letterDate }}</td>
-            <td>
+<table class="header-table" cellpadding="0" cellspacing="0">
+    @if($logoAlign === 'right')
+        {{-- Samore: logo top-right, date below on the left --}}
+        <tr class="header-logo-row">
+            <td style="width: 50%;"></td>
+            <td class="header-logo-right" style="width: 50%; text-align: right;">
                 @if($logoUri)
-                    <div class="logo-wrap right">
-                        <img src="{{ $logoUri }}" alt="{{ $company->name }}">
-                    </div>
+                    <img src="{{ $logoUri }}" alt="{{ $company->name }}">
                 @endif
             </td>
-        @elseif($logoAlign === 'left')
-            <td>
+        </tr>
+        <tr class="header-date-row">
+            <td style="width: 50%; text-align: left;">
+                <div class="header-date header-date-left">Date: {{ $letterDate }}</div>
+            </td>
+            <td style="width: 50%;"></td>
+        </tr>
+    @else
+        {{-- Proactive: logo top-left, date below on the right --}}
+        <tr class="header-logo-row">
+            <td class="header-logo-left" style="width: 50%; text-align: left;">
                 @if($logoUri)
-                    <div class="logo-wrap left">
-                        <img src="{{ $logoUri }}" alt="{{ $company->name }}">
-                    </div>
+                    <img src="{{ $logoUri }}" alt="{{ $company->name }}">
                 @endif
             </td>
-            <td class="header-date {{ $dateAlign }}">Date: {{ $letterDate }}</td>
-        @else
-            <td colspan="2">
-                @if($logoUri)
-                    <div class="logo-wrap center">
-                        <img src="{{ $logoUri }}" alt="{{ $company->name }}">
-                    </div>
-                @endif
-                <div class="header-date {{ $dateAlign }}" style="margin-top: 10px;">Date: {{ $letterDate }}</div>
+            <td style="width: 50%;"></td>
+        </tr>
+        <tr class="header-date-row">
+            <td style="width: 50%;"></td>
+            <td style="width: 50%; text-align: right;">
+                <div class="header-date header-date-right">Date: {{ $letterDate }}</div>
             </td>
-        @endif
-    </tr>
+        </tr>
+    @endif
 </table>
 
 <div class="doc-title">Permission Letter</div>

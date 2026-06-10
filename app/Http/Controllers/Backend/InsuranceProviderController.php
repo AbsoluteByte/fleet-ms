@@ -45,7 +45,7 @@ class InsuranceProviderController extends Controller
                 ->with('error', 'No active company found!');
         }
         $statuses = Status::where('type', 'insurance')->get();
-        $companies = Company::where('tenant_id', $tenant->id)->all();
+        $companies = Company::where('tenant_id', $tenant->id)->get();
         return view($this->dir.'create', compact('statuses', 'companies'));
     }
 
@@ -98,7 +98,7 @@ class InsuranceProviderController extends Controller
 
         $model = InsuranceProvider::where('tenant_id', $tenant->id)->findOrFail($id);
         $statuses = Status::where('type', 'insurance')->get();
-        $companies = Company::where('tenant_id', $tenant->id)->all();
+        $companies = Company::where('tenant_id', $tenant->id)->get();
         return view($this->dir.'edit', compact('model', 'statuses', 'companies'));
     }
 

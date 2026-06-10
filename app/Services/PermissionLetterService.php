@@ -19,6 +19,7 @@ class PermissionLetterService
      *     owned_by_name: string,
      *     signatory_name: string,
      *     director_intro_name: ?string,
+     *     director_salutation: string,
      *     footer_html: string
      * }
      */
@@ -36,6 +37,7 @@ class PermissionLetterService
             'owned_by_name' => strtoupper($company->name),
             'signatory_name' => strtoupper($company->director_name ?? ''),
             'director_intro_name' => null,
+            'director_salutation' => 'Mr.',
             'footer_html' => e($company->name).', '.e($company->address_line_1).', '.e($company->town).' '.e($company->postcode).' '.e($company->phone).' | '.e($company->email).'.'
                 .($company->company_registration_number
                     ? '<br>'.e($company->name).' is Registered in England and Wales with Company No. '.e($company->company_registration_number)
@@ -53,6 +55,7 @@ class PermissionLetterService
                 'owned_by_name' => 'SAMORE TRADERS LTD',
                 'signatory_name' => 'JAWAD SAMORE',
                 'director_intro_name' => 'Jawad Ahmed Samore',
+                'director_salutation' => 'Mr.',
                 'footer_html' => 'SAMORE TRADERS LIMITED<br>'
                     .'Company number 08741649<br>'
                     .'337b New Summer Street, Birmingham, England, B19 3RD',
@@ -65,8 +68,9 @@ class PermissionLetterService
                 'policy_label' => 'POLICY NO:',
                 'intro_company_short' => 'Proactive hybrid corporate ltd',
                 'owned_by_name' => 'PROACTIVE HYBRID CORPORATE LTD',
-                'signatory_name' => 'JAWAD SAMORE',
-                'director_intro_name' => 'Jawad Samore',
+                'signatory_name' => 'AMNA CHOUDHRY',
+                'director_intro_name' => 'Amna Choudhry',
+                'director_salutation' => 'Miss',
                 'footer_html' => 'PROACTIVE HYBRID CORPORATE LTD<br>'
                     .'Company number 12298619<br>'
                     .'30 Brewery Street, Birmingham, B6 4JB',

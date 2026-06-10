@@ -167,6 +167,7 @@
                     </div>
                 </div>
 
+                {{-- County field hidden per client request
                 <div class="col-md-3">
                     <div class="mb-2">
                         <label for="county" class="form-label">County</label>
@@ -179,6 +180,7 @@
                         @enderror
                     </div>
                 </div>
+                --}}
 
                 <div class="col-md-3">
                     <div class="mb-2">
@@ -589,7 +591,7 @@
             });
 
             // Auto-capitalize address fields
-            const addressFields = ['address1', 'address2', 'town', 'county'];
+            const addressFields = ['address1', 'address2', 'town'];
             addressFields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
                 if (field) {
