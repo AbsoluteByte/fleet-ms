@@ -670,6 +670,53 @@ class AgreementController extends Controller
         }
     }
 
+    public function permissionLetterPDF(Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        try {
+            [$pdf, $filename] = $this->makePermissionLetterPdf($agreement);
+
+            return $pdf->stream($filename);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to generate permission letter: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * @return array{0: \Barryvdh\DomPDF\PDF, 1: string}
+     */
+    private function makePermissionLetterPdf(Agreement $agreement): array
+    {
+        $agreement->load([
+            'company', 'driver', 'car', 'car.carModel', 'insuranceProvider',
+        ]);
+
+        $policyNumber = $agreement->using_own_insurance
+            ? $agreement->own_insurance_policy_number
+            : optional($agreement->insuranceProvider)->policy_number;
+
+        $data = [
+            'agreement' => $agreement,
+            'company' => $agreement->company,
+            'driver' => $agreement->driver,
+            'car' => $agreement->car,
+            'policyNumber' => $policyNumber,
+            'letterDate' => $agreement->start_date->format('d.m.Y'),
+        ];
+
+        $pdf = PDF::loadView($this->dir.'.permission_letter_pdf', $data);
+        $pdf->setPaper('A4', 'portrait');
+
+        $filename = 'Permission_Letter_'.$agreement->id.'_'.str_replace(' ', '_', $agreement->driver->full_name).'.pdf';
+
+        return [$pdf, $filename];
+    }
+
     /**
      * @return array{0: \Barryvdh\DomPDF\PDF, 1: string}
      */

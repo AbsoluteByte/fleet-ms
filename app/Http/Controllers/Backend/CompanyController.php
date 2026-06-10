@@ -62,6 +62,7 @@ class CompanyController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'director_name' => 'required|string|max:255',
+            'company_registration_number' => 'nullable|string|max:50',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             'address_line_1' => 'required|string|max:255',
             'address_line_2' => 'nullable|string|max:255',
@@ -128,6 +129,7 @@ class CompanyController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'director_name' => 'required|string|max:255',
+            'company_registration_number' => 'nullable|string|max:50',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             'address_line_1' => 'required|string|max:255',
             'address_line_2' => 'nullable|string|max:255',

@@ -123,6 +123,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('agreements', App\Http\Controllers\Backend\AgreementController::class);
     Route::get('agreements/{agreement}/pdf', [App\Http\Controllers\Backend\AgreementController::class, 'generatePDF'])->name('agreements.pdf');
     Route::get('agreements/{agreement}/pdf/preview', [App\Http\Controllers\Backend\AgreementController::class, 'previewPDF'])->name('agreements.pdf.preview');
+    Route::get('agreements/{agreement}/permission-letter', [App\Http\Controllers\Backend\AgreementController::class, 'permissionLetterPDF'])->name('agreements.permission-letter');
 
     // Inside admin prefix group
     Route::post('agreements/{agreement}/send-esign', [App\Http\Controllers\Backend\AgreementController::class, 'sendForESignature'])

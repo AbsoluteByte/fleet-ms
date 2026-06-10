@@ -15,6 +15,10 @@
                 <i class="fa fa-file-pdf-o me-2"></i>
                 Generate PDF
             </a>
+            <a href="{{ route('agreements.permission-letter', $agreement) }}" class="btn btn-outline-primary" target="_blank" rel="noopener noreferrer">
+                <i class="fa fa-file-text-o me-2"></i>
+                Permission Letter
+            </a>
             <a href="{{ route('agreements.edit', $agreement) }}" class="btn btn-warning">
                 <i class="fa fa-edit me-2"></i>
                 Edit

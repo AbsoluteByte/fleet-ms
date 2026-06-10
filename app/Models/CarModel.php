@@ -8,7 +8,7 @@ class CarModel extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['tenant_id, name', 'createdBy', 'updatedBy'];
+    protected $fillable = ['tenant_id', 'name', 'createdBy', 'updatedBy'];
 
     public function cars()
     {

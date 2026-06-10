@@ -25,6 +25,19 @@
         @enderror
     </div>
 
+    {{-- Company Registration Number --}}
+    <div class="col-md-6 mb-3">
+        <label for="company_registration_number" class="form-label fw-bold">Company Registration Number</label>
+        <input type="text" name="company_registration_number" id="company_registration_number"
+               class="form-control @error('company_registration_number') is-invalid @enderror"
+               value="{{ old('company_registration_number') ?? ($model->company_registration_number ?? '') }}"
+               placeholder="e.g. 08741649">
+        @error('company_registration_number')
+        <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+        <small class="form-text text-muted">Optional. Used on Permission Letter PDF footer.</small>
+    </div>
+
     {{-- Company Logo --}}
     <div class="col-md-12 mb-4">
         <label for="logo" class="form-label fw-bold">Company Logo</label>

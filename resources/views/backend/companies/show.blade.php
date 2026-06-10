@@ -51,6 +51,15 @@
                                 </div>
                             </div>
 
+                            @if($company->company_registration_number)
+                                <div class="col-md-6 mb-3">
+                                    <div class="info-item">
+                                        <strong><i class="fa fa-id-card text-primary"></i> Company Registration Number:</strong>
+                                        <p class="mb-0 ml-4">{{ $company->company_registration_number }}</p>
+                                    </div>
+                                </div>
+                            @endif
+
                             <!-- Contact Information -->
                             <div class="col-12 mt-3">
                                 <h4 class="border-bottom pb-2 mb-3">
