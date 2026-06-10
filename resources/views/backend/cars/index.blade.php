@@ -9,7 +9,7 @@
                         <div class="float-right">
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="available_by_phv">Available by PHV</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="awaiting_phv">Awaiting PHV</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="preparation_for_phvl">Preparation for PHVL</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="preparation_for_phvl">PHVL Preparation</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="damaged">Damaged</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="written_off">Written off</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="stolen">Stolen</button>

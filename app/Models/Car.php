@@ -160,7 +160,7 @@ class Car extends Model
     public static function fleetStatusLabels(): array
     {
         return [
-            self::FLEET_STATUS_PREPARATION_FOR_PHVL => 'Preparation for PHVL',
+            self::FLEET_STATUS_PREPARATION_FOR_PHVL => 'PHVL Preparation',
             self::FLEET_STATUS_AVAILABLE_FOR_RENT => 'Available for Rent',
             'reserved' => 'Reserved',
             'vehicle_swap' => 'Vehicle Swap',
