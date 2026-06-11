@@ -174,21 +174,6 @@
                     this.value = value;
                 });
             }
-            // Expiry date validation
-            const expiryField = document.getElementById('expiry_date');
-            if (expiryField) {
-                expiryField.addEventListener('change', function() {
-                    const selectedDate = new Date(this.value);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-
-                    if (selectedDate <= today) {
-                        alert('Expiry date should be in the future.');
-                        // Don't clear the field, just warn the user
-                    }
-                });
-            }
-
             // Amount validation
             const amountField = document.getElementById('amount');
             if (amountField) {
