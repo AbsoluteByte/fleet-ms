@@ -8,8 +8,8 @@ use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
 use App\Models\Invoice;
-use App\Models\InsuranceProvider;
 use App\Models\Status;
+use App\Models\Tenant;
 use App\Services\AgreementInvoiceService;
 use App\Services\PaymentAllocationService;
 use App\Services\PermissionLetterService;
@@ -67,8 +67,7 @@ class AgreementController extends Controller
         }
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
-        $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'insurances.status'])->get();
-        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
+        $cars = $this->carsForAgreementForm($tenant);
         $model = new Agreement;
         $statuses = Status::where('type', 'agreement')->get();
 
@@ -77,7 +76,7 @@ class AgreementController extends Controller
         $agreementPaymentLimit = null;
         $agreementPaymentAllowed = true;
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed'));
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed'));
     }
 
     public function store(Request $request)
@@ -107,9 +106,7 @@ class AgreementController extends Controller
             'condition_report' => 'nullable|string',
             'notes' => 'nullable|string',
             'status_id' => 'required|exists:statuses,id',
-            // New insurance validation
             'using_own_insurance' => 'boolean',
-            'insurance_provider_id' => 'required_if:using_own_insurance,0|nullable|exists:insurance_providers,id',
             'own_insurance_provider_name' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_start_date' => 'required_if:using_own_insurance,1|nullable|date',
             'own_insurance_end_date' => 'required_if:using_own_insurance,1|nullable|date|after:own_insurance_start_date',
@@ -232,15 +229,14 @@ class AgreementController extends Controller
         $model = $agreement->load('collections');
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
-        $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'insurances.status'])->get();
-        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
+        $cars = $this->carsForAgreementForm($tenant, $agreement->car_id);
         $statuses = Status::where('type', 'agreement')->get();
 
         $canManageDiscount = $this->canManageDiscount();
         $agreementPaymentLimit = $this->unpaidAgreementInvoiceBalance($agreement);
         $agreementPaymentAllowed = $agreementPaymentLimit > 0;
 
-        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'insuranceProviders', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed'));
+        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed'));
     }
 
     public function update(Request $request, Agreement $agreement)
@@ -272,7 +268,6 @@ class AgreementController extends Controller
             'status_id' => 'required|exists:statuses,id',
 
             'using_own_insurance' => 'boolean',
-            'insurance_provider_id' => 'required_if:using_own_insurance,0|nullable|exists:insurance_providers,id',
             'own_insurance_provider_name' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_start_date' => 'required_if:using_own_insurance,1|nullable|date',
             'own_insurance_end_date' => 'required_if:using_own_insurance,1|nullable|date|after:own_insurance_start_date',
@@ -416,6 +411,27 @@ class AgreementController extends Controller
         return $validated;
     }
 
+    private function carsForAgreementForm(Tenant $tenant, ?int $alwaysIncludeCarId = null)
+    {
+        $cars = Car::where('tenant_id', $tenant->id)
+            ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'insurances.status', 'insurances.insuranceProvider'])
+            ->get()
+            ->filter(fn (Car $car) => $car->isEligibleForAgreementSelection());
+
+        if ($alwaysIncludeCarId) {
+            $currentCar = Car::where('tenant_id', $tenant->id)
+                ->where('id', $alwaysIncludeCarId)
+                ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'insurances.status', 'insurances.insuranceProvider'])
+                ->first();
+
+            if ($currentCar && ! $cars->contains('id', $alwaysIncludeCarId)) {
+                $cars = $cars->push($currentCar);
+            }
+        }
+
+        return $cars->sortBy('registration')->values();
+    }
+
     private function mergeInsuranceData(Request $request, array $validated, ?Agreement $existing = null): array
     {
         $usingOwn = $request->boolean('using_own_insurance');
@@ -434,6 +450,7 @@ class AgreementController extends Controller
             $validated['own_insurance_type'] = null;
             $validated['own_insurance_policy_number'] = null;
             $validated['own_insurance_proof_document'] = null;
+            $validated['insurance_provider_id'] = null;
 
             return $validated;
         }
@@ -694,16 +711,18 @@ class AgreementController extends Controller
     private function makePermissionLetterPdf(Agreement $agreement): array
     {
         $agreement->load([
-            'company', 'driver', 'car', 'car.carModel', 'insuranceProvider',
+            'company', 'driver', 'car', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
         ]);
+
+        $activeCarInsurance = $agreement->car?->currentActiveInsurance();
 
         $policyNumber = $agreement->using_own_insurance
             ? $agreement->own_insurance_policy_number
-            : optional($agreement->insuranceProvider)->policy_number;
+            : optional($activeCarInsurance?->insuranceProvider)->policy_number;
 
         $insuranceExpiryDate = $agreement->using_own_insurance
             ? $agreement->own_insurance_end_date
-            : optional($agreement->insuranceProvider)->expiry_date;
+            : $activeCarInsurance?->expiry_date;
 
         $letterMeta = app(PermissionLetterService::class)->resolveLetterMeta($agreement->company);
 

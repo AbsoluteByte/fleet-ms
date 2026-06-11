@@ -14,10 +14,15 @@
                     <select name="car_id" id="car_id" class="form-control select-search @error('car_id') is-invalid @enderror" required>
                         <option value="">Select Vehicle</option>
                         @foreach($cars as $car)
+                            @php
+                                $activeInsurance = $car->currentActiveInsurance();
+                            @endphp
                             <option value="{{ $car->id }}"
                                     data-company-id="{{ $car->company_id }}"
                                     data-has-active-insurance="{{ $car->isInsuranceCurrentlyActive() ? '1' : '0' }}"
-                                    data-active-insurance-provider-id="{{ optional($car->currentActiveInsurance())->insurance_provider_id }}"
+                                    data-insurance-provider-name="{{ optional($activeInsurance?->insuranceProvider)->provider_name }}"
+                                    data-insurance-policy-number="{{ optional($activeInsurance?->insuranceProvider)->policy_number }}"
+                                    data-insurance-expiry="{{ optional($activeInsurance?->expiry_date)->format('d M, Y') }}"
                                 {{ (old('car_id') ?? (isset($model) ? $model->car_id : '')) == $car->id ? 'selected' : '' }}>
                                 {{ $car->registration }} - {{ $car->carModel->name }}
                             </option>
@@ -314,25 +319,74 @@
             </div>
         </div>
 
-        <!-- Company's insurance (provider) -->
-        <div id="provider-insurance-section" style="display: none;">
+        <!-- Company's insurance (read-only from car record) -->
+        <div id="vehicle-insurance-section" style="display: none;">
             <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="insurance_provider_id" class="form-label">Insurance Provider *</label>
-                        <select name="insurance_provider_id" id="insurance_provider_id" class="form-control select-search @error('insurance_provider_id') is-invalid @enderror">
-                            <option value="">Select Insurance Provider</option>
-                            @foreach($insuranceProviders as $provider)
-                                <option value="{{ $provider->id }}"
-                                        data-company-id="{{ $provider->company_id }}"
-                                    {{ (old('insurance_provider_id') ?? (isset($model) ? $model->insurance_provider_id : '')) == $provider->id ? 'selected' : '' }}>
-                                    {{ $provider->provider_name }}
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('insurance_provider_id')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
+                <div class="col-12">
+                    <div class="mb-0">
+                        <div id="vehicle-insurance-empty" class="vehicle-insurance-panel vehicle-insurance-panel--empty" style="display: none;">
+                            <div class="vehicle-insurance-panel__icon vehicle-insurance-panel__icon--muted">
+                                <i class="fa fa-car"></i>
+                            </div>
+                            <div>
+                                <div class="vehicle-insurance-panel__title">No vehicle selected</div>
+                                <div class="vehicle-insurance-panel__subtitle">Choose a vehicle above to view its current insurance details.</div>
+                            </div>
+                        </div>
+
+                        <div id="vehicle-insurance-active" class="vehicle-insurance-panel vehicle-insurance-panel--active" style="display: none;">
+                            <div class="vehicle-insurance-panel__header">
+                                <div class="vehicle-insurance-panel__heading">
+                                    <div class="vehicle-insurance-panel__icon vehicle-insurance-panel__icon--active">
+                                        <i class="fa fa-shield-alt"></i>
+                                    </div>
+                                    <div>
+                                        <div class="vehicle-insurance-panel__title">Active vehicle insurance</div>
+                                        <div class="vehicle-insurance-panel__subtitle">Read-only — synced from the car record</div>
+                                    </div>
+                                </div>
+                                <span class="vehicle-insurance-status-badge vehicle-insurance-status-badge--active">
+                                    <i class="fa fa-check-circle"></i> Active
+                                </span>
+                            </div>
+                            <div class="vehicle-insurance-details">
+                                <div class="vehicle-insurance-detail">
+                                    <div class="vehicle-insurance-detail__label">
+                                        <i class="fa fa-building"></i> Insurance provider
+                                    </div>
+                                    <div class="vehicle-insurance-detail__value" id="vehicle-insurance-provider-name">—</div>
+                                </div>
+                                <div class="vehicle-insurance-detail">
+                                    <div class="vehicle-insurance-detail__label">
+                                        <i class="fa fa-file-alt"></i> Policy number
+                                    </div>
+                                    <div class="vehicle-insurance-detail__value vehicle-insurance-detail__value--mono" id="vehicle-insurance-policy-number">—</div>
+                                </div>
+                                <div class="vehicle-insurance-detail">
+                                    <div class="vehicle-insurance-detail__label">
+                                        <i class="fa fa-calendar-alt"></i> Expiry date
+                                    </div>
+                                    <div class="vehicle-insurance-detail__value" id="vehicle-insurance-expiry">—</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="vehicle-insurance-inactive" class="vehicle-insurance-panel vehicle-insurance-panel--inactive" style="display: none;">
+                            <div class="vehicle-insurance-panel__header">
+                                <div class="vehicle-insurance-panel__heading">
+                                    <div class="vehicle-insurance-panel__icon vehicle-insurance-panel__icon--warning">
+                                        <i class="fa fa-exclamation-triangle"></i>
+                                    </div>
+                                    <div>
+                                        <div class="vehicle-insurance-panel__title">No active insurance on this vehicle</div>
+                                        <div class="vehicle-insurance-panel__subtitle">This car can still be used on the agreement, but it is not currently insured on the fleet policy.</div>
+                                    </div>
+                                </div>
+                                <span class="vehicle-insurance-status-badge vehicle-insurance-status-badge--inactive">
+                                    Not active
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -701,20 +755,179 @@
                 flex-basis: 100%;
             }
         }
+
+        .vehicle-insurance-panel {
+            border: 1px solid #e4e6f1;
+            border-radius: 10px;
+            background: #fff;
+            padding: 16px 18px;
+            margin-top: 4px;
+        }
+
+        .vehicle-insurance-panel--empty {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: #fafbfc;
+            border-style: dashed;
+        }
+
+        .vehicle-insurance-panel--active {
+            border-color: #cfe8dc;
+            background: linear-gradient(180deg, #f8fdfb 0%, #ffffff 100%);
+            box-shadow: 0 2px 12px rgba(40, 167, 69, 0.06);
+        }
+
+        .vehicle-insurance-panel--inactive {
+            border-color: #f5d9a8;
+            background: linear-gradient(180deg, #fffaf2 0%, #ffffff 100%);
+            box-shadow: 0 2px 12px rgba(255, 159, 67, 0.08);
+        }
+
+        .vehicle-insurance-panel__header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .vehicle-insurance-panel--inactive .vehicle-insurance-panel__header {
+            margin-bottom: 0;
+        }
+
+        .vehicle-insurance-panel__heading {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .vehicle-insurance-panel__icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 16px;
+        }
+
+        .vehicle-insurance-panel__icon--active {
+            background: #e8f7ef;
+            color: #28a745;
+        }
+
+        .vehicle-insurance-panel__icon--warning {
+            background: #fff1dd;
+            color: #ff9f43;
+        }
+
+        .vehicle-insurance-panel__icon--muted {
+            background: #f1f2f6;
+            color: #8a8fa3;
+        }
+
+        .vehicle-insurance-panel__title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #4b4b5a;
+            line-height: 1.3;
+        }
+
+        .vehicle-insurance-panel__subtitle {
+            font-size: 12px;
+            color: #8a8fa3;
+            margin-top: 2px;
+            line-height: 1.45;
+        }
+
+        .vehicle-insurance-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .vehicle-insurance-status-badge--active {
+            background: #e8f7ef;
+            color: #1f8f4e;
+        }
+
+        .vehicle-insurance-status-badge--inactive {
+            background: #fff1dd;
+            color: #c77700;
+        }
+
+        .vehicle-insurance-details {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .vehicle-insurance-detail {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid #e8ebf3;
+            border-radius: 8px;
+            padding: 12px 14px;
+            min-width: 0;
+        }
+
+        .vehicle-insurance-detail__label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #8a8fa3;
+            margin-bottom: 6px;
+        }
+
+        .vehicle-insurance-detail__label i {
+            margin-right: 4px;
+            opacity: 0.85;
+        }
+
+        .vehicle-insurance-detail__value {
+            font-size: 14px;
+            font-weight: 600;
+            color: #3f3f4d;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .vehicle-insurance-detail__value--mono {
+            font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 0.02em;
+        }
+
+        @media (max-width: 991.98px) {
+            .vehicle-insurance-details {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .vehicle-insurance-panel__header {
+                flex-direction: column;
+            }
+
+            .vehicle-insurance-status-badge {
+                align-self: flex-start;
+            }
+        }
     </style>
 @endpush
 
 @push('js')
     <script>
-        // Store all insurance providers with their company IDs
-        const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
-            return [
-                'id' => $provider->id,
-                'company_id' => $provider->company_id,
-                'provider_name' => $provider->provider_name
-            ];
-        }));
-
         function setSelectValue(selectOrId, value) {
             const select = typeof selectOrId === 'string'
                 ? document.getElementById(selectOrId.replace(/^#/, ''))
@@ -735,6 +948,57 @@
             select.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
+        function updateVehicleInsuranceDisplay() {
+            const carSelect = document.getElementById('car_id');
+            const emptyPanel = document.getElementById('vehicle-insurance-empty');
+            const activePanel = document.getElementById('vehicle-insurance-active');
+            const inactivePanel = document.getElementById('vehicle-insurance-inactive');
+            const providerNameEl = document.getElementById('vehicle-insurance-provider-name');
+            const policyNumberEl = document.getElementById('vehicle-insurance-policy-number');
+            const expiryEl = document.getElementById('vehicle-insurance-expiry');
+
+            if (!carSelect || !activePanel || !inactivePanel) {
+                return;
+            }
+
+            const selectedOption = carSelect.options[carSelect.selectedIndex];
+            const hasCar = selectedOption && selectedOption.value !== '';
+            const hasActiveInsurance = hasCar
+                && selectedOption.getAttribute('data-has-active-insurance') === '1';
+
+            if (!hasCar) {
+                if (emptyPanel) {
+                    emptyPanel.style.display = 'flex';
+                }
+                activePanel.style.display = 'none';
+                inactivePanel.style.display = 'none';
+                return;
+            }
+
+            if (emptyPanel) {
+                emptyPanel.style.display = 'none';
+            }
+
+            if (hasActiveInsurance) {
+                activePanel.style.display = 'block';
+                inactivePanel.style.display = 'none';
+
+                if (providerNameEl) {
+                    providerNameEl.textContent = selectedOption.getAttribute('data-insurance-provider-name') || '—';
+                }
+                if (policyNumberEl) {
+                    policyNumberEl.textContent = selectedOption.getAttribute('data-insurance-policy-number') || '—';
+                }
+                if (expiryEl) {
+                    expiryEl.textContent = selectedOption.getAttribute('data-insurance-expiry') || '—';
+                }
+                return;
+            }
+
+            activePanel.style.display = 'none';
+            inactivePanel.style.display = 'block';
+        }
+
         function syncFromVehicle() {
             const carSelect = document.getElementById('car_id');
 
@@ -746,9 +1010,6 @@
             const companyId = selectedOption ? selectedOption.getAttribute('data-company-id') : null;
             const hasActiveInsurance = selectedOption
                 && selectedOption.getAttribute('data-has-active-insurance') === '1';
-            const activeProviderId = selectedOption
-                ? selectedOption.getAttribute('data-active-insurance-provider-id')
-                : null;
 
             if (hasActiveInsurance) {
                 const companyRadio = document.getElementById('using_own_insurance_company');
@@ -764,85 +1025,23 @@
                 setSelectValue('company_id', companyId);
             }
 
-            if (hasActiveInsurance && activeProviderId) {
-                filterInsuranceProviders(activeProviderId);
-                setSelectValue('insurance_provider_id', activeProviderId);
-            }
+            updateVehicleInsuranceDisplay();
         }
 
-        // Filter insurance providers based on selected company
-        function filterInsuranceProviders(preferredProviderId = null) {
-            const companyId = document.getElementById('company_id').value;
-            const insuranceProviderSelect = document.getElementById('insurance_provider_id');
-            const selectedProviderId = preferredProviderId != null && preferredProviderId !== ''
-                ? preferredProviderId
-                : insuranceProviderSelect.value;
-            const $insuranceProviderSelect = typeof $ !== 'undefined' ? $(insuranceProviderSelect) : null;
-            const usesSelect2 = $insuranceProviderSelect
-                && $.fn.select2
-                && $insuranceProviderSelect.hasClass('select2-hidden-accessible');
-
-            if (usesSelect2) {
-                $insuranceProviderSelect.empty().append(new Option('Select Insurance Provider', '', false, false));
-
-                if (companyId) {
-                    allInsuranceProviders
-                        .filter(provider => provider.company_id == companyId)
-                        .forEach(provider => {
-                            const option = new Option(
-                                provider.provider_name,
-                                provider.id,
-                                false,
-                                provider.id == selectedProviderId
-                            );
-                            option.setAttribute('data-company-id', provider.company_id);
-                            $insuranceProviderSelect.append(option);
-                        });
-                }
-
-                const stillValid = companyId && allInsuranceProviders.some(function (provider) {
-                    return provider.company_id == companyId && provider.id == selectedProviderId;
-                });
-
-                $insuranceProviderSelect.val(stillValid ? selectedProviderId : '').trigger('change.select2');
-                return;
-            }
-
-            insuranceProviderSelect.innerHTML = '<option value="">Select Insurance Provider</option>';
-
-            if (companyId) {
-                allInsuranceProviders
-                    .filter(provider => provider.company_id == companyId)
-                    .forEach(provider => {
-                        const option = document.createElement('option');
-                        option.value = provider.id;
-                        option.textContent = provider.provider_name;
-                        option.setAttribute('data-company-id', provider.company_id);
-
-                        if (provider.id == selectedProviderId) {
-                            option.selected = true;
-                        }
-
-                        insuranceProviderSelect.appendChild(option);
-                    });
-            }
-        }
-
-        // Toggle insurance sections based on Client's / Company's selection
         function toggleInsuranceSections() {
             const usingOwnInsuranceClient = document.getElementById('using_own_insurance_client');
             const usingOwnInsuranceCompany = document.getElementById('using_own_insurance_company');
-            const providerSection = document.getElementById('provider-insurance-section');
+            const vehicleInsuranceSection = document.getElementById('vehicle-insurance-section');
             const ownSection = document.getElementById('own-insurance-section');
 
             if (usingOwnInsuranceClient.checked) {
-                providerSection.style.display = 'none';
+                vehicleInsuranceSection.style.display = 'none';
                 ownSection.style.display = 'block';
-                setSelectValue('insurance_provider_id', '');
             } else if (usingOwnInsuranceCompany.checked) {
-                providerSection.style.display = 'block';
+                vehicleInsuranceSection.style.display = 'block';
                 ownSection.style.display = 'none';
                 clearOwnInsuranceFields();
+                updateVehicleInsuranceDisplay();
             }
         }
 
@@ -1020,8 +1219,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             toggleInsuranceSections();
             toggleAgreementPaymentFields();
-
-            filterInsuranceProviders();
+            updateVehicleInsuranceDisplay();
 
             document.getElementById('add_payment')?.addEventListener('change', toggleAgreementPaymentFields);
             document.getElementById('agreed_rent')?.addEventListener('input', function() {
@@ -1061,7 +1259,6 @@
             updateAgreementPaymentLimits();
             document.getElementById('using_own_insurance_client').addEventListener('change', toggleInsuranceSections);
             document.getElementById('using_own_insurance_company').addEventListener('change', toggleInsuranceSections);
-            document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
             const discountPercentage = document.getElementById('discount_type_percentage');
             const discountFixed = document.getElementById('discount_type_fixed');
             const discountValue = document.getElementById('discount_value');

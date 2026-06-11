@@ -255,6 +255,42 @@ class Car extends Model
         return $this->currentActiveInsurance() !== null;
     }
 
+    public function latestMot(): ?CarMot
+    {
+        return $this->mots
+            ->sortByDesc(fn (CarMot $m) => [optional($m->expiry_date)->timestamp ?? 0, $m->id])
+            ->first();
+    }
+
+    public function latestRoadTax(): ?CarRoadTax
+    {
+        return $this->roadTaxes
+            ->sortByDesc(fn (CarRoadTax $r) => [optional($r->expiryDate())->timestamp ?? 0, $r->id])
+            ->first();
+    }
+
+    public function isMotCurrentlyValid(): bool
+    {
+        $mot = $this->latestMot();
+
+        return (bool) ($mot?->expiry_date && $mot->expiry_date->copy()->startOfDay()->gte(now()->startOfDay()));
+    }
+
+    public function isRoadTaxCurrentlyValid(): bool
+    {
+        $roadTax = $this->latestRoadTax();
+        $expiry = $roadTax?->expiryDate();
+
+        return (bool) ($expiry && $expiry->copy()->startOfDay()->gte(now()->startOfDay()));
+    }
+
+    public function isEligibleForAgreementSelection(): bool
+    {
+        return $this->isMotCurrentlyValid()
+            && $this->isRoadTaxCurrentlyValid()
+            && $this->isPhvCurrentlyActive();
+    }
+
     public function latestService()
     {
         return $this->services
