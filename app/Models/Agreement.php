@@ -82,20 +82,20 @@ class Agreement extends Model
         return $this->belongsTo(self::class, 'parent_agreement_id');
     }
 
-    public function courtesyAgreements()
+    public function replacementVehicleAgreements()
     {
         return $this->hasMany(self::class, 'parent_agreement_id');
     }
 
-    public function isCourtesy(): bool
+    public function isReplacementVehicle(): bool
     {
-        return strcasecmp((string) optional($this->status)->name, 'Courtesy') === 0;
+        return strcasecmp((string) optional($this->status)->name, 'Replacement Vehicle') === 0;
     }
 
     public function scopeBillable($query)
     {
         return $query->whereHas('status', function ($statusQuery) {
-            $statusQuery->where('name', '!=', 'Courtesy');
+            $statusQuery->where('name', '!=', 'Replacement Vehicle');
         });
     }
 

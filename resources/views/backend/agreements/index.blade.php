@@ -42,8 +42,8 @@
                                             <td>{{ $agreement->start_date->format('M d, Y') }}</td>
                                             <td>{{ $agreement->end_date->format('M d, Y') }}</td>
                                             <td>
-                                                @if($agreement->isCourtesy())
-                                                    <span class="text-muted">Courtesy</span>
+                                                @if($agreement->isReplacementVehicle())
+                                                    <span class="text-muted">Replacement</span>
                                                 @else
                                                     £{{ number_format($agreement->agreed_rent, 2) }}
                                                 @endif
@@ -72,7 +72,7 @@
                                                       style="background-color: {{ $agreement->status->color }}">
                                                     {{ $agreement->status->name }}
                                                 </span>
-                                                @if($agreement->isCourtesy() && $agreement->parentAgreement)
+                                                @if($agreement->isReplacementVehicle() && $agreement->parentAgreement)
                                                     <br>
                                                     <small class="text-muted">
                                                         Original:

@@ -54,7 +54,7 @@
                                     <td><strong>Vehicle:</strong></td>
                                     <td>{{ $agreement->car->registration }} - {{ $agreement->car->carModel->name }}</td>
                                 </tr>
-                                @if($agreement->isCourtesy() && $agreement->parentAgreement)
+                                @if($agreement->isReplacementVehicle() && $agreement->parentAgreement)
                                     <tr>
                                         <td><strong>Original agreement:</strong></td>
                                         <td>
@@ -87,9 +87,9 @@
                             </table>
                         </div>
                         <div class="col-md-6">
-                            @if($agreement->isCourtesy())
+                            @if($agreement->isReplacementVehicle())
                                 <div class="alert alert-info mb-3">
-                                    This is a courtesy agreement. Billing is handled on the
+                                    This is a replacement vehicle agreement. Billing is handled on the
                                     @if($agreement->parentAgreement)
                                         <a href="{{ route('agreements.show', $agreement->parentAgreement) }}">original agreement #{{ $agreement->parentAgreement->id }}</a>.
                                     @else
@@ -101,7 +101,7 @@
                                 <tr>
                                     <td><strong>Agreed Rent:</strong></td>
                                     <td>
-                                        @if($agreement->isCourtesy())
+                                        @if($agreement->isReplacementVehicle())
                                             <span class="text-muted">Billing on original agreement</span>
                                         @else
                                             £{{ number_format($agreement->agreed_rent, 2) }}
@@ -111,7 +111,7 @@
                                 <tr>
                                     <td><strong>Deposit:</strong></td>
                                     <td>
-                                        @if($agreement->isCourtesy())
+                                        @if($agreement->isReplacementVehicle())
                                             <span class="text-muted">Billing on original agreement</span>
                                         @else
                                             £{{ number_format($agreement->deposit_amount, 2) }}

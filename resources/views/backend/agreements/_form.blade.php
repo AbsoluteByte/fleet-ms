@@ -7,6 +7,16 @@
         </h5>
     </div>
     <div class="card-body">
+        @if($errors->any())
+            <div class="alert alert-danger mb-3">
+                <strong>Please fix the following:</strong>
+                <ul class="mb-0 mt-1">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
         <div class="row">
             <div class="col-md-6">
                 <div class="mb-3">
@@ -944,20 +954,39 @@
 
 @push('js')
     <script>
-        const courtesyStatusId = @json($courtesyStatusId ?? null);
+        const replacementVehicleStatusId = @json($replacementVehicleStatusId ?? null);
         const originalAgreements = @json($originalAgreements ?? []);
         const selectedParentAgreementId = @json(old('parent_agreement_id') ?? (isset($model) ? $model->parent_agreement_id : null));
 
-        const courtesyFinancialFieldIds = ['agreed_rent', 'collection_type', 'rent_interval', 'deposit_amount'];
+        const replacementVehicleFinancialFieldIds = ['agreed_rent', 'collection_type', 'rent_interval', 'deposit_amount'];
+        const replacementVehicleSectionIds = ['agreement-financial-section', 'agreement-discount-section', 'agreement-payment-section'];
 
-        function isCourtesyStatusSelected() {
+        function setReplacementVehicleSectionFieldsEnabled(enabled) {
+            replacementVehicleSectionIds.forEach(function (sectionId) {
+                const section = document.getElementById(sectionId);
+
+                if (!section) {
+                    return;
+                }
+
+                section.querySelectorAll('input, select, textarea').forEach(function (field) {
+                    if (field.name === 'auto_schedule_collections') {
+                        return;
+                    }
+
+                    field.disabled = !enabled;
+                });
+            });
+        }
+
+        function isReplacementVehicleStatusSelected() {
             const statusSelect = document.getElementById('status_id');
 
-            if (!statusSelect || courtesyStatusId === null) {
+            if (!statusSelect || replacementVehicleStatusId === null) {
                 return false;
             }
 
-            return String(statusSelect.value) === String(courtesyStatusId);
+            return String(statusSelect.value) === String(replacementVehicleStatusId);
         }
 
         function setFieldRequired(fieldId, required) {
@@ -1023,8 +1052,8 @@
             });
         }
 
-        function toggleCourtesyMode() {
-            const isCourtesy = isCourtesyStatusSelected();
+        function toggleReplacementVehicleMode() {
+            const isReplacementVehicle = isReplacementVehicleStatusSelected();
             const parentSection = document.getElementById('parent-agreement-section');
             const financialSection = document.getElementById('agreement-financial-section');
             const discountSection = document.getElementById('agreement-discount-section');
@@ -1033,27 +1062,29 @@
             const addPaymentCheckbox = document.getElementById('add_payment');
 
             if (parentSection) {
-                parentSection.style.display = isCourtesy ? 'block' : 'none';
+                parentSection.style.display = isReplacementVehicle ? 'block' : 'none';
             }
 
             if (financialSection) {
-                financialSection.style.display = isCourtesy ? 'none' : 'block';
+                financialSection.style.display = isReplacementVehicle ? 'none' : 'block';
             }
 
             if (discountSection) {
-                discountSection.style.display = isCourtesy ? 'none' : 'block';
+                discountSection.style.display = isReplacementVehicle ? 'none' : 'block';
             }
 
             if (paymentSection) {
-                paymentSection.style.display = isCourtesy ? 'none' : 'block';
+                paymentSection.style.display = isReplacementVehicle ? 'none' : 'block';
             }
 
-            courtesyFinancialFieldIds.forEach(function (fieldId) {
-                setFieldRequired(fieldId, !isCourtesy);
+            replacementVehicleFinancialFieldIds.forEach(function (fieldId) {
+                setFieldRequired(fieldId, !isReplacementVehicle);
             });
 
+            setReplacementVehicleSectionFieldsEnabled(!isReplacementVehicle);
+
             if (parentSelect) {
-                if (isCourtesy) {
+                if (isReplacementVehicle) {
                     parentSelect.setAttribute('required', 'required');
                     populateOriginalAgreementOptions();
                 } else {
@@ -1063,12 +1094,11 @@
             }
 
             if (addPaymentCheckbox) {
-                if (isCourtesy) {
+                if (isReplacementVehicle) {
                     addPaymentCheckbox.checked = false;
-                    addPaymentCheckbox.disabled = true;
-                } else {
-                    addPaymentCheckbox.disabled = false;
                 }
+
+                addPaymentCheckbox.disabled = isReplacementVehicle;
 
                 toggleAgreementPaymentFields();
             }
@@ -1363,25 +1393,25 @@
 
         // Initialize toggle states
         document.addEventListener('DOMContentLoaded', function() {
-            toggleCourtesyMode();
+            toggleReplacementVehicleMode();
             toggleInsuranceSections();
             toggleAgreementPaymentFields();
             updateVehicleInsuranceDisplay();
 
-            document.getElementById('status_id')?.addEventListener('change', toggleCourtesyMode);
+            document.getElementById('status_id')?.addEventListener('change', toggleReplacementVehicleMode);
             document.getElementById('driver_id')?.addEventListener('change', function() {
-                if (isCourtesyStatusSelected()) {
+                if (isReplacementVehicleStatusSelected()) {
                     populateOriginalAgreementOptions();
                 }
             });
 
             if (typeof $ !== 'undefined') {
                 $('#driver_id').on('change', function() {
-                    if (isCourtesyStatusSelected()) {
+                    if (isReplacementVehicleStatusSelected()) {
                         populateOriginalAgreementOptions();
                     }
                 });
-                $('#status_id').on('change', toggleCourtesyMode);
+                $('#status_id').on('change', toggleReplacementVehicleMode);
             }
 
             document.getElementById('add_payment')?.addEventListener('change', toggleAgreementPaymentFields);
@@ -1440,6 +1470,14 @@
                 $('#car_id').on('change', syncFromVehicle);
             } else {
                 document.getElementById('car_id')?.addEventListener('change', syncFromVehicle);
+            }
+
+            const agreementForm = document.getElementById('parent-agreement-section')?.closest('form');
+
+            if (agreementForm) {
+                agreementForm.addEventListener('submit', function () {
+                    toggleReplacementVehicleMode();
+                });
             }
         });
 

@@ -76,9 +76,9 @@ class AgreementController extends Controller
         $agreementPaymentLimit = null;
         $agreementPaymentAllowed = true;
         $originalAgreements = $this->originalAgreementsForForm($tenant);
-        $courtesyStatusId = $this->courtesyStatusId();
+        $replacementVehicleStatusId = $this->replacementVehicleStatusId();
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'courtesyStatusId'));
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId'));
     }
 
     public function store(Request $request)
@@ -90,17 +90,17 @@ class AgreementController extends Controller
                 ->with('error', 'No active company found!');
         }
         $validated = $this->validateAgreementRequest($request);
-        $isCourtesy = $this->isCourtesyStatusId((int) $validated['status_id']);
+        $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $validated['status_id']);
         $this->assertEndDateOnOrAfterStartDate($validated);
 
-        if ($isCourtesy) {
-            $this->assertCourtesyParentAgreement($validated, $tenant);
+        if ($isReplacementVehicle) {
+            $this->assertReplacementVehicleParentAgreement($validated, $tenant);
         }
 
         $validated['auto_schedule_collections'] = false;
-        [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isCourtesy);
+        [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isReplacementVehicle);
 
-        if (! $isCourtesy) {
+        if (! $isReplacementVehicle) {
             $this->assertAgreementPaymentLimit(
                 $agreementPaymentData,
                 round(((float) $validated['agreed_rent']) + ((float) $validated['deposit_amount']), 2),
@@ -109,7 +109,7 @@ class AgreementController extends Controller
         }
 
         try {
-            $agreement = DB::transaction(function () use ($validated, $request, $tenant, $agreementPaymentData, $isCourtesy) {
+            $agreement = DB::transaction(function () use ($validated, $request, $tenant, $agreementPaymentData, $isReplacementVehicle) {
                 $validated = $this->mergeInsuranceData($request, $validated);
 
                 // Create agreement record
@@ -117,11 +117,11 @@ class AgreementController extends Controller
                 $validated['createdBy'] = Auth::id();
                 $validated = $this->mergeTerminationData($validated);
                 $validated = $this->applyDiscountData($validated, $request);
-                $validated = $this->mergeCourtesyData($validated);
+                $validated = $this->mergeReplacementVehicleData($validated);
                 $agreement = Agreement::create($validated);
                 $this->syncTerminatedCarAvailability($agreement);
 
-                if (! $isCourtesy) {
+                if (! $isReplacementVehicle) {
                     // Handle collections based on auto schedule setting
                     if ($validated['auto_schedule_collections']) {
                         $agreement->generateCollections();
@@ -203,11 +203,11 @@ class AgreementController extends Controller
 
         $canManageDiscount = $this->canManageDiscount();
         $agreementPaymentLimit = $this->unpaidAgreementInvoiceBalance($agreement);
-        $agreementPaymentAllowed = $agreementPaymentLimit > 0 && ! $agreement->isCourtesy();
+        $agreementPaymentAllowed = $agreementPaymentLimit > 0 && ! $agreement->isReplacementVehicle();
         $originalAgreements = $this->originalAgreementsForForm($tenant, $agreement->id, $agreement->parent_agreement_id);
-        $courtesyStatusId = $this->courtesyStatusId();
+        $replacementVehicleStatusId = $this->replacementVehicleStatusId();
 
-        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'courtesyStatusId'));
+        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId'));
     }
 
     public function update(Request $request, Agreement $agreement)
@@ -219,17 +219,17 @@ class AgreementController extends Controller
                 ->with('error', 'No active company found!');
         }
         $validated = $this->validateAgreementRequest($request);
-        $isCourtesy = $this->isCourtesyStatusId((int) $validated['status_id']);
+        $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $validated['status_id']);
         $this->assertEndDateOnOrAfterStartDate($validated);
 
-        if ($isCourtesy) {
-            $this->assertCourtesyParentAgreement($validated, $tenant, $agreement);
+        if ($isReplacementVehicle) {
+            $this->assertReplacementVehicleParentAgreement($validated, $tenant, $agreement);
         }
 
         $validated['auto_schedule_collections'] = false;
-        [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isCourtesy);
+        [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isReplacementVehicle);
 
-        if (! $isCourtesy) {
+        if (! $isReplacementVehicle) {
             $this->assertAgreementPaymentLimit(
                 $agreementPaymentData,
                 $this->unpaidAgreementInvoiceBalance($agreement),
@@ -238,7 +238,7 @@ class AgreementController extends Controller
         }
 
         try {
-            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant, $agreementPaymentData, $isCourtesy) {
+            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant, $agreementPaymentData, $isReplacementVehicle) {
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
 
                 $validated = $this->mergeInsuranceData($request, $validated, $agreement);
@@ -248,11 +248,11 @@ class AgreementController extends Controller
                 $validated['updatedBy'] = Auth::id();
                 $validated = $this->mergeTerminationData($validated, $agreement);
                 $validated = $this->applyDiscountData($validated, $request, $agreement);
-                $validated = $this->mergeCourtesyData($validated);
+                $validated = $this->mergeReplacementVehicleData($validated);
                 $agreement->update($validated);
                 $this->syncTerminatedCarAvailability($agreement);
 
-                if (! $isCourtesy) {
+                if (! $isReplacementVehicle) {
                     if ($validated['auto_schedule_collections']) {
                         if ($oldAutoSchedule !== $validated['auto_schedule_collections'] ||
                             $agreement->wasChanged(['start_date', 'end_date', 'collection_type', 'agreed_rent'])) {
@@ -351,7 +351,7 @@ class AgreementController extends Controller
 
     private function validateAgreementRequest(Request $request): array
     {
-        $isCourtesy = $this->isCourtesyStatusId((int) $request->input('status_id'));
+        $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $request->input('status_id'));
 
         $rules = [
             'company_id' => 'required|exists:companies,id',
@@ -359,20 +359,11 @@ class AgreementController extends Controller
             'end_date' => 'required|date',
             'driver_id' => 'required|exists:drivers,id',
             'car_id' => 'required|exists:cars,id',
-            'agreed_rent' => ($isCourtesy ? 'nullable' : 'required').'|numeric|min:0',
-            'rent_interval' => ($isCourtesy ? 'nullable' : 'required').'|string',
-            'deposit_amount' => ($isCourtesy ? 'nullable' : 'required').'|numeric|min:0',
-            'discount_type' => 'nullable|in:percentage,fixed',
-            'discount_value' => 'nullable|numeric|min:0',
-            'discount_notes' => 'nullable|string',
             'mileage_out' => 'nullable|integer|min:0',
             'mileage_in' => 'nullable|integer|min:0',
-            'collection_type' => ($isCourtesy ? 'nullable' : 'required').'|in:weekly,monthly,static',
-            'auto_schedule_collections' => 'boolean',
             'condition_report' => 'nullable|string',
             'notes' => 'nullable|string',
             'status_id' => 'required|exists:statuses,id',
-            'parent_agreement_id' => ($isCourtesy ? 'required' : 'nullable').'|exists:agreements,id',
             'using_own_insurance' => 'boolean',
             'own_insurance_provider_name' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_start_date' => 'required_if:using_own_insurance,1|nullable|date',
@@ -384,38 +375,61 @@ class AgreementController extends Controller
             'termination_notice_date' => 'nullable|date',
             'termination_available_from_date' => 'nullable|date',
             'termination_notes' => 'nullable|string',
-            'collections' => 'array',
-            'collections.*.date' => 'required_if:auto_schedule_collections,0|nullable|date',
-            'collections.*.due_date' => 'nullable|date',
-            'collections.*.method' => 'required_if:auto_schedule_collections,0|nullable|string',
-            'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
-            'add_payment' => $isCourtesy ? 'prohibited' : 'boolean',
-            'agreement_payments' => 'required_if:add_payment,1|array',
-            'agreement_payments.*.payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
-            'agreement_payments.*.payment_date' => 'required_if:add_payment,1|nullable|date',
-            'agreement_payments.*.amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
-            'agreement_payments.*.notes' => 'nullable|string',
         ];
+
+        if ($isReplacementVehicle) {
+            $rules['parent_agreement_id'] = 'required|exists:agreements,id';
+        } else {
+            $rules = array_merge($rules, [
+                'agreed_rent' => 'required|numeric|min:0',
+                'rent_interval' => 'required|string',
+                'deposit_amount' => 'required|numeric|min:0',
+                'discount_type' => 'nullable|in:percentage,fixed',
+                'discount_value' => 'nullable|numeric|min:0',
+                'discount_notes' => 'nullable|string',
+                'collection_type' => 'required|in:weekly,monthly,static',
+                'auto_schedule_collections' => 'boolean',
+                'collections' => 'array',
+                'collections.*.date' => 'required_if:auto_schedule_collections,0|nullable|date',
+                'collections.*.due_date' => 'nullable|date',
+                'collections.*.method' => 'required_if:auto_schedule_collections,0|nullable|string',
+                'collections.*.amount' => 'required_if:auto_schedule_collections,0|nullable|numeric|min:0',
+                'add_payment' => 'boolean',
+                'agreement_payments' => 'required_if:add_payment,1|array',
+                'agreement_payments.*.payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
+                'agreement_payments.*.payment_date' => 'required_if:add_payment,1|nullable|date',
+                'agreement_payments.*.amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
+                'agreement_payments.*.notes' => 'nullable|string',
+            ]);
+        }
 
         return $request->validate($rules);
     }
 
-    private function isCourtesyStatusId(?int $statusId): bool
+    private function isReplacementVehicleStatusId(?int $statusId): bool
     {
         if (! $statusId) {
             return false;
         }
 
-        $courtesyStatusId = $this->courtesyStatusId();
+        $replacementVehicleStatusId = $this->replacementVehicleStatusId();
 
-        return $courtesyStatusId !== null && $statusId === $courtesyStatusId;
+        if ($replacementVehicleStatusId !== null && $statusId === $replacementVehicleStatusId) {
+            return true;
+        }
+
+        return Status::query()
+            ->where('id', $statusId)
+            ->where('type', 'agreement')
+            ->where('name', 'Replacement Vehicle')
+            ->exists();
     }
 
-    private function courtesyStatusId(): ?int
+    private function replacementVehicleStatusId(): ?int
     {
         return Status::query()
             ->where('type', 'agreement')
-            ->where('name', 'Courtesy')
+            ->where('name', 'Replacement Vehicle')
             ->value('id');
     }
 
@@ -462,7 +476,7 @@ class AgreementController extends Controller
     /**
      * @param  array<string, mixed>  $validated
      */
-    private function assertCourtesyParentAgreement(array $validated, Tenant $tenant, ?Agreement $existing = null): void
+    private function assertReplacementVehicleParentAgreement(array $validated, Tenant $tenant, ?Agreement $existing = null): void
     {
         $parentId = (int) $validated['parent_agreement_id'];
 
@@ -506,9 +520,9 @@ class AgreementController extends Controller
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    private function mergeCourtesyData(array $validated): array
+    private function mergeReplacementVehicleData(array $validated): array
     {
-        if (! $this->isCourtesyStatusId((int) ($validated['status_id'] ?? 0))) {
+        if (! $this->isReplacementVehicleStatusId((int) ($validated['status_id'] ?? 0))) {
             $validated['parent_agreement_id'] = null;
 
             return $validated;
@@ -603,13 +617,13 @@ class AgreementController extends Controller
         return strtolower(trim((string) Auth::user()?->email)) === self::DISCOUNT_ALLOWED_EMAIL;
     }
 
-    private function prepareAgreementPaymentData(array $validated, Request $request, bool $isCourtesy = false): array
+    private function prepareAgreementPaymentData(array $validated, Request $request, bool $isReplacementVehicle = false): array
     {
         $paymentData = [];
 
-        if ($isCourtesy && $request->boolean('add_payment')) {
+        if ($isReplacementVehicle && $request->boolean('add_payment')) {
             throw ValidationException::withMessages([
-                'add_payment' => ['Payments cannot be added to a courtesy agreement. Use the original agreement instead.'],
+                'add_payment' => ['Payments cannot be added to a replacement vehicle agreement. Use the original agreement instead.'],
             ]);
         }
 

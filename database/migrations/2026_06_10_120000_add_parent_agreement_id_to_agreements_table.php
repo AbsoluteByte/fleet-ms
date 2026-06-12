@@ -20,7 +20,7 @@ return new class extends Migration
         });
 
         Status::firstOrCreate(
-            ['name' => 'Courtesy', 'type' => 'agreement'],
+            ['name' => 'Replacement Vehicle', 'type' => 'agreement'],
             ['color' => '#17a2b8']
         );
     }
@@ -34,7 +34,7 @@ return new class extends Migration
 
         Status::query()
             ->where('type', 'agreement')
-            ->where('name', 'Courtesy')
+            ->where('name', 'Replacement Vehicle')
             ->delete();
     }
 };

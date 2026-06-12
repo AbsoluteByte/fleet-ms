@@ -30,7 +30,7 @@ class AgreementInvoiceService
 
     public function generateForAgreement(Agreement $agreement, ?Carbon $throughDate = null): int
     {
-        if ($agreement->isCourtesy() || ! $agreement->driver_id || ! $agreement->start_date || ! $agreement->end_date) {
+        if ($agreement->isReplacementVehicle() || ! $agreement->driver_id || ! $agreement->start_date || ! $agreement->end_date) {
             return 0;
         }
 

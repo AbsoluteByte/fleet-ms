@@ -15,7 +15,7 @@ class StatusSeeder extends Seeder
             ['name' => 'Expired', 'type' => 'agreement', 'color' => '#dc3545'],
             ['name' => 'Pending', 'type' => 'agreement', 'color' => '#ffc107'],
             ['name' => 'Terminated', 'type' => 'agreement', 'color' => '#6c757d'],
-            ['name' => 'Courtesy', 'type' => 'agreement', 'color' => '#17a2b8'],
+            ['name' => 'Replacement Vehicle', 'type' => 'agreement', 'color' => '#17a2b8'],
 
             // Claim statuses
             ['name' => 'Open', 'type' => 'claim', 'color' => '#007bff'],
