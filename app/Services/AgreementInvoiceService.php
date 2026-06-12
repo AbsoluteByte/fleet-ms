@@ -15,6 +15,7 @@ class AgreementInvoiceService
         $count = 0;
 
         Agreement::query()
+            ->billable()
             ->whereNotNull('driver_id')
             ->whereDate('start_date', '<=', $throughDate)
             ->whereDate('end_date', '>=', now()->startOfDay())
@@ -29,7 +30,7 @@ class AgreementInvoiceService
 
     public function generateForAgreement(Agreement $agreement, ?Carbon $throughDate = null): int
     {
-        if (! $agreement->driver_id || ! $agreement->start_date || ! $agreement->end_date) {
+        if ($agreement->isCourtesy() || ! $agreement->driver_id || ! $agreement->start_date || ! $agreement->end_date) {
             return 0;
         }
 

@@ -16,7 +16,7 @@ class Agreement extends Model
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
         'deposit_amount', 'discount_type', 'discount_value', 'discount_notes', 'security_deposit', 'mileage_out', 'mileage_in',
         'collection_type', 'auto_schedule_collections', 'next_collection_date',
-        'condition_report', 'notes', 'status_id',
+        'condition_report', 'notes', 'status_id', 'parent_agreement_id',
         // New insurance fields
         'using_own_insurance', 'insurance_provider_id',
         'own_insurance_provider_name', 'own_insurance_start_date',
@@ -75,6 +75,39 @@ class Agreement extends Model
     public function status()
     {
         return $this->belongsTo(Status::class);
+    }
+
+    public function parentAgreement()
+    {
+        return $this->belongsTo(self::class, 'parent_agreement_id');
+    }
+
+    public function courtesyAgreements()
+    {
+        return $this->hasMany(self::class, 'parent_agreement_id');
+    }
+
+    public function isCourtesy(): bool
+    {
+        return strcasecmp((string) optional($this->status)->name, 'Courtesy') === 0;
+    }
+
+    public function scopeBillable($query)
+    {
+        return $query->whereHas('status', function ($statusQuery) {
+            $statusQuery->where('name', '!=', 'Courtesy');
+        });
+    }
+
+    public function scopeEligibleAsOriginal($query)
+    {
+        $today = now()->startOfDay();
+
+        return $query
+            ->whereNull('parent_agreement_id')
+            ->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Active'))
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today);
     }
 
     public function terminationRecordedBy()

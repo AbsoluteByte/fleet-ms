@@ -41,7 +41,13 @@
                                             <td>{{ $agreement->car->registration }}</td>
                                             <td>{{ $agreement->start_date->format('M d, Y') }}</td>
                                             <td>{{ $agreement->end_date->format('M d, Y') }}</td>
-                                            <td>£{{ number_format($agreement->agreed_rent, 2) }}</td>
+                                            <td>
+                                                @if($agreement->isCourtesy())
+                                                    <span class="text-muted">Courtesy</span>
+                                                @else
+                                                    £{{ number_format($agreement->agreed_rent, 2) }}
+                                                @endif
+                                            </td>
                                             <td>
                                                 @if($agreement->hellosign_status)
                                                     <span class="badge {{ $agreement->esign_status_badge }}">
@@ -66,6 +72,15 @@
                                                       style="background-color: {{ $agreement->status->color }}">
                                                     {{ $agreement->status->name }}
                                                 </span>
+                                                @if($agreement->isCourtesy() && $agreement->parentAgreement)
+                                                    <br>
+                                                    <small class="text-muted">
+                                                        Original:
+                                                        <a href="{{ route('agreements.show', $agreement->parentAgreement) }}">
+                                                            #{{ $agreement->parentAgreement->id }}
+                                                        </a>
+                                                    </small>
+                                                @endif
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">

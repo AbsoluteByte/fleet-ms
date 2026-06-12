@@ -73,13 +73,29 @@
                     <select name="status_id" id="status_id" class="form-control @error('status_id') is-invalid @enderror" required>
                         <option value="">Select Status</option>
                         @foreach($statuses as $status)
-                            <option value="{{ $status->id }}" {{ (old('status_id') ?? (isset($model) ? $model->status_id : '')) == $status->id ? 'selected' : '' }}>
+                            <option value="{{ $status->id }}"
+                                    data-status-name="{{ $status->name }}"
+                                {{ (old('status_id') ?? (isset($model) ? $model->status_id : '')) == $status->id ? 'selected' : '' }}>
                                 {{ $status->name }}
                             </option>
                         @endforeach
                     </select>
                     @error('status_id')
                     <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="col-md-6" id="parent-agreement-section" style="display: none;">
+                <div class="mb-3">
+                    <label for="parent_agreement_id" class="form-label">Original agreement *</label>
+                    <select name="parent_agreement_id" id="parent_agreement_id"
+                            class="form-control select-search @error('parent_agreement_id') is-invalid @enderror">
+                        <option value="">Select original agreement</option>
+                    </select>
+                    <small class="text-muted d-block mt-1">Rent and deposit remain on the original agreement. Select the driver's active hire agreement.</small>
+                    @error('parent_agreement_id')
+                    <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
                 </div>
             </div>
@@ -147,7 +163,7 @@
 </div>
 
 <!-- Financial Information -->
-<div class="card mb-2">
+<div class="card mb-2" id="agreement-financial-section">
     <div class="card-header">
         <h5 class="card-title mb-0">
             <i class="fa fa-pound-sign me-2"></i>
@@ -220,7 +236,7 @@
 
 @if(($canManageDiscount ?? false) === true)
 <!-- Discount Information -->
-<div class="card mb-2">
+<div class="card mb-2" id="agreement-discount-section">
     <div class="card-header">
         <h5 class="card-title mb-0">
             <i class="fa fa-tag me-2"></i>
@@ -539,7 +555,7 @@
     $agreementPaymentAllowed = $agreementPaymentAllowed ?? true;
     $agreementPaymentLimit = $agreementPaymentLimit ?? null;
 @endphp
-<div class="card mb-2">
+<div class="card mb-2" id="agreement-payment-section">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
             <i class="fa fa-credit-card me-2"></i>
@@ -928,6 +944,136 @@
 
 @push('js')
     <script>
+        const courtesyStatusId = @json($courtesyStatusId ?? null);
+        const originalAgreements = @json($originalAgreements ?? []);
+        const selectedParentAgreementId = @json(old('parent_agreement_id') ?? (isset($model) ? $model->parent_agreement_id : null));
+
+        const courtesyFinancialFieldIds = ['agreed_rent', 'collection_type', 'rent_interval', 'deposit_amount'];
+
+        function isCourtesyStatusSelected() {
+            const statusSelect = document.getElementById('status_id');
+
+            if (!statusSelect || courtesyStatusId === null) {
+                return false;
+            }
+
+            return String(statusSelect.value) === String(courtesyStatusId);
+        }
+
+        function setFieldRequired(fieldId, required) {
+            const field = document.getElementById(fieldId);
+
+            if (!field) {
+                return;
+            }
+
+            if (required) {
+                field.setAttribute('required', 'required');
+            } else {
+                field.removeAttribute('required');
+            }
+        }
+
+        function populateOriginalAgreementOptions() {
+            const parentSelect = document.getElementById('parent_agreement_id');
+            const driverSelect = document.getElementById('driver_id');
+
+            if (!parentSelect || !driverSelect) {
+                return;
+            }
+
+            const driverId = driverSelect.value;
+            const currentValue = parentSelect.value || (selectedParentAgreementId != null ? String(selectedParentAgreementId) : '');
+            const filtered = originalAgreements.filter(function (agreement) {
+                return String(agreement.driver_id) === String(driverId);
+            });
+            const $parentSelect = typeof $ !== 'undefined' ? $(parentSelect) : null;
+            const usesSelect2 = $parentSelect
+                && $.fn.select2
+                && $parentSelect.hasClass('select2-hidden-accessible');
+
+            if (usesSelect2) {
+                $parentSelect.empty().append(new Option('Select original agreement', '', false, false));
+
+                filtered.forEach(function (agreement) {
+                    const option = new Option(agreement.label, agreement.id, false, String(agreement.id) === currentValue);
+                    $parentSelect.append(option);
+                });
+
+                const stillValid = filtered.some(function (agreement) {
+                    return String(agreement.id) === currentValue;
+                });
+
+                $parentSelect.val(stillValid ? currentValue : '').trigger('change.select2');
+                return;
+            }
+
+            parentSelect.innerHTML = '<option value="">Select original agreement</option>';
+
+            filtered.forEach(function (agreement) {
+                const option = document.createElement('option');
+                option.value = agreement.id;
+                option.textContent = agreement.label;
+
+                if (String(agreement.id) === currentValue) {
+                    option.selected = true;
+                }
+
+                parentSelect.appendChild(option);
+            });
+        }
+
+        function toggleCourtesyMode() {
+            const isCourtesy = isCourtesyStatusSelected();
+            const parentSection = document.getElementById('parent-agreement-section');
+            const financialSection = document.getElementById('agreement-financial-section');
+            const discountSection = document.getElementById('agreement-discount-section');
+            const paymentSection = document.getElementById('agreement-payment-section');
+            const parentSelect = document.getElementById('parent_agreement_id');
+            const addPaymentCheckbox = document.getElementById('add_payment');
+
+            if (parentSection) {
+                parentSection.style.display = isCourtesy ? 'block' : 'none';
+            }
+
+            if (financialSection) {
+                financialSection.style.display = isCourtesy ? 'none' : 'block';
+            }
+
+            if (discountSection) {
+                discountSection.style.display = isCourtesy ? 'none' : 'block';
+            }
+
+            if (paymentSection) {
+                paymentSection.style.display = isCourtesy ? 'none' : 'block';
+            }
+
+            courtesyFinancialFieldIds.forEach(function (fieldId) {
+                setFieldRequired(fieldId, !isCourtesy);
+            });
+
+            if (parentSelect) {
+                if (isCourtesy) {
+                    parentSelect.setAttribute('required', 'required');
+                    populateOriginalAgreementOptions();
+                } else {
+                    parentSelect.removeAttribute('required');
+                    setSelectValue(parentSelect, '');
+                }
+            }
+
+            if (addPaymentCheckbox) {
+                if (isCourtesy) {
+                    addPaymentCheckbox.checked = false;
+                    addPaymentCheckbox.disabled = true;
+                } else {
+                    addPaymentCheckbox.disabled = false;
+                }
+
+                toggleAgreementPaymentFields();
+            }
+        }
+
         function setSelectValue(selectOrId, value) {
             const select = typeof selectOrId === 'string'
                 ? document.getElementById(selectOrId.replace(/^#/, ''))
@@ -1217,9 +1363,26 @@
 
         // Initialize toggle states
         document.addEventListener('DOMContentLoaded', function() {
+            toggleCourtesyMode();
             toggleInsuranceSections();
             toggleAgreementPaymentFields();
             updateVehicleInsuranceDisplay();
+
+            document.getElementById('status_id')?.addEventListener('change', toggleCourtesyMode);
+            document.getElementById('driver_id')?.addEventListener('change', function() {
+                if (isCourtesyStatusSelected()) {
+                    populateOriginalAgreementOptions();
+                }
+            });
+
+            if (typeof $ !== 'undefined') {
+                $('#driver_id').on('change', function() {
+                    if (isCourtesyStatusSelected()) {
+                        populateOriginalAgreementOptions();
+                    }
+                });
+                $('#status_id').on('change', toggleCourtesyMode);
+            }
 
             document.getElementById('add_payment')?.addEventListener('change', toggleAgreementPaymentFields);
             document.getElementById('agreed_rent')?.addEventListener('input', function() {

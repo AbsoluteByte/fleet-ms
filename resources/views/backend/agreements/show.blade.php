@@ -54,6 +54,18 @@
                                     <td><strong>Vehicle:</strong></td>
                                     <td>{{ $agreement->car->registration }} - {{ $agreement->car->carModel->name }}</td>
                                 </tr>
+                                @if($agreement->isCourtesy() && $agreement->parentAgreement)
+                                    <tr>
+                                        <td><strong>Original agreement:</strong></td>
+                                        <td>
+                                            <a href="{{ route('agreements.show', $agreement->parentAgreement) }}">
+                                                #{{ $agreement->parentAgreement->id }}
+                                                — {{ $agreement->parentAgreement->car->registration ?? '—' }}
+                                                ({{ $agreement->parentAgreement->driver->full_name ?? '—' }})
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endif
                                 <tr>
                                     <td><strong>Start Date:</strong></td>
                                     <td>{{ $agreement->start_date->format('M d, Y g:i A') }}</td>
@@ -75,14 +87,36 @@
                             </table>
                         </div>
                         <div class="col-md-6">
+                            @if($agreement->isCourtesy())
+                                <div class="alert alert-info mb-3">
+                                    This is a courtesy agreement. Billing is handled on the
+                                    @if($agreement->parentAgreement)
+                                        <a href="{{ route('agreements.show', $agreement->parentAgreement) }}">original agreement #{{ $agreement->parentAgreement->id }}</a>.
+                                    @else
+                                        original agreement.
+                                    @endif
+                                </div>
+                            @endif
                             <table class="table table-borderless">
                                 <tr>
                                     <td><strong>Agreed Rent:</strong></td>
-                                    <td>£{{ number_format($agreement->agreed_rent, 2) }}</td>
+                                    <td>
+                                        @if($agreement->isCourtesy())
+                                            <span class="text-muted">Billing on original agreement</span>
+                                        @else
+                                            £{{ number_format($agreement->agreed_rent, 2) }}
+                                        @endif
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><strong>Deposit:</strong></td>
-                                    <td>£{{ number_format($agreement->deposit_amount, 2) }}</td>
+                                    <td>
+                                        @if($agreement->isCourtesy())
+                                            <span class="text-muted">Billing on original agreement</span>
+                                        @else
+                                            £{{ number_format($agreement->deposit_amount, 2) }}
+                                        @endif
+                                    </td>
                                 </tr>
                                 @if($agreement->security_deposit)
                                     <tr>
