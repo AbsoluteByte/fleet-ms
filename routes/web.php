@@ -95,6 +95,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('cars/{car}/download/v5/{v5_index?}', [App\Http\Controllers\Backend\CarController::class, 'downloadV5'])->name('cars.download.v5')->whereNumber('v5_index');
     Route::get('cars/{car}/mots/{car_mot}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadMot'])->name('cars.mots.download');
     Route::get('cars/{car}/phvs/{car_phv}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadPhv'])->name('cars.phvs.download');
+    Route::get('cars/{car}/notifications', [App\Http\Controllers\Backend\DashboardController::class, 'getCarNotifications'])->name('cars.notifications');
     Route::post('cars/{car}/apply-sorn', [App\Http\Controllers\Backend\CarController::class, 'applySorn'])->name('cars.apply-sorn');
     Route::post('cars/{car}/end-sorn', [App\Http\Controllers\Backend\CarController::class, 'endSorn'])->name('cars.end-sorn');
     Route::delete('cars/{car}/v5-document/{v5_index?}', [App\Http\Controllers\Backend\CarController::class, 'destroyV5Document'])->name('cars.v5-document.destroy')->whereNumber('v5_index');
@@ -108,6 +109,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('cars', App\Http\Controllers\Backend\CarController::class);
     Route::get('car-status', [App\Http\Controllers\Backend\CarStatusController::class, 'create'])->name('car-status.create');
     Route::post('car-status', [App\Http\Controllers\Backend\CarStatusController::class, 'store'])->name('car-status.store');
+    Route::put('car-status/{car}/current', [App\Http\Controllers\Backend\CarStatusController::class, 'updateCurrent'])->name('car-status.current.update');
 
     Route::get('car-insurance-import', [App\Http\Controllers\Backend\CarInsuranceImportController::class, 'index'])->name('car-insurance-import.index');
     Route::post('car-insurance-import', [App\Http\Controllers\Backend\CarInsuranceImportController::class, 'store'])->name('car-insurance-import.store');
@@ -115,6 +117,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     Route::resource('reservations', App\Http\Controllers\Backend\ReservationController::class)->except(['show']);
     Route::resource('vehicle-swaps', App\Http\Controllers\Backend\VehicleSwapController::class)->except(['show']);
+    Route::delete('drivers/{driver}/documents/{document}', [App\Http\Controllers\Backend\DriverController::class, 'destroyDocument'])->name('drivers.documents.destroy');
     Route::resource('drivers', App\Http\Controllers\Backend\DriverController::class);
 
     Route::post('drivers/{driver}/invite', [App\Http\Controllers\Backend\DriverController::class, 'invite'])->name('drivers.invite');
@@ -175,6 +178,11 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     // ✅ Fleet notifications API (for header bell)
     Route::get('dashboard/fleet-notifications', [App\Http\Controllers\Backend\DashboardController::class, 'getFleetNotifications'])
         ->name('dashboard.fleet-notifications');
+
+    Route::get('alerts/damaged-active-insurance', [App\Http\Controllers\Backend\DamagedCarInsuranceAlertController::class, 'index'])
+        ->name('alerts.damaged-active-insurance');
+    Route::post('alerts/damaged-active-insurance/dismiss', [App\Http\Controllers\Backend\DamagedCarInsuranceAlertController::class, 'dismiss'])
+        ->name('alerts.damaged-active-insurance.dismiss');
 
     // ✅ Notifications index page
     Route::get('notifications', [App\Http\Controllers\Backend\DashboardController::class, 'notificationsIndex'])

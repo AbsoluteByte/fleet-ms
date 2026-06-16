@@ -102,6 +102,19 @@ class DriverController extends Controller
             ->with('success', 'Driver updated successfully.');
     }
 
+    public function destroyDocument(Driver $driver, string $document, DriverPersistenceService $driverPersistence)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $driver->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        $driverPersistence->removeDocument($driver, $document);
+
+        return response()->json(['ok' => true]);
+    }
+
     public function destroy(Driver $driver)
     {
         $tenant = Auth::user()->currentTenant();

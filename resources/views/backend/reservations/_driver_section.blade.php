@@ -31,15 +31,10 @@
                 <select name="driver_id" id="reservation_driver_id"
                         class="form-control select-search @error('driver_id') is-invalid @enderror">
                     <option value="">— Select driver —</option>
-                    @foreach($drivers as $existingDriver)
-                        <option value="{{ $existingDriver->id }}"
-                            {{ (string) $selectedDriverId === (string) $existingDriver->id ? 'selected' : '' }}>
-                            {{ $existingDriver->full_name }}
-                            @if($existingDriver->phone_number)
-                                — {{ $existingDriver->phone_number }}
-                            @endif
-                        </option>
-                    @endforeach
+                    @include('backend.drivers._select_options', [
+                        'drivers' => $drivers,
+                        'selectedId' => $selectedDriverId,
+                    ])
                 </select>
                 @error('driver_id')
                 <div class="invalid-feedback d-block">{{ $message }}</div>

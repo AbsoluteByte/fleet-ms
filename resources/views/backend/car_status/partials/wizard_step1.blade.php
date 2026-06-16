@@ -1,4 +1,13 @@
-<div id="fleet_step1" class="@if(old('target_status')) d-none @endif">
+@php
+    $prefillCarId = $prefillCarId ?? null;
+    $prefillTargetStatus = $prefillTargetStatus ?? null;
+    $editCurrentStatus = ! empty($editCurrentStatus);
+    $selectedCarId = old('car_id', $prefillCarId);
+    $selectedTargetStatus = old('target_status', $prefillTargetStatus);
+@endphp
+
+@if(! $editCurrentStatus)
+<div id="fleet_step1" class="@if($selectedTargetStatus) d-none @endif">
     <h5 class="border-bottom pb-2 mb-3 text-center">Select vehicle and new status to continue</h5>
     <div class="row">
         <div class="col-md-6 form-group">
@@ -9,7 +18,7 @@
                 @foreach($cars as $car)
                     <option value="{{ $car->id }}"
                         data-fleet-status="{{ $car->fleet_status ?? 'available_for_rent' }}"
-                        {{ (string) old('car_id') === (string) $car->id ? 'selected' : '' }}>
+                        {{ (string) $selectedCarId === (string) $car->id ? 'selected' : '' }}>
                         {{ $car->registration }} — {{ $car->carModel->name ?? '' }}</option>
                 @endforeach
             </select>
@@ -23,7 +32,7 @@
                     class="form-control @error('target_status') is-invalid @enderror">
                 <option value="">— Select status —</option>
                 @foreach($fleetLabels as $key => $label)
-                    <option value="{{ $key }}" {{ old('target_status') === $key ? 'selected' : '' }}>{{ $label }}</option>
+                    <option value="{{ $key }}" {{ $selectedTargetStatus === $key ? 'selected' : '' }}>{{ $label }}</option>
                 @endforeach
             </select>
             @error('target_status')
@@ -37,3 +46,4 @@
         </button>
     </div>
 </div>
+@endif

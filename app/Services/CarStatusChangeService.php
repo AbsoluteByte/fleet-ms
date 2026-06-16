@@ -433,9 +433,9 @@ class CarStatusChangeService
     private function applyForSale(Request $request, Car $car): array
     {
         $validated = $request->validate([
-            'payload.preparation_date' => 'required|date',
-            'payload.ready_date' => 'required|date',
-            'payload.advertised_date' => 'required|date',
+            'payload.preparation_date' => 'nullable|date',
+            'payload.ready_date' => 'nullable|date',
+            'payload.advertised_date' => 'nullable|date',
         ]);
 
         $this->cancelActiveReservationsAndSwapsForCar($car);
@@ -445,7 +445,14 @@ class CarStatusChangeService
             'available_from_date' => null,
         ]);
 
-        return $validated['payload'];
+        $payload = $validated['payload'] ?? [];
+        foreach (['preparation_date', 'ready_date', 'advertised_date'] as $key) {
+            if (($payload[$key] ?? '') === '') {
+                $payload[$key] = null;
+            }
+        }
+
+        return $payload;
     }
 
     /**

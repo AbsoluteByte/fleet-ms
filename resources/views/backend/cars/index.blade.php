@@ -11,6 +11,7 @@
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="awaiting_phv">Awaiting PHV</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="preparation_for_phvl">PHVL Preparation</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="damaged">Damaged</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="non_compliant">Non-Compliant</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="written_off">Written off</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="stolen">Stolen</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="for_sale">For sale</button>
@@ -50,6 +51,7 @@
                                                 ? 'Applied'
                                                 : (strcasecmp($latestInsuranceStatusName, 'Active') === 0 ? 'Active' : 'Inactive');
                                             $phvCounselLabel = $car->latestPhvCounselName() ?? '—';
+                                            $carNotificationCount = $carNotificationCounts[$car->registration] ?? 0;
                                         @endphp
                                         <tr
                                             data-company="{{ $car->company->name }}"
@@ -98,6 +100,18 @@
                                                     <a href="{{ route('cars.edit', $car) }}" class="btn btn-sm btn-outline-warning">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
+                                                    <span class="car-notifications-wrap">
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-primary car-notifications-btn"
+                                                                data-notifications-url="{{ route('cars.notifications', $car) }}"
+                                                                data-registration="{{ $car->registration }}"
+                                                                title="View car notifications{{ $carNotificationCount > 0 ? ' (' . $carNotificationCount . ')' : '' }}">
+                                                            <i class="fa fa-bell"></i>
+                                                        </button>
+                                                        @if($carNotificationCount > 0)
+                                                            <span class="badge badge-danger car-notifications-badge{{ $carNotificationCount > 9 ? ' car-notifications-badge--wide' : '' }}">{{ $carNotificationCount }}</span>
+                                                        @endif
+                                                    </span>
                                                     <form action="{{ route('cars.destroy', $car) }}" method="POST" style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
@@ -134,17 +148,7 @@
         $filterModels = $cars->map(fn ($car) => $car->carModel->name ?? null)->filter()->unique()->sort()->values();
         $filterColors = $cars->pluck('color')->filter()->unique()->sort()->values();
         $filterCouncils = $cars->map(fn ($car) => $car->latestPhvCounselName())->filter()->unique()->sort()->values();
-        $filterStatuses = [
-            'Available For Rent',
-            'Reserved',
-            'Vehicle Swap',
-            'Damaged',
-            'Written Off',
-            'Stolen',
-            'For Sale',
-            'Sold',
-            'SORN',
-        ];
+        $filterStatuses = \App\Models\Car::fleetStatusLabels();
     @endphp
     <div class="cars-filter-backdrop" id="carsFilterBackdrop"></div>
     <aside class="cars-filter-panel" id="carsFilterPanel" aria-hidden="true">
@@ -189,8 +193,8 @@
                 <label for="carsFilterStatus">Car Status</label>
                 <select id="carsFilterStatus" class="form-control cars-advanced-filter" data-filter-key="carStatus">
                     <option value="">All Car Statuses</option>
-                    @foreach($filterStatuses as $status)
-                        <option value="{{ $status }}">{{ $status }}</option>
+                    @foreach($filterStatuses as $statusKey => $statusLabel)
+                        <option value="{{ $statusKey }}">{{ $statusLabel }}</option>
                     @endforeach
                 </select>
             </div>
@@ -218,6 +222,25 @@
             <button type="button" class="btn btn-outline-secondary btn-block" id="carsFilterReset">Reset Filters</button>
         </div>
     </aside>
+
+    <div class="modal fade" id="carNotificationsModal" tabindex="-1" role="dialog" aria-labelledby="carNotificationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="carNotificationsModalLabel">Car notifications</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="carNotificationsModalBody">
+                    <p class="text-muted mb-0">Loading notifications...</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
@@ -333,6 +356,65 @@
         .insurance-status-dot--inactive {
             background: #ea5455;
         }
+
+        .car-notification-item {
+            border: 1px solid #ebe9f1;
+            border-left-width: 4px;
+            border-radius: .35rem;
+            padding: .75rem .9rem;
+            margin-bottom: .6rem;
+        }
+
+        .car-notification-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .car-notification-item--danger { border-left-color: #ea5455; }
+        .car-notification-item--warning { border-left-color: #ff9f43; }
+        .car-notification-item--info { border-left-color: #00cfe8; }
+        .car-notification-item--primary { border-left-color: #7367f0; }
+        .car-notification-item--success { border-left-color: #28c76f; }
+        .car-notification-item--secondary { border-left-color: #82868b; }
+
+        .car-notifications-wrap {
+            position: relative;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .btn-group .car-notifications-wrap {
+            overflow: visible;
+        }
+
+        .car-notifications-badge {
+            position: absolute;
+            top: -7px;
+            right: -7px;
+            z-index: 3;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            min-width: 18px;
+            padding: 0 !important;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1 !important;
+            border-radius: 50% !important;
+            border: 2px solid #fff;
+            box-shadow: 0 1px 3px rgba(34, 41, 47, 0.2);
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+
+        .car-notifications-badge.car-notifications-badge--wide {
+            width: auto;
+            min-width: 22px;
+            height: 18px;
+            padding: 0 5px !important;
+            border-radius: 999px !important;
+        }
     </style>
 @endsection
 @section('js')
@@ -372,7 +454,7 @@
                 return (!advancedFilters.company || row.dataset.company === advancedFilters.company)
                     && (!advancedFilters.council || row.dataset.council === advancedFilters.council)
                     && (!advancedFilters.insuranceStatus || row.dataset.insuranceStatus === advancedFilters.insuranceStatus)
-                    && (!advancedFilters.carStatus || row.dataset.carStatus === advancedFilters.carStatus)
+                    && (!advancedFilters.carStatus || row.dataset.fleetStatus === advancedFilters.carStatus)
                     && (!advancedFilters.model || row.dataset.model === advancedFilters.model)
                     && (!advancedFilters.color || row.dataset.color === advancedFilters.color)
                     && passesQuickFilter(row);
@@ -433,6 +515,76 @@
                 quickFilter = '';
                 updateQuickFilterButtons();
                 dataTable.draw();
+            });
+
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function renderCarNotifications(registration, notifications) {
+                const $body = $('#carNotificationsModalBody');
+                const safeReg = escapeHtml(registration || '');
+                $('#carNotificationsModalLabel').text('Notifications - ' + (registration || 'Car'));
+
+                if (!Array.isArray(notifications) || notifications.length === 0) {
+                    $body.html('<p class="text-muted mb-0">No notifications found for <strong>' + safeReg + '</strong>.</p>');
+                    return;
+                }
+
+                const html = notifications.map(function (notification) {
+                    const color = notification.color || 'info';
+                    const title = escapeHtml(notification.title || 'Notification');
+                    const message = escapeHtml(notification.message || '');
+                    const timeAgo = escapeHtml(notification.time_ago || '');
+                    const actionUrl = notification.action_url ? escapeHtml(notification.action_url) : '';
+                    const actionHtml = actionUrl
+                        ? '<a href="' + actionUrl + '" class="btn btn-sm btn-outline-primary mt-50">Open</a>'
+                        : '';
+
+                    return '<div class="car-notification-item car-notification-item--' + color + '">' +
+                        '<div class="d-flex justify-content-between align-items-start">' +
+                        '<div class="pr-1">' +
+                        '<div class="font-weight-bold">' + title + '</div>' +
+                        '<div class="text-muted small mt-25">' + message + '</div>' +
+                        '</div>' +
+                        '<small class="text-muted text-nowrap ml-1">' + timeAgo + '</small>' +
+                        '</div>' +
+                        actionHtml +
+                        '</div>';
+                }).join('');
+
+                $body.html(html);
+            }
+
+            $(document).on('click', '.car-notifications-btn', function () {
+                const url = $(this).data('notifications-url');
+                const registration = $(this).data('registration');
+
+                $('#carNotificationsModalLabel').text('Notifications - ' + (registration || 'Car'));
+                $('#carNotificationsModalBody').html('<p class="text-muted mb-0">Loading notifications...</p>');
+                $('#carNotificationsModal').modal('show');
+
+                fetch(url, {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error('Failed to load notifications');
+                        }
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        renderCarNotifications(data.car_registration || registration, data.notifications || []);
+                    })
+                    .catch(function () {
+                        $('#carNotificationsModalBody').html('<p class="text-danger mb-0">Unable to load notifications for this car right now.</p>');
+                    });
             });
         });
     </script>

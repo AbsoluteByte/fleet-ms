@@ -65,11 +65,10 @@
                     <label for="driver_id" class="form-label">Driver *</label>
                     <select name="driver_id" id="driver_id" class="form-control select-search @error('driver_id') is-invalid @enderror" required>
                         <option value="">Select Driver</option>
-                        @foreach($drivers as $driver)
-                            <option value="{{ $driver->id }}" {{ (old('driver_id') ?? (isset($model) ? $model->driver_id : '')) == $driver->id ? 'selected' : '' }}>
-                                {{ $driver->full_name }} - {{ $driver->post_code ?: '—' }} - {{ $driver->phone_number ?: '—' }}
-                            </option>
-                        @endforeach
+                        @include('backend.drivers._select_options', [
+                            'drivers' => $drivers,
+                            'selectedId' => old('driver_id') ?? ($model->driver_id ?? null),
+                        ])
                     </select>
                     @error('driver_id')
                     <div class="invalid-feedback">{{ $message }}</div>

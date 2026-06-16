@@ -8,6 +8,15 @@
 
         const $form = $('#fleet-status-form');
         const oldTarget = String($form.data('old-target') || '').trim();
+        const isEditMode = String($form.data('edit-mode') || '0') === '1';
+        let prefillStatusData = $form.data('prefill-status') || {};
+        if (typeof prefillStatusData === 'string') {
+            try {
+                prefillStatusData = JSON.parse(prefillStatusData || '{}');
+            } catch (e) {
+                prefillStatusData = {};
+            }
+        }
 
         let carFleetFlags = {};
         const fleetFlagsDataEl = document.getElementById('fleet-car-fleet-flags-data');
@@ -208,6 +217,43 @@
             }
         });
 
+        function setInputValueByName(name, value) {
+            if (value === null || value === undefined) {
+                return;
+            }
+            const $el = $('[name="' + name + '"]');
+            if (!$el.length) {
+                return;
+            }
+            if ($el.is(':checkbox')) {
+                $el.prop('checked', Boolean(value));
+                return;
+            }
+            $el.val(value);
+        }
+
+        function maybeApplyPrefillStatusData() {
+            const keys = Object.keys(prefillStatusData || {});
+            if (!keys.length) {
+                return;
+            }
+
+            const hasOldPayloadInput = $('[name^="payload["]').filter(function () {
+                if (this.type === 'checkbox') {
+                    return this.checked;
+                }
+                return String($(this).val() || '').trim() !== '';
+            }).length > 0;
+
+            if (hasOldPayloadInput) {
+                return;
+            }
+
+            keys.forEach(function (key) {
+                setInputValueByName('payload[' + key + ']', prefillStatusData[key]);
+            });
+        }
+
         $('#fleet_wizard_next').on('click', function () {
             const carId = $('#fleet_wizard_car_id').val();
             const status = $('#fleet_target_status').val();
@@ -240,19 +286,30 @@
                 alert('Please click Next after selecting the car and status.');
                 return false;
             }
-            $('#fleet_hidden_swapped_with_car_id').prop('disabled', false);
-            $('.fleet-status-panel').each(function () {
-                const hidden = $(this).hasClass('d-none');
-                $(this).find(':input').prop('disabled', hidden);
-            });
-            const ts = $('#fleet_target_status').val();
-            if (ts !== 'vehicle_swap') {
-                $('#fleet_hidden_swapped_with_car_id').prop('disabled', true);
+
+            if (isEditMode) {
+                $('.fleet-status-panel').each(function () {
+                    const isActivePanel = String($(this).data('status') || '') === oldTarget;
+                    $(this).find(':input').prop('disabled', !isActivePanel);
+                });
+            } else {
+                $('#fleet_hidden_swapped_with_car_id').prop('disabled', false);
+                $('.fleet-status-panel').each(function () {
+                    const hidden = $(this).hasClass('d-none');
+                    $(this).find(':input').prop('disabled', hidden);
+                });
+                const ts = $('#fleet_target_status').val();
+                if (ts !== 'vehicle_swap') {
+                    $('#fleet_hidden_swapped_with_car_id').prop('disabled', true);
+                }
             }
+
             return true;
         });
 
         if (oldTarget) {
+            $('#fleet_step2').removeClass('d-none');
+            maybeApplyPrefillStatusData();
             $('#fleet_hidden_swapped_with_car_id').val(
                 oldTarget === 'vehicle_swap' ? String($('#fleet_wizard_car_id').val() || '') : ''
             );

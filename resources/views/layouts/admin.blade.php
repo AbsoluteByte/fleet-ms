@@ -40,6 +40,7 @@
 <!-- BEGIN: Footer-->
 <x-backend-footer/><!-- END: Footer-->
 <x-backend-scanner-modal/>
+<x-damaged-insurance-alert-modal/>
 
 <x-backend-scripts/>
 @stack('jsFiles')

@@ -2,11 +2,19 @@
     use App\Models\VehicleSwap;
 
     $fleetLabels = $fleetLabels ?? [];
+    $prefillCarId = $prefillCarId ?? null;
+    $prefillTargetStatus = $prefillTargetStatus ?? null;
+    $prefillStatusPayload = is_array($prefillStatusPayload ?? null) ? $prefillStatusPayload : [];
+    $editCurrentStatus = ! empty($editCurrentStatus);
+    $activeTargetStatus = old('target_status', $prefillTargetStatus);
+    $activeCarId = old('car_id', $prefillCarId);
+    $payloadOld = fn (string $key, $default = '') => old('payload.'.$key, $prefillStatusPayload[$key] ?? $default);
+
     $swapReasonOld = old('reason_for_swap', '');
     $phvlTypeOld = old('phvl_issue_type', '');
 
-    $step2OldCarId = old('car_id');
-    $step2OldTarget = old('target_status');
+    $step2OldCarId = $activeCarId;
+    $step2OldTarget = $activeTargetStatus;
     $step2Reg = '';
     if ($step2OldCarId !== null && $step2OldCarId !== '') {
         $step2Car = $cars->firstWhere('id', $step2OldCarId);
@@ -14,7 +22,9 @@
     }
     $step2StatusLabel = ($step2OldTarget && isset($fleetLabels[$step2OldTarget])) ? $fleetLabels[$step2OldTarget] : '';
     $step2SummaryText = ($step2Reg !== '' && $step2StatusLabel !== '')
-        ? "{$step2Reg} status is updating to {$step2StatusLabel}"
+        ? ($editCurrentStatus
+            ? "{$step2Reg} — editing current {$step2StatusLabel} details"
+            : "{$step2Reg} status is updating to {$step2StatusLabel}")
         : '';
 
     $carFleetFlags = $carFleetFlags ?? [];
@@ -35,14 +45,14 @@
     }
 @endphp
 
-<div id="fleet_step2" class="{{ old('target_status') ? '' : 'd-none' }}">
+<div id="fleet_step2" class="{{ $activeTargetStatus ? '' : 'd-none' }}">
     <h5 id="fleet_step2_summary" class="border-bottom pb-2 mb-3 text-center">{{ $step2SummaryText }}</h5>
 
     <input type="hidden" name="swapped_with_car_id" id="fleet_hidden_swapped_with_car_id"
            value="{{ old('swapped_with_car_id') }}">
 
     {{-- Available for rent --}}
-    <div class="fleet-status-panel {{ old('target_status') === 'available_for_rent' ? '' : 'd-none' }}"
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'available_for_rent' ? '' : 'd-none' }}"
          data-status="available_for_rent">
         <div id="fleet_available_rent_warning"
              class="alert alert-warning mb-3 {{ $fleetAvailWarnShow ? '' : 'd-none' }}"
@@ -60,7 +70,7 @@
     </div>
 
     {{-- Reserved --}}
-    <div class="fleet-status-panel {{ old('target_status') === 'reserved' ? '' : 'd-none' }}" data-status="reserved">
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'reserved' ? '' : 'd-none' }}" data-status="reserved">
         <div class="row">
             <div class="col-md-4 form-group">
                 <label for="fleet_rsv_customer_name">Client's name <span class="text-danger">*</span></label>
@@ -144,7 +154,7 @@
     </div>
 
     {{-- Vehicle swap (replacement = Step 1 car; old car selected here) --}}
-    <div class="fleet-status-panel {{ old('target_status') === 'vehicle_swap' ? '' : 'd-none' }}"
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'vehicle_swap' ? '' : 'd-none' }}"
          data-status="vehicle_swap">
         <div class="row">
             <div class="col-md-12 form-group">
@@ -300,7 +310,7 @@
     </div>
 
     {{-- Damaged --}}
-    <div class="fleet-status-panel {{ old('target_status') === 'damaged' ? '' : 'd-none' }}" data-status="damaged">
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'damaged' ? '' : 'd-none' }}" data-status="damaged">
         <div class="row">
             <div class="col-md-6 form-group">
                 <label for="fleet_damaged_damage_date">Damage date <span class="text-danger">*</span></label>
@@ -316,11 +326,10 @@
                 <select name="payload[driver_id]" id="fleet_damaged_driver_id"
                         class="form-control select-search @error('payload.driver_id') is-invalid @enderror">
                     <option value="">— Optional —</option>
-                    @foreach($drivers as $driver)
-                        <option value="{{ $driver->id }}"
-                            {{ (string) old('payload.driver_id') === (string) $driver->id ? 'selected' : '' }}>
-                            {{ $driver->full_name }}</option>
-                    @endforeach
+                    @include('backend.drivers._select_options', [
+                        'drivers' => $drivers,
+                        'selectedId' => $payloadOld('driver_id'),
+                    ])
                 </select>
                 @error('payload.driver_id')
                 <div class="invalid-feedback d-block">{{ $message }}</div>
@@ -331,9 +340,9 @@
                 <select name="payload[insurance_status]" id="fleet_damaged_insurance_status"
                         class="form-control @error('payload.insurance_status') is-invalid @enderror">
                     <option value="">— Select —</option>
-                    <option value="company" {{ old('payload.insurance_status') === 'company' ? 'selected' : '' }}>
+                    <option value="company" {{ $payloadOld('insurance_status') === 'company' ? 'selected' : '' }}>
                         Company</option>
-                    <option value="driver" {{ old('payload.insurance_status') === 'driver' ? 'selected' : '' }}>
+                    <option value="driver" {{ $payloadOld('insurance_status') === 'driver' ? 'selected' : '' }}>
                         Driver</option>
                 </select>
                 @error('payload.insurance_status')
@@ -422,7 +431,7 @@
         $writtenOffDisposalOld = old('payload.disposal_outcome');
         $writtenOffDisposalOptions = \App\Services\CarStatusChangeService::WRITTEN_OFF_DISPOSAL_OUTCOMES;
     @endphp
-    <div class="fleet-status-panel {{ old('target_status') === 'written_off' ? '' : 'd-none' }}"
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'written_off' ? '' : 'd-none' }}"
          data-status="written_off">
         <div class="row">
             <div class="col-md-6 form-group">
@@ -446,11 +455,10 @@
                 <select name="payload[driver_id]" id="fleet_written_driver_id"
                         class="form-control select-search @error('payload.driver_id') is-invalid @enderror">
                     <option value="">— Optional —</option>
-                    @foreach($drivers as $driver)
-                        <option value="{{ $driver->id }}"
-                            {{ (string) old('payload.driver_id') === (string) $driver->id ? 'selected' : '' }}>
-                            {{ $driver->full_name }}</option>
-                    @endforeach
+                    @include('backend.drivers._select_options', [
+                        'drivers' => $drivers,
+                        'selectedId' => $payloadOld('driver_id'),
+                    ])
                 </select>
                 @error('payload.driver_id')
                 <div class="invalid-feedback d-block">{{ $message }}</div>
@@ -461,9 +469,9 @@
                 <select name="payload[insurance_status]" id="fleet_written_insurance_status"
                         class="form-control @error('payload.insurance_status') is-invalid @enderror">
                     <option value="">— Select —</option>
-                    <option value="company" {{ old('payload.insurance_status') === 'company' ? 'selected' : '' }}>
+                    <option value="company" {{ $payloadOld('insurance_status') === 'company' ? 'selected' : '' }}>
                         Company</option>
-                    <option value="driver" {{ old('payload.insurance_status') === 'driver' ? 'selected' : '' }}>
+                    <option value="driver" {{ $payloadOld('insurance_status') === 'driver' ? 'selected' : '' }}>
                         Driver</option>
                 </select>
                 @error('payload.insurance_status')
@@ -539,18 +547,17 @@
     </div>
 
     {{-- Stolen --}}
-    <div class="fleet-status-panel {{ old('target_status') === 'stolen' ? '' : 'd-none' }}" data-status="stolen">
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'stolen' ? '' : 'd-none' }}" data-status="stolen">
         <div class="row">
             <div class="col-md-6 form-group">
                 <label for="fleet_stolen_driver_id">Driver</label>
                 <select name="payload[driver_id]" id="fleet_stolen_driver_id"
                         class="form-control select-search @error('payload.driver_id') is-invalid @enderror">
                     <option value="">— Optional —</option>
-                    @foreach($drivers as $driver)
-                        <option value="{{ $driver->id }}"
-                            {{ (string) old('payload.driver_id') === (string) $driver->id ? 'selected' : '' }}>
-                            {{ $driver->full_name }}</option>
-                    @endforeach
+                    @include('backend.drivers._select_options', [
+                        'drivers' => $drivers,
+                        'selectedId' => $payloadOld('driver_id'),
+                    ])
                 </select>
                 @error('payload.driver_id')
                 <div class="invalid-feedback d-block">{{ $message }}</div>
@@ -561,9 +568,9 @@
                 <select name="payload[insurance_status]" id="fleet_stolen_insurance_status"
                         class="form-control @error('payload.insurance_status') is-invalid @enderror">
                     <option value="">— Select —</option>
-                    <option value="company" {{ old('payload.insurance_status') === 'company' ? 'selected' : '' }}>
+                    <option value="company" {{ $payloadOld('insurance_status') === 'company' ? 'selected' : '' }}>
                         Company</option>
-                    <option value="driver" {{ old('payload.insurance_status') === 'driver' ? 'selected' : '' }}>
+                    <option value="driver" {{ $payloadOld('insurance_status') === 'driver' ? 'selected' : '' }}>
                         Driver</option>
                 </select>
                 @error('payload.insurance_status')
@@ -575,7 +582,7 @@
                             class="text-danger">*</span></label>
                 <input type="number" name="payload[insurance_excess_amount]" id="fleet_stolen_insurance_excess"
                        class="form-control @error('payload.insurance_excess_amount') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('payload.insurance_excess_amount') }}">
+                       step="0.01" min="0" value="{{ $payloadOld('insurance_excess_amount') }}">
                 @error('payload.insurance_excess_amount')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -584,7 +591,7 @@
                 <label for="fleet_stolen_claim_ref">Insurance claim reference <span class="text-danger">*</span></label>
                 <input type="text" name="payload[insurance_claim_reference]" id="fleet_stolen_claim_ref"
                        class="form-control @error('payload.insurance_claim_reference') is-invalid @enderror"
-                       maxlength="255" value="{{ old('payload.insurance_claim_reference') }}">
+                       maxlength="255" value="{{ $payloadOld('insurance_claim_reference') }}">
                 @error('payload.insurance_claim_reference')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -592,7 +599,7 @@
             <div class="col-md-12 form-group">
                 <label for="fleet_stolen_notes">Notes</label>
                 <textarea name="payload[notes]" id="fleet_stolen_notes" rows="2"
-                          class="form-control @error('payload.notes') is-invalid @enderror">{{ old('payload.notes') }}</textarea>
+                          class="form-control @error('payload.notes') is-invalid @enderror">{{ $payloadOld('notes') }}</textarea>
                 @error('payload.notes')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -601,31 +608,32 @@
     </div>
 
     {{-- For sale --}}
-    <div class="fleet-status-panel {{ old('target_status') === 'for_sale' ? '' : 'd-none' }}" data-status="for_sale">
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'for_sale' ? '' : 'd-none' }}" data-status="for_sale">
+        <p class="text-muted small mb-3">Dates are optional — you can add or update them later.</p>
         <div class="row">
             <div class="col-md-4 form-group">
-                <label for="fleet_sale_prep_date">Preparation date <span class="text-danger">*</span></label>
+                <label for="fleet_sale_prep_date">Preparation date</label>
                 <input type="date" name="payload[preparation_date]" id="fleet_sale_prep_date"
                        class="form-control @error('payload.preparation_date') is-invalid @enderror"
-                       value="{{ old('payload.preparation_date') }}">
+                       value="{{ $payloadOld('preparation_date') }}">
                 @error('payload.preparation_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
             <div class="col-md-4 form-group">
-                <label for="fleet_sale_ready_date">Ready date <span class="text-danger">*</span></label>
+                <label for="fleet_sale_ready_date">Ready date</label>
                 <input type="date" name="payload[ready_date]" id="fleet_sale_ready_date"
                        class="form-control @error('payload.ready_date') is-invalid @enderror"
-                       value="{{ old('payload.ready_date') }}">
+                       value="{{ $payloadOld('ready_date') }}">
                 @error('payload.ready_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
             <div class="col-md-4 form-group">
-                <label for="fleet_sale_advertised_date">Advertised date <span class="text-danger">*</span></label>
+                <label for="fleet_sale_advertised_date">Advertised date</label>
                 <input type="date" name="payload[advertised_date]" id="fleet_sale_advertised_date"
                        class="form-control @error('payload.advertised_date') is-invalid @enderror"
-                       value="{{ old('payload.advertised_date') }}">
+                       value="{{ $payloadOld('advertised_date') }}">
                 @error('payload.advertised_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -634,7 +642,7 @@
     </div>
 
     {{-- Sold --}}
-    <div class="fleet-status-panel {{ old('target_status') === 'sold' ? '' : 'd-none' }}" data-status="sold">
+    <div class="fleet-status-panel {{ $activeTargetStatus === 'sold' ? '' : 'd-none' }}" data-status="sold">
         <div class="row">
             <div class="col-md-6 form-group">
                 <label for="fleet_sold_sell_date">Sell date <span class="text-danger">*</span></label>
@@ -708,11 +716,17 @@
     </div>
 
     <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap">
-        <button type="button" class="btn btn-outline-secondary" id="fleet_wizard_back">
-            <i class="fa fa-arrow-left"></i> Back
-        </button>
+        @unless($editCurrentStatus)
+            <button type="button" class="btn btn-outline-secondary" id="fleet_wizard_back">
+                <i class="fa fa-arrow-left"></i> Back
+            </button>
+        @else
+            <a href="{{ route('cars.show', $prefillCarId) }}" class="btn btn-outline-secondary">
+                <i class="fa fa-arrow-left"></i> Back to car
+            </a>
+        @endunless
         <button type="submit" class="btn btn-primary" id="fleet_wizard_submit">
-            <i class="fa fa-check"></i> Submit
+            <i class="fa fa-check"></i> {{ $editCurrentStatus ? 'Save changes' : 'Submit' }}
         </button>
     </div>
 </div>

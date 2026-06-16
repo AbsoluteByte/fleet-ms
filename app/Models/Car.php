@@ -15,6 +15,8 @@ class Car extends Model
 
     public const FLEET_STATUS_AVAILABLE_FOR_RENT = 'available_for_rent';
 
+    public const FLEET_STATUS_NON_COMPLIANT = 'non_compliant';
+
     protected $fillable = [
         'tenant_id', 'company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
@@ -176,6 +178,7 @@ class Car extends Model
         return [
             self::FLEET_STATUS_PREPARATION_FOR_PHVL => 'PHVL Preparation',
             self::FLEET_STATUS_AVAILABLE_FOR_RENT => 'Available for Rent',
+            self::FLEET_STATUS_NON_COMPLIANT => 'Non-Compliant',
             'reserved' => 'Reserved',
             'vehicle_swap' => 'Vehicle Swap',
             'damaged' => 'Damaged',
@@ -284,11 +287,42 @@ class Car extends Model
         return (bool) ($expiry && $expiry->copy()->startOfDay()->gte(now()->startOfDay()));
     }
 
-    public function isEligibleForAgreementSelection(): bool
+    public function isRoadLegalCompliant(): bool
     {
         return $this->isMotCurrentlyValid()
             && $this->isRoadTaxCurrentlyValid()
             && $this->isPhvCurrentlyActive();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function complianceFailureReasons(): array
+    {
+        $reasons = [];
+
+        if (! $this->isMotCurrentlyValid()) {
+            $reasons[] = 'mot';
+        }
+
+        if (! $this->isRoadTaxCurrentlyValid()) {
+            $reasons[] = 'road_tax';
+        }
+
+        if (! $this->isPhvCurrentlyActive()) {
+            $reasons[] = $this->hasPhvRecord() ? 'phv' : 'phv_missing';
+        }
+
+        return $reasons;
+    }
+
+    public function isEligibleForAgreementSelection(): bool
+    {
+        if (($this->fleet_status ?? self::FLEET_STATUS_AVAILABLE_FOR_RENT) === self::FLEET_STATUS_NON_COMPLIANT) {
+            return false;
+        }
+
+        return $this->isRoadLegalCompliant();
     }
 
     public function latestService()
@@ -322,6 +356,11 @@ class Car extends Model
         return (bool) ($phv?->expiry_date && $phv->expiry_date->copy()->startOfDay()->gte(now()->startOfDay()));
     }
 
+    public function hasPhvRecord(): bool
+    {
+        return $this->phvs->isNotEmpty();
+    }
+
     public function isAvailableForRent(): bool
     {
         if ($this->sorn_applied || $this->activeReservation()) {
@@ -330,6 +369,7 @@ class Car extends Model
 
         if (in_array($this->fleet_status, [
             self::FLEET_STATUS_PREPARATION_FOR_PHVL,
+            self::FLEET_STATUS_NON_COMPLIANT,
             'damaged',
             'written_off',
             'stolen',

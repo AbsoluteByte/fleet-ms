@@ -25,6 +25,15 @@
                         · {{ $entry->created_at?->format('d/m/Y H:i') }}
                     </p>
 
+                    @if(isset($car) && $car->fleet_status === $entry->new_status)
+                        <div class="mb-3">
+                            <a href="{{ route('car-status.create', ['car_id' => $car->id, 'edit_current_status' => 1]) }}"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fa fa-edit"></i> Edit current status details
+                            </a>
+                        </div>
+                    @endif
+
                     @if($entry->reservation_id)
                         <div class="mb-3">
                             <a href="{{ route('reservations.edit', $entry->reservation_id) }}"
@@ -64,7 +73,9 @@
                         <h6 class="border-bottom pb-2">Submitted information</h6>
                         <dl class="row small mb-0">
                             @foreach($detailEntries as $key => $value)
-                                <dt class="col-sm-4 text-break">{{ ucwords(str_replace('_', ' ', (string) $key)) }}</dt>
+                                <dt class="col-sm-4 text-break">
+                                    {{ $key === 'driver_id' ? 'Driver' : ucwords(str_replace('_', ' ', (string) $key)) }}
+                                </dt>
                                 <dd class="col-sm-8">
                                     @if(is_array($value))
                                         <pre class="mb-0 p-2 bg-light rounded border small"
@@ -73,6 +84,15 @@
                                         {{ $value ? 'Yes' : 'No' }}
                                     @elseif($key === 'disposal_outcome' && isset($writtenOffDisposalLabels[$value]))
                                         {{ $writtenOffDisposalLabels[$value] }}
+                                    @elseif($key === 'driver_id' && $value)
+                                        @php
+                                            $historyDriver = ($statusHistoryDrivers ?? collect())->get((int) $value);
+                                        @endphp
+                                        @if($historyDriver)
+                                            <a href="{{ route('drivers.edit', $historyDriver) }}">{{ $historyDriver->full_name }}</a>
+                                        @else
+                                            Driver #{{ $value }}
+                                        @endif
                                     @else
                                         {{ $value }}
                                     @endif

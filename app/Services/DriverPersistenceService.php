@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\File;
 
 class DriverPersistenceService
 {
-    private const DOCUMENT_FIELDS = [
+    public const DOCUMENT_FIELDS = [
         'driver_license_document',
         'driver_phd_license_document',
         'phd_card_document',
@@ -19,6 +19,31 @@ class DriverPersistenceService
         'misc_document',
         'proof_of_address_document',
     ];
+
+    /**
+     * @return list<string>
+     */
+    public static function documentFields(): array
+    {
+        return self::DOCUMENT_FIELDS;
+    }
+
+    public function removeDocument(Driver $driver, string $field): void
+    {
+        if (! in_array($field, self::DOCUMENT_FIELDS, true)) {
+            abort(404);
+        }
+
+        $filename = $driver->{$field};
+
+        if ($filename) {
+            $this->deleteDocument($filename);
+            $driver->update([
+                $field => null,
+                'updatedBy' => Auth::id(),
+            ]);
+        }
+    }
 
     /**
      * @return array<string, mixed>
@@ -85,6 +110,10 @@ class DriverPersistenceService
 
         if (! filled($driverAttributes['county'] ?? null)) {
             $driverAttributes['county'] = null;
+        }
+
+        if (! filled($driverAttributes['address2'] ?? null)) {
+            $driverAttributes['address2'] = null;
         }
 
         return $this->mergeUploadedDocuments($request, $driverAttributes, $existing);

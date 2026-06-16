@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('invoices:generate-agreements')->daily();
 Schedule::command('insurance:auto-cancel-expired')->daily();
+Schedule::command('cars:sync-fleet-compliance')->daily();

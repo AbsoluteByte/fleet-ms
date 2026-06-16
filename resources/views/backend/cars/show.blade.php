@@ -74,6 +74,10 @@
                             <div class="col-md-6 mb-3">
                                 <strong>Fleet Status:</strong>
                                 <p class="mb-0">{{ $car->fleetStatusLabel() }}</p>
+                                <a href="{{ route('car-status.create', ['car_id' => $car->id, 'edit_current_status' => 1]) }}"
+                                   class="btn btn-sm btn-outline-primary mt-1">
+                                    <i class="fa fa-edit"></i> Edit current status details
+                                </a>
                             </div>
                             @if($car->statusHistories->isNotEmpty())
                                 @php
@@ -135,7 +139,11 @@
                                         </p>
                                     @endif
                                     @foreach($car->statusHistories as $entry)
-                                        @include('backend.cars.partials.status_history_detail_modal', ['entry' => $entry])
+                                        @include('backend.cars.partials.status_history_detail_modal', [
+                                            'entry' => $entry,
+                                            'car' => $car,
+                                            'statusHistoryDrivers' => $statusHistoryDrivers ?? collect(),
+                                        ])
                                     @endforeach
                                 </div>
                             @endif

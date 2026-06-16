@@ -325,145 +325,47 @@
             </h5>
         </div>
         <div class="card-body">
+            @php
+                $isDriverEdit = isset($model) && ! empty($model->id);
+                $driverDocumentFields = [
+                    'driver_license_document' => 'Driver License Document',
+                    'driver_phd_license_document' => 'PHD License Document',
+                    'phd_card_document' => 'PHD Card Document',
+                    'dvla_license_summary' => 'DVLA License Summary',
+                    'proof_of_address_document' => 'Proof of Address',
+                    'misc_document' => 'Miscellaneous Document',
+                ];
+            @endphp
             <div class="row">
-                <div class="col-md-4">
-                    <div class="mb-2">
-                        <label for="driver_license_document" class="form-label">Driver License Document</label>
-                        <input type="file" name="driver_license_document" id="driver_license_document"
-                               class="form-control @error('driver_license_document') is-invalid @enderror"
-                               accept=".pdf,.jpg,.jpeg,.png">
-                        @if(isset($model) && $model->driver_license_document)
-                            <div class="mt-2">
-                                <span class="text-muted d-block mb-1">Current Document:</span>
-                                <a href="{{ asset('uploads/driver_licenses/' . $model->driver_license_document) }}"
-                                   target="_blank" class="btn btn-sm btn-outline-info">
-                                    <i class="fa fa-eye"></i> View Document
-                                </a>
-                            </div>
-                        @endif
-                        @error('driver_license_document')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
+                @foreach($driverDocumentFields as $field => $label)
+                    <div class="col-md-4">
+                        <div class="mb-2">
+                            <label for="{{ $field }}" class="form-label">{{ $label }}</label>
+                            <input type="file" name="{{ $field }}" id="{{ $field }}"
+                                   class="form-control @error($field) is-invalid @enderror"
+                                   accept=".pdf,.jpg,.jpeg,.png">
+                            @if($isDriverEdit && $model->{$field})
+                                @include('components.car-document-actions', [
+                                    'viewUrl' => asset('uploads/driver_licenses/' . $model->{$field}),
+                                    'removeUrl' => route('drivers.documents.destroy', [$model, $field]),
+                                    'label' => $label,
+                                ])
+                            @endif
+                            @error($field)
+                            <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                            <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
+                        </div>
                     </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="mb-2">
-                        <label for="driver_phd_license_document" class="form-label">PHD License Document</label>
-                        <input type="file" name="driver_phd_license_document" id="driver_phd_license_document"
-                               class="form-control @error('driver_phd_license_document') is-invalid @enderror"
-                               accept=".pdf,.jpg,.jpeg,.png">
-                        @if(isset($model) && $model->driver_phd_license_document)
-                            <div class="mt-2">
-                                <span class="text-muted d-block mb-1">Current Document:</span>
-                                <a href="{{ asset('uploads/driver_licenses/' . $model->driver_phd_license_document) }}"
-                                   target="_blank" class="btn btn-sm btn-outline-info">
-                                    <i class="fa fa-eye"></i> View Document
-                                </a>
-                            </div>
-                        @endif
-                        @error('driver_phd_license_document')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
-                    </div>
-                </div>
-
-                {{-- NEW FIELD: PHD Card Document --}}
-                <div class="col-md-4">
-                    <div class="mb-2">
-                        <label for="phd_card_document" class="form-label">PHD Card Document</label>
-                        <input type="file" name="phd_card_document" id="phd_card_document"
-                               class="form-control @error('phd_card_document') is-invalid @enderror"
-                               accept=".pdf,.jpg,.jpeg,.png">
-                        @if(isset($model) && $model->phd_card_document)
-                            <div class="mt-2">
-                                <span class="text-muted d-block mb-1">Current Document:</span>
-                                <a href="{{ asset('uploads/driver_licenses/' . $model->phd_card_document) }}"
-                                   target="_blank" class="btn btn-sm btn-outline-info">
-                                    <i class="fa fa-eye"></i> View Document
-                                </a>
-                            </div>
-                        @endif
-                        @error('phd_card_document')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
-                    </div>
-                </div>
-
-                {{-- NEW FIELD: DVLA License Summary --}}
-                <div class="col-md-4">
-                    <div class="mb-2">
-                        <label for="dvla_license_summary" class="form-label">DVLA License Summary</label>
-                        <input type="file" name="dvla_license_summary" id="dvla_license_summary"
-                               class="form-control @error('dvla_license_summary') is-invalid @enderror"
-                               accept=".pdf,.jpg,.jpeg,.png">
-                        @if(isset($model) && $model->dvla_license_summary)
-                            <div class="mt-2">
-                                <span class="text-muted d-block mb-1">Current Document:</span>
-                                <a href="{{ asset('uploads/driver_licenses/' . $model->dvla_license_summary) }}"
-                                   target="_blank" class="btn btn-sm btn-outline-info">
-                                    <i class="fa fa-eye"></i> View Document
-                                </a>
-                            </div>
-                        @endif
-                        @error('dvla_license_summary')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="mb-2">
-                        <label for="proof_of_address_document" class="form-label">Proof of Address</label>
-                        <input type="file" name="proof_of_address_document" id="proof_of_address_document"
-                               class="form-control @error('proof_of_address_document') is-invalid @enderror"
-                               accept=".pdf,.jpg,.jpeg,.png">
-                        @if(isset($model) && $model->proof_of_address_document)
-                            <div class="mt-2">
-                                <span class="text-muted d-block mb-1">Current Document:</span>
-                                <a href="{{ asset('uploads/driver_licenses/' . $model->proof_of_address_document) }}"
-                                   target="_blank" class="btn btn-sm btn-outline-info">
-                                    <i class="fa fa-eye"></i> View Document
-                                </a>
-                            </div>
-                        @endif
-                        @error('proof_of_address_document')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
-                    </div>
-                </div>
-
-                {{-- NEW FIELD: Misc Document --}}
-                <div class="col-md-4">
-                    <div class="mb-2">
-                        <label for="misc_document" class="form-label">Miscellaneous Document</label>
-                        <input type="file" name="misc_document" id="misc_document"
-                               class="form-control @error('misc_document') is-invalid @enderror"
-                               accept=".pdf,.jpg,.jpeg,.png">
-                        @if(isset($model) && $model->misc_document)
-                            <div class="mt-2">
-                                <span class="text-muted d-block mb-1">Current Document:</span>
-                                <a href="{{ asset('uploads/driver_licenses/' . $model->misc_document) }}"
-                                   target="_blank" class="btn btn-sm btn-outline-info">
-                                    <i class="fa fa-eye"></i> View Document
-                                </a>
-                            </div>
-                        @endif
-                        @error('misc_document')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        <small class="form-text text-muted">Supported: PDF, JPG, JPEG, PNG. Max: 2MB</small>
-                    </div>
-                </div>
+                @endforeach
             </div>
         </div>
     </div>
 </div>
+
+@if(!empty($isDriverEdit))
+    @include('components.fleetiq-delete-confirm-modal')
+@endif
 
 <!-- Form Actions -->
 @if (empty($hideFormActions))
@@ -545,14 +447,7 @@
 
 
             // File upload validation
-            const fileFields = [
-                'driver_license_document',
-                'driver_phd_license_document',
-                'phd_card_document',
-                'dvla_license_summary',
-                'misc_document',
-                'proof_of_address_document'
-            ];
+            const fileFields = @json(array_keys($driverDocumentFields ?? []));
 
             fileFields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
@@ -615,6 +510,76 @@
                     this.value = this.value.toUpperCase();
                 });
             }
+
+            @if(!empty($isDriverEdit))
+            (function () {
+                var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                var pending = { url: null };
+                var $modal = window.jQuery;
+                var confirmBtn = document.getElementById('fleetiqDeleteConfirmBtn');
+                var titleEl = document.getElementById('fleetiqDeleteConfirmTitle');
+                var bodyEl = document.getElementById('fleetiqDeleteConfirmBody');
+                var btnTextEl = document.getElementById('fleetiqDeleteConfirmBtnText');
+
+                document.addEventListener('click', function (e) {
+                    var btn = e.target.closest('.car-doc-remove-btn');
+                    if (!btn) {
+                        return;
+                    }
+
+                    e.preventDefault();
+                    pending.url = btn.getAttribute('data-remove-url');
+                    var label = btn.getAttribute('data-doc-label') || 'document';
+
+                    if (titleEl) {
+                        titleEl.textContent = 'Remove document?';
+                    }
+                    if (bodyEl) {
+                        bodyEl.textContent = 'Are you sure you want to remove this ' + label + '? The file will be deleted. You can upload a new file afterwards.';
+                    }
+                    if (btnTextEl) {
+                        btnTextEl.textContent = 'Yes, remove document';
+                    }
+                    if ($modal && $modal.fn && $modal.fn.modal) {
+                        $modal('#fleetiqDeleteConfirmModal').modal('show');
+                    }
+                });
+
+                if (confirmBtn) {
+                    confirmBtn.addEventListener('click', function () {
+                        if (!pending.url) {
+                            return;
+                        }
+
+                        confirmBtn.disabled = true;
+                        fetch(pending.url, {
+                            method: 'DELETE',
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            credentials: 'same-origin',
+                        }).then(function (response) {
+                            if (!response.ok) {
+                                throw new Error();
+                            }
+
+                            return response.json();
+                        }).then(function () {
+                            if ($modal && $modal.fn && $modal.fn.modal) {
+                                $modal('#fleetiqDeleteConfirmModal').modal('hide');
+                            }
+                            window.location.reload();
+                        }).catch(function () {
+                            alert('Could not remove this document. Please try again.');
+                        }).finally(function () {
+                            confirmBtn.disabled = false;
+                        });
+                    });
+                }
+            })();
+            @endif
         });
     </script>
 @endpush

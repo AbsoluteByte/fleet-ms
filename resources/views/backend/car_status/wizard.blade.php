@@ -27,13 +27,52 @@
                     <hr class="my-0">
                     <div class="card-body">
                         @include('alerts')
-                        <form method="POST" action="{{ route('car-status.store') }}" id="fleet-status-form"
+                        @if(!empty($editCurrentStatus) && !empty($prefillCarId))
+                            @php
+                                $editCarRegistration = $cars->firstWhere('id', $prefillCarId)?->registration ?? 'this vehicle';
+                            @endphp
+                            <div class="alert alert-info mb-3" role="alert">
+                                You are editing the current status details for <strong>{{ $editCarRegistration }}</strong>. Submit to save your changes.
+                            </div>
+                        @endif
+                        @if($errors->any())
+                            <ul class="text-danger small mb-3">
+                                @foreach($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        @endif
+                        <form method="POST"
+                              action="{{ !empty($editCurrentStatus) && !empty($prefillCarId) ? route('car-status.current.update', $prefillCarId) : route('car-status.store') }}"
+                              id="fleet-status-form"
                               enctype="multipart/form-data"
-                              data-old-target="{{ old('target_status') }}">
+                              data-old-target="{{ old('target_status', $prefillTargetStatus ?? '') }}"
+                              data-edit-mode="{{ !empty($editCurrentStatus) ? '1' : '0' }}"
+                              data-prefill-status='@json($prefillStatusPayload ?? [])'>
                             @csrf
+                            @if(!empty($editCurrentStatus) && !empty($prefillCarId))
+                                @method('PUT')
+                                <input type="hidden" name="edit_current_status" value="1">
+                                <input type="hidden" name="car_id" value="{{ old('car_id', $prefillCarId) }}">
+                                <input type="hidden" name="target_status" value="{{ old('target_status', $prefillTargetStatus) }}">
+                            @endif
                             <script type="application/json" id="fleet-car-fleet-flags-data">@json($carFleetFlags ?? [])</script>
-                            @include('backend.car_status.partials.wizard_step1', ['fleetLabels' => $fleetLabels])
-                            @include('backend.car_status.partials.wizard_step2', compact('cars', 'drivers', 'fleetLabels', 'carFleetFlags'))
+                            @include('backend.car_status.partials.wizard_step1', [
+                                'fleetLabels' => $fleetLabels,
+                                'prefillCarId' => $prefillCarId ?? null,
+                                'prefillTargetStatus' => $prefillTargetStatus ?? null,
+                                'editCurrentStatus' => !empty($editCurrentStatus),
+                            ])
+                            @include('backend.car_status.partials.wizard_step2', compact(
+                                'cars',
+                                'drivers',
+                                'fleetLabels',
+                                'carFleetFlags',
+                                'prefillCarId',
+                                'prefillTargetStatus',
+                                'prefillStatusPayload',
+                                'editCurrentStatus'
+                            ))
                         </form>
                     </div>
                 </div>

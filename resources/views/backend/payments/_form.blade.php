@@ -10,11 +10,10 @@
                 <label for="driver_id" class="form-label">Driver <span class="text-danger">*</span></label>
                 <select name="driver_id" id="driver_id" class="form-control select-search @error('driver_id') is-invalid @enderror" required>
                     <option value="">Select Driver</option>
-                    @foreach($drivers as $driver)
-                        <option value="{{ $driver->id }}" {{ (string) old('driver_id', optional($selectedDriver)->id) === (string) $driver->id ? 'selected' : '' }}>
-                            {{ $driver->full_name }}{{ $driver->email ? ' - '.$driver->email : '' }}
-                        </option>
-                    @endforeach
+                    @include('backend.drivers._select_options', [
+                        'drivers' => $drivers,
+                        'selectedId' => old('driver_id', optional($selectedDriver)->id),
+                    ])
                 </select>
                 @error('driver_id')
                 <div class="invalid-feedback">{{ $message }}</div>

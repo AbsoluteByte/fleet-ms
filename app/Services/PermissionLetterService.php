@@ -38,7 +38,7 @@ class PermissionLetterService
             'signatory_name' => strtoupper($company->director_name ?? ''),
             'director_intro_name' => null,
             'director_salutation' => 'Mr.',
-            'footer_html' => e($company->name).', '.e($company->address_line_1).', '.e($company->town).' '.e($company->postcode).' '.e($company->phone).' | '.e($company->email).'.'
+            'footer_html' => e($company->name).', '.e($company->commaSeparatedAddress()).' '.e($company->phone).' | '.e($company->email).'.'
                 .($company->company_registration_number
                     ? '<br>'.e($company->name).' is Registered in England and Wales with Company No. '.e($company->company_registration_number)
                     : ''),

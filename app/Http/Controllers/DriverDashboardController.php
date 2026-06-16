@@ -122,6 +122,14 @@ class DriverDashboardController extends Controller
             'next_of_kin_phone' => 'required|string|max:20',
         ]);
 
+        if (! filled($validated['address2'] ?? null)) {
+            $validated['address2'] = null;
+        }
+
+        if (! filled($validated['county'] ?? null)) {
+            $validated['county'] = null;
+        }
+
         $driver->update($validated);
 
         return redirect()->back()

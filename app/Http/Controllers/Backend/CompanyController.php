@@ -68,7 +68,7 @@ class CompanyController extends Controller
             'address_line_2' => 'nullable|string|max:255',
             'postcode' => 'required|string|max:20',
             'town' => 'required|string|max:100',
-            'county' => 'required|string|max:100',
+            'county' => 'nullable|string|max:100',
             'country_id' => 'required|numeric|exists:countries,id',
             'phone' => 'required|numeric',
             'email' => 'required|email|max:255',
@@ -84,6 +84,14 @@ class CompanyController extends Controller
             if ($file->move($path, $name)) {
                 $validated['logo'] = $name;
             }
+        }
+
+        if (! filled($validated['address_line_2'] ?? null)) {
+            $validated['address_line_2'] = null;
+        }
+
+        if (! filled($validated['county'] ?? null)) {
+            $validated['county'] = null;
         }
 
         $validated['tenant_id'] = $tenant->id;
@@ -135,7 +143,7 @@ class CompanyController extends Controller
             'address_line_2' => 'nullable|string|max:255',
             'postcode' => 'required|string|max:20',
             'town' => 'required|string|max:100',
-            'county' => 'required|string|max:100',
+            'county' => 'nullable|string|max:100',
             'country_id' => 'required|numeric|exists:countries,id',
             'phone' => 'required|string|max:20',
             'email' => 'required|email|max:255',
@@ -160,6 +168,16 @@ class CompanyController extends Controller
                 $validated['logo'] = $name;
             }
         }
+
+
+        if (! filled($validated['address_line_2'] ?? null)) {
+            $validated['address_line_2'] = null;
+        }
+
+        if (! filled($validated['county'] ?? null)) {
+            $validated['county'] = null;
+        }
+
         $validated['tenant_id'] = $tenant->id;
         $validated['updatedBy'] = Auth::id();
         $company->update($validated);

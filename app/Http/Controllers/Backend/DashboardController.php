@@ -775,6 +775,54 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function getCarNotifications(Car $car)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || (int) $car->tenant_id !== (int) $tenant->id) {
+            return response()->json(['notifications' => []], 403);
+        }
+
+        $data = $this->getUnifiedNotifications();
+
+        $notifications = collect($data['notifications'])
+            ->filter(function ($notification) use ($car) {
+                return isset($notification['vehicle'])
+                    && (string) $notification['vehicle'] === (string) $car->registration;
+            })
+            ->values()
+            ->map(function ($notification) {
+                return [
+                    'id' => $notification['id'] ?? null,
+                    'title' => $notification['title'] ?? 'Notification',
+                    'message' => $notification['message'] ?? '',
+                    'time_ago' => $notification['time_ago'] ?? '',
+                    'color' => $notification['color'] ?? 'info',
+                    'action_url' => $notification['action_url'] ?? null,
+                ];
+            });
+
+        return response()->json([
+            'car_registration' => $car->registration,
+            'notifications' => $notifications,
+        ]);
+    }
+
+    public function getCarNotificationCounts(): array
+    {
+        $data = $this->getUnifiedNotifications();
+
+        return collect($data['notifications'])
+            ->filter(function ($notification) {
+                return isset($notification['vehicle'])
+                    && (string) $notification['vehicle'] !== ''
+                    && (string) $notification['vehicle'] !== 'N/A';
+            })
+            ->groupBy(fn ($notification) => (string) $notification['vehicle'])
+            ->map(fn ($group) => $group->count())
+            ->all();
+    }
+
     // ✅ Notifications Index Page
     public function notificationsIndex(Request $request)
     {

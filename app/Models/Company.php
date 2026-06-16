@@ -33,4 +33,36 @@ class Company extends Model
     {
         return $this->belongsTo(Country::class);
     }
+
+    /**
+     * @param  array<int, mixed>  $lines
+     */
+    public static function formatCommaSeparatedAddress(array $lines): string
+    {
+        $formatted = collect($lines)
+            ->map(function ($line) {
+                if (! is_scalar($line)) {
+                    return null;
+                }
+
+                $trimmed = trim((string) $line);
+
+                return $trimmed === '' ? null : $trimmed;
+            })
+            ->filter()
+            ->implode(', ');
+
+        return preg_replace('/,\s*,+/', ', ', $formatted) ?? $formatted;
+    }
+
+    public function commaSeparatedAddress(): string
+    {
+        return static::formatCommaSeparatedAddress([
+            $this->address_line_1,
+            $this->address_line_2,
+            $this->town,
+            $this->county,
+            $this->postcode,
+        ]);
+    }
 }

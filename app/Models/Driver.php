@@ -64,6 +64,56 @@ class Driver extends Model
         return trim($this->first_name . ' ' . $this->middle_name . ' ' . $this->last_name);
     }
 
+    /**
+     * Label for driver dropdowns: "John Smith (SW1A 1AA)"
+     */
+    public function selectOptionLabel(): string
+    {
+        $name = trim($this->full_name);
+        $postCode = trim((string) ($this->post_code ?? ''));
+
+        if ($name === '' && $postCode === '') {
+            return 'Driver #'.$this->id;
+        }
+
+        if ($postCode === '') {
+            return $name;
+        }
+
+        return $name !== '' ? "{$name} ({$postCode})" : "({$postCode})";
+    }
+
+    /**
+     * @param  array<int, mixed>  $lines
+     */
+    public static function formatCommaSeparatedAddress(array $lines): string
+    {
+        $formatted = collect($lines)
+            ->map(function ($line) {
+                if (! is_scalar($line)) {
+                    return null;
+                }
+
+                $trimmed = trim((string) $line);
+
+                return $trimmed === '' ? null : $trimmed;
+            })
+            ->filter()
+            ->implode(', ');
+
+        return preg_replace('/,\s*,+/', ', ', $formatted) ?? $formatted;
+    }
+
+    public function commaSeparatedAddress(): string
+    {
+        return static::formatCommaSeparatedAddress([
+            $this->address1,
+            $this->address2,
+            $this->town,
+            $this->post_code,
+        ]);
+    }
+
     public function country()
     {
         return $this->belongsTo(Country::class);

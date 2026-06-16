@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Backend\DashboardController;
 use App\Services\PhvlArchiveService;
 use App\Models\Car;
 use App\Models\CarModel;
@@ -15,6 +16,7 @@ use App\Models\CarPhv;
 use App\Models\CarRoadTax;
 use App\Models\Company;
 use App\Models\Counsel;
+use App\Models\Driver;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
 use Carbon\Carbon;
@@ -66,7 +68,9 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir.'index', compact('cars'));
+        $carNotificationCounts = app(DashboardController::class)->getCarNotificationCounts();
+
+        return view($this->dir.'index', compact('cars', 'carNotificationCounts'));
     }
 
     // ✅ Updated Create
@@ -339,7 +343,22 @@ class CarController extends Controller
         ]);
         $this->sortCarHistoryRelations($car);
 
-        return view($this->dir.'show', compact('car'));
+        $statusHistoryDriverIds = $car->statusHistories
+            ->pluck('status_data')
+            ->filter(fn ($data) => is_array($data) && ! empty($data['driver_id']))
+            ->map(fn (array $data) => (int) $data['driver_id'])
+            ->unique()
+            ->values();
+
+        $statusHistoryDrivers = $statusHistoryDriverIds->isEmpty()
+            ? collect()
+            : Driver::query()
+                ->where('tenant_id', $tenant->id)
+                ->whereIn('id', $statusHistoryDriverIds)
+                ->get()
+                ->keyBy('id');
+
+        return view($this->dir.'show', compact('car', 'statusHistoryDrivers'));
     }
 
     // ✅ Updated Edit
@@ -1453,6 +1472,7 @@ class CarController extends Controller
     {
         return [
             'available_for_rent' => 'Available for rent',
+            'non_compliant' => 'Non-Compliant',
             'damaged' => 'Damaged',
             'written_off' => 'Written off',
             'stolen' => 'Stolen',

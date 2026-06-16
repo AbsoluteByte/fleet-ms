@@ -132,11 +132,15 @@ class ReservationController extends Controller
 
         DB::transaction(function () use ($request, $validated, $balance, $carId, $tenant, $driverPersistence) {
             $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence);
+            $driverSnapshot = $this->driverSnapshot($driverId);
 
             $reservation = CarReservation::create([
                 'tenant_id' => $tenant->id,
                 'car_id' => $carId,
                 'driver_id' => $driverId,
+                'customer_name' => $driverSnapshot['customer_name'],
+                'customer_phone' => $driverSnapshot['customer_phone'],
+                'customer_email' => $driverSnapshot['customer_email'],
                 'reservation_date' => $validated['reservation_date'],
                 'pick_up_date' => $validated['pick_up_date'],
                 'available_from_date' => $validated['pick_up_date'],
@@ -191,10 +195,14 @@ class ReservationController extends Controller
 
         DB::transaction(function () use ($request, $reservation, $validated, $balance, $carId, $oldCarId, $tenant, $driverPersistence) {
             $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence);
+            $driverSnapshot = $this->driverSnapshot($driverId);
 
             $reservation->update([
                 'car_id' => $carId,
                 'driver_id' => $driverId,
+                'customer_name' => $driverSnapshot['customer_name'],
+                'customer_phone' => $driverSnapshot['customer_phone'],
+                'customer_email' => $driverSnapshot['customer_email'],
                 'reservation_date' => $validated['reservation_date'],
                 'pick_up_date' => $validated['pick_up_date'],
                 'available_from_date' => $validated['pick_up_date'],
@@ -285,6 +293,21 @@ class ReservationController extends Controller
         $driver = $driverPersistence->createFromValidatedAttributes($driverAttributes, $tenant);
 
         return $driver->id;
+    }
+
+    /**
+     * @return array{customer_name: string, customer_phone: ?string, customer_email: ?string}
+     */
+    private function driverSnapshot(int $driverId): array
+    {
+        $driver = Driver::query()->findOrFail($driverId);
+        $fullName = trim((string) $driver->full_name);
+
+        return [
+            'customer_name' => $fullName !== '' ? $fullName : ('Driver #' . $driver->id),
+            'customer_phone' => $driver->phone_number ?: null,
+            'customer_email' => $driver->email ?: null,
+        ];
     }
 
     private function legacyDriverStub(CarReservation $reservation): Driver
