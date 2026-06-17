@@ -35,6 +35,23 @@
                     </div>
 
                     <div class="card-body">
+                        <!-- Driver Status -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="border-bottom pb-2 mb-3">Driver Status</h4>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <strong>Status:</strong>
+                                <p class="mb-0">
+                                    @if($driver->is_active)
+                                        <span class="badge badge-success">Active</span>
+                                    @else
+                                        <span class="badge badge-secondary">Inactive</span>
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+
                         <!-- Invitation Status -->
                         <div class="row mb-4">
                             <div class="col-12">

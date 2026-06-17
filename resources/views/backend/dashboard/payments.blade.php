@@ -299,9 +299,9 @@
                             <a href="${row.action_url}" class="btn btn-sm btn-outline-primary">
                                 <i class="feather icon-eye"></i>
                             </a>
-                            <button class="btn btn-sm btn-${row.color}" onclick="openPaymentModal('${row.collection_id}', '${row.amount_raw}', '${row.driver_name}', '${row.vehicle}')">
+                            <a href="{{ route('payments.create') }}?driver_id=${row.driver_id}" class="btn btn-sm btn-${row.color}">
                                 <i class="feather icon-credit-card"></i> Pay
-                            </button>
+                            </a>
                         </div>
                     `;
                         }
@@ -327,22 +327,6 @@
 
             // Reload table
             paymentsTable.ajax.reload();
-        }
-
-        function openPaymentModal(collectionId, amount, driverName, vehicle) {
-            const modal = $('#quickPaymentModal');
-            const form = $('#quickPaymentForm');
-
-            form.attr('action', `/admin/agreements/collections/${collectionId}/pay`);
-            $('#quick_amount_paid').val(amount).attr('max', amount);
-
-            $('#payment-summary').html(`
-        <strong>Driver:</strong> ${driverName}<br>
-        <strong>Vehicle:</strong> ${vehicle}<br>
-        <strong>Amount Due:</strong> £${parseFloat(amount).toLocaleString()}
-    `);
-
-            modal.modal('show');
         }
     </script>
 @endsection

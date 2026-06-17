@@ -1875,13 +1875,7 @@
                         if (!(data.ok && data.gov_sorn_url)) {
                             throw new Error();
                         }
-                        mountSornModalsAfterApply(data.sorn_applied_by_name, data.sorn_applied_at_formatted, data.sorn_proof_url || null);
-                        removeApplySornModal();
-                        promoteSornToolbarButton();
-                        attachFleetiqEndSornHandlers();
-                        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal) {
-                            window.jQuery('#sornAppliedSuccessModal').modal('show');
-                        }
+                        window.location.reload();
                     }).catch(function (err) {
                         if (overlay) {
                             overlay.classList.add('d-none');

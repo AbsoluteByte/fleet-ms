@@ -37,6 +37,7 @@ class CarStatusController extends Controller
 
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
+            ->active()
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();
@@ -135,7 +136,7 @@ class CarStatusController extends Controller
         return redirect()->route('cars.show', $car)->with('success', 'Vehicle status updated.');
     }
 
-    public function updateCurrent(Request $request, Car $car)
+    public function updateCurrent(Request $request, Car $car, CarStatusChangeService $carStatusChangeService)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -176,9 +177,14 @@ class CarStatusController extends Controller
         $statusData = is_array($latestEntry->status_data) ? $latestEntry->status_data : [];
 
         if ($car->fleet_status === 'sold') {
-            $payload['documents'] = isset($statusData['documents']) && is_array($statusData['documents'])
+            $existingDocuments = isset($statusData['documents']) && is_array($statusData['documents'])
                 ? $statusData['documents']
                 : [];
+            $payload['documents'] = $carStatusChangeService->mergeSoldDocumentUploads(
+                $request,
+                $latestEntry->id,
+                $existingDocuments
+            );
         }
 
         $latestEntry->update([

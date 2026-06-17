@@ -246,15 +246,11 @@
                                                         <i class="feather icon-eye"></i>
                                                     </a>
                                                 @endif
-                                                @php
-                                                    $collectionId = explode('_', $notification['id'])[1] ?? null;
-                                                    $amount = isset($notification['amount']) ? str_replace(['£', ','], '', $notification['amount']) : 0;
-                                                @endphp
-                                                @if($collectionId)
-                                                    <button class="btn btn-sm btn-{{ $notification['color'] }} btn-icon"
-                                                            onclick="quickPayFromNotif('{{ $collectionId }}', '{{ $amount }}')">
+                                                @if(!empty($notification['driver_id']))
+                                                    <a href="{{ route('payments.create', ['driver_id' => $notification['driver_id']]) }}"
+                                                       class="btn btn-sm btn-{{ $notification['color'] }} btn-icon">
                                                         <i class="feather icon-credit-card"></i>
-                                                    </button>
+                                                    </a>
                                                 @endif
                                             </div>
                                         </div>
@@ -270,7 +266,7 @@
                             </ul>
                             @if($paymentNotifications->count() >= 10)
                                 <div class="card-footer text-center border-top">
-                                    <a href="{{ route('notifications.index') }}" class="text-primary">
+                                    <a href="{{ route('payments.notifications') }}" class="text-primary">
                                         View All Notifications <i class="feather icon-arrow-right"></i>
                                     </a>
                                 </div>
@@ -557,21 +553,5 @@
         };
         var statusChart = new ApexCharts(document.querySelector("#agreement-status-chart"), statusOptions);
         statusChart.render();
-
-        // Quick Payment Function
-        function quickPayFromNotif(collectionId, amount) {
-            const modal = $('#quickPaymentModal');
-            const form = $('#quickPaymentForm');
-
-            form.attr('action', `/admin/agreements/collections/${collectionId}/pay`);
-            $('#quick_amount_paid').val(amount).attr('max', amount);
-
-            $('#payment-summary-content').html(`
-        <strong>Collection ID:</strong> #${collectionId}<br>
-        <strong>Amount Due:</strong> £${parseFloat(amount).toLocaleString()}
-    `);
-
-            modal.modal('show');
-        }
     </script>
 @endsection

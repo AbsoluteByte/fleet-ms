@@ -327,14 +327,8 @@
         <div class="card-body">
             @php
                 $isDriverEdit = isset($model) && ! empty($model->id);
-                $driverDocumentFields = [
-                    'driver_license_document' => 'Driver License Document',
-                    'driver_phd_license_document' => 'PHD License Document',
-                    'phd_card_document' => 'PHD Card Document',
-                    'dvla_license_summary' => 'DVLA License Summary',
-                    'proof_of_address_document' => 'Proof of Address',
-                    'misc_document' => 'Miscellaneous Document',
-                ];
+                $documentArchives = $documentArchives ?? collect();
+                $driverDocumentFields = \App\Services\DriverPersistenceService::DOCUMENT_FIELD_LABELS;
             @endphp
             <div class="row">
                 @foreach($driverDocumentFields as $field => $label)
@@ -359,12 +353,135 @@
                     </div>
                 @endforeach
             </div>
+
+            @if($isDriverEdit && $documentArchives->isNotEmpty())
+                @once
+                    @push('css')
+                        <style>
+                            .driver-archive-trigger {
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 0.65rem;
+                                margin-top: 0.75rem;
+                                padding: 0.5rem 0.75rem;
+                                border: 1px solid rgba(115, 103, 240, 0.22);
+                                border-radius: 0.428rem;
+                                background: linear-gradient(135deg, rgba(115, 103, 240, 0.1) 0%, rgba(115, 103, 240, 0.04) 100%);
+                                color: #5e50ee;
+                                text-align: left;
+                                transition: all 0.2s ease;
+                            }
+
+                            .driver-archive-trigger:hover,
+                            .driver-archive-trigger:focus {
+                                color: #4839eb;
+                                background: linear-gradient(135deg, rgba(115, 103, 240, 0.16) 0%, rgba(115, 103, 240, 0.08) 100%);
+                                border-color: rgba(115, 103, 240, 0.35);
+                                box-shadow: 0 4px 18px rgba(115, 103, 240, 0.12);
+                                outline: none;
+                            }
+
+                            .driver-archive-trigger__main {
+                                display: flex;
+                                align-items: center;
+                                min-width: 0;
+                            }
+
+                            .driver-archive-trigger__icon {
+                                display: inline-flex;
+                                align-items: center;
+                                justify-content: center;
+                                width: 1.75rem;
+                                height: 1.75rem;
+                                margin-right: 0.5rem;
+                                border-radius: 0.35rem;
+                                background: #7367f0;
+                                color: #fff;
+                                flex-shrink: 0;
+                                font-size: 0.75rem;
+                            }
+
+                            .driver-archive-trigger__label {
+                                display: block;
+                                font-size: 0.875rem;
+                                font-weight: 600;
+                                line-height: 1.2;
+                                color: #4b4b4b;
+                            }
+
+                            .driver-archive-trigger__meta {
+                                display: block;
+                                margin-top: 0.1rem;
+                                font-size: 0.7rem;
+                                color: #6e6b7b;
+                            }
+
+                            .driver-archive-trigger__badge {
+                                min-width: 1.35rem;
+                                padding: 0.2rem 0.45rem;
+                                font-size: 0.7rem;
+                                font-weight: 600;
+                                border-radius: 999px;
+                                background: #7367f0;
+                                color: #fff;
+                                flex-shrink: 0;
+                            }
+                        </style>
+                    @endpush
+                @endonce
+                <button type="button"
+                        class="driver-archive-trigger"
+                        data-toggle="modal"
+                        data-target="#driverDocumentArchiveModal">
+                    <span class="driver-archive-trigger__main">
+                        <span class="driver-archive-trigger__icon" aria-hidden="true">
+                            <i class="fa fa-archive"></i>
+                        </span>
+                        <span>
+                            <span class="driver-archive-trigger__label">View Archive</span>
+                            <span class="driver-archive-trigger__meta">
+                                {{ $documentArchives->count() }} archived {{ $documentArchives->count() === 1 ? 'file' : 'files' }}
+                            </span>
+                        </span>
+                    </span>
+                    <span class="driver-archive-trigger__badge">{{ $documentArchives->count() }}</span>
+                </button>
+            @endif
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-1">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fa fa-toggle-on me-2"></i>
+                    Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" name="is_active" id="is_active"
+                           class="custom-control-input"
+                        {{ old('is_active', $model->is_active ?? true) ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="is_active">
+                        <strong>Active Driver</strong>
+                    </label>
+                    <small class="form-text text-muted d-block">
+                        Uncheck to mark this driver as inactive. Inactive drivers will not appear in notifications or new agreement/reservation selections.
+                    </small>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 @if(!empty($isDriverEdit))
     @include('components.fleetiq-delete-confirm-modal')
+    @if(($documentArchives ?? collect())->isNotEmpty())
+        @include('components.driver-document-archive-modal', ['documentArchives' => $documentArchives])
+    @endif
 @endif
 
 <!-- Form Actions -->

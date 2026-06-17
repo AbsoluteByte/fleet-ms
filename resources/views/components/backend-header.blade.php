@@ -231,17 +231,15 @@
             let actions = '';
 
             // Add quick pay button for payment notifications
-            if (['overdue_payment', 'due_today', 'due_this_week'].includes(notification.type)) {
-                const collectionId = notification.id.split('_')[1];
-                const amount = notification.amount ? notification.amount.replace('£', '').replace(',', '') : '0';
-
+            if (['overdue_payment', 'due_today', 'due_this_week'].includes(notification.type) && notification.driver_id) {
                 actions = `
                     <div class="notification-actions mt-2">
-                        <button class="btn btn-sm btn-${notification.color} notification-action-btn"
-                                onclick="event.preventDefault(); event.stopPropagation(); quickPayFromNotification('${collectionId}', '${amount}')">
+                        <a href="/admin/payments/create?driver_id=${notification.driver_id}"
+                           class="btn btn-sm btn-${notification.color} notification-action-btn"
+                           onclick="event.stopPropagation();">
                             <i class="feather icon-credit-card"></i>
                             Pay Now
-                        </button>
+                        </a>
                     </div>
                 `;
             }
@@ -338,14 +336,10 @@
         }
     }
 
-    // Quick payment function for notification action buttons
-    function quickPayFromNotification(collectionId, amount) {
-        // Open payment modal (assuming it exists on the page)
-        if (typeof quickPay === 'function') {
-            quickPay(collectionId, amount);
-        } else {
-            // Redirect to payment page
-            window.location.href = `/agreements/collections/${collectionId}/pay`;
+    // Quick payment function for notification action buttons (legacy fallback)
+    function quickPayFromNotification(driverId) {
+        if (driverId) {
+            window.location.href = `/admin/payments/create?driver_id=${driverId}`;
         }
     }
 

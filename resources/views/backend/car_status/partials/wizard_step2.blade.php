@@ -26,6 +26,9 @@
             ? "{$step2Reg} — editing current {$step2StatusLabel} details"
             : "{$step2Reg} status is updating to {$step2StatusLabel}")
         : '';
+    $existingSoldDocs = ($editCurrentStatus && $activeTargetStatus === 'sold' && is_array($prefillStatusPayload['documents'] ?? null))
+        ? array_values(array_filter($prefillStatusPayload['documents'], fn ($doc) => is_string($doc) && $doc !== ''))
+        : [];
 
     $carFleetFlags = $carFleetFlags ?? [];
     $fleetAvailWarnShow = false;
@@ -648,7 +651,7 @@
                 <label for="fleet_sold_sell_date">Sell date <span class="text-danger">*</span></label>
                 <input type="date" name="payload[sell_date]" id="fleet_sold_sell_date"
                        class="form-control @error('payload.sell_date') is-invalid @enderror"
-                       value="{{ old('payload.sell_date') }}">
+                       value="{{ $payloadOld('sell_date') }}">
                 @error('payload.sell_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -657,7 +660,7 @@
                 <label for="fleet_sold_price">Sell price <span class="text-danger">*</span></label>
                 <input type="number" name="payload[sell_price]" id="fleet_sold_price"
                        class="form-control @error('payload.sell_price') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('payload.sell_price') }}">
+                       step="0.01" min="0" value="{{ $payloadOld('sell_price') }}">
                 @error('payload.sell_price')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -667,9 +670,9 @@
                 <select name="payload[payment_terms]" id="fleet_sold_payment_terms"
                         class="form-control @error('payload.payment_terms') is-invalid @enderror">
                     <option value="">— Select —</option>
-                    <option value="cash" {{ old('payload.payment_terms') === 'cash' ? 'selected' : '' }}>Cash</option>
-                    <option value="bank" {{ old('payload.payment_terms') === 'bank' ? 'selected' : '' }}>Bank</option>
-                    <option value="auto_total" {{ old('payload.payment_terms') === 'auto_total' ? 'selected' : '' }}>
+                    <option value="cash" {{ $payloadOld('payment_terms') === 'cash' ? 'selected' : '' }}>Cash</option>
+                    <option value="bank" {{ $payloadOld('payment_terms') === 'bank' ? 'selected' : '' }}>Bank</option>
+                    <option value="auto_total" {{ $payloadOld('payment_terms') === 'auto_total' ? 'selected' : '' }}>
                         Auto Total</option>
                 </select>
                 @error('payload.payment_terms')
@@ -680,7 +683,7 @@
                 <label for="fleet_sold_buyer_name">Buyer name <span class="text-danger">*</span></label>
                 <input type="text" name="payload[buyer_name]" id="fleet_sold_buyer_name"
                        class="form-control @error('payload.buyer_name') is-invalid @enderror"
-                       maxlength="255" value="{{ old('payload.buyer_name') }}">
+                       maxlength="255" value="{{ $payloadOld('buyer_name') }}">
                 @error('payload.buyer_name')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -689,7 +692,7 @@
                 <label for="fleet_sold_buyer_contact">Buyer contact <span class="text-danger">*</span></label>
                 <input type="text" name="payload[buyer_contact]" id="fleet_sold_buyer_contact"
                        class="form-control @error('payload.buyer_contact') is-invalid @enderror"
-                       maxlength="255" value="{{ old('payload.buyer_contact') }}">
+                       maxlength="255" value="{{ $payloadOld('buyer_contact') }}">
                 @error('payload.buyer_contact')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -697,20 +700,33 @@
             <div class="col-md-12 form-group">
                 <label for="fleet_sold_buyer_address">Buyer address <span class="text-danger">*</span></label>
                 <textarea name="payload[buyer_address]" id="fleet_sold_buyer_address" rows="2"
-                          class="form-control @error('payload.buyer_address') is-invalid @enderror">{{ old('payload.buyer_address') }}</textarea>
+                          class="form-control @error('payload.buyer_address') is-invalid @enderror">{{ $payloadOld('buyer_address') }}</textarea>
                 @error('payload.buyer_address')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
             <div class="col-md-12 form-group">
                 <label for="fleet_sold_documents">Sale documents</label>
+                @if($existingSoldDocs !== [])
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1">Uploaded documents</small>
+                        <ul class="mb-0 pl-3">
+                            @foreach($existingSoldDocs as $docPath)
+                                <li>
+                                    <a href="{{ asset($docPath) }}" target="_blank" rel="noopener noreferrer">View file</a>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
                 <input type="file" name="sold_documents[]" id="fleet_sold_documents"
                        class="form-control @error('sold_documents.*') is-invalid @enderror"
                        multiple accept=".pdf,.jpg,.jpeg,.png">
+                <div id="fleet_sold_documents_selected" class="small text-muted mt-50"></div>
                 @error('sold_documents.*')
                 <div class="invalid-feedback d-block">{{ $message }}</div>
                 @enderror
-                <small class="text-muted">PDF or images, max 10 MB each.</small>
+                <small class="text-muted">PDF or images, max 10 MB each. New files are added to existing documents.</small>
             </div>
         </div>
     </div>

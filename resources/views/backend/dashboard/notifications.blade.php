@@ -82,7 +82,7 @@
                             </div>
                         </div>
                         <h2 class="text-bold-700">{{ $summary['expiring_phv'] }}</h2>
-                        <p class="mb-0 font-small-3">PHV License</p>
+                        <p class="mb-0 font-small-3">PHVL</p>
                     </div>
                 </div>
             </div>
@@ -184,7 +184,7 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('phv_expiry')">
-                            PHV
+                            PHVL
                             <span class="badge badge-pill badge-secondary ml-50">{{ $summary['expiring_phv'] }}</span>
                         </a>
                     </li>
@@ -232,6 +232,7 @@
                             <th>TITLE</th>
                             <th>MESSAGE</th>
                             <th>VEHICLE/DRIVER</th>
+                            <th>Last Car</th>
                             <th>EXPIRY STATUS</th>
                             {{-- Must match hidden sort_key column in DataTables (column count) --}}
                             <th class="d-none"></th>
@@ -341,6 +342,16 @@
                         }
                     },
                     {
+                        data: null,
+                        render: function(data, type, row) {
+                            if (row.last_car_registration && row.last_car_agreement_url) {
+                                return `<a href="${row.last_car_agreement_url}" class="font-weight-bold">${row.last_car_registration}</a>`;
+                            }
+
+                            return '-';
+                        }
+                    },
+                    {
                         data: 'time_ago',
                         render: function(data, type, row) {
                             if (row.type === 'insurance_applied' || row.type === 'road_tax_missing') {
@@ -377,7 +388,7 @@
                         }
                     }
                 ],
-                order: [[5, 'asc']], // Chronological expiry (server order; column is Unix timestamp)
+                order: [[6, 'asc']], // Chronological expiry (server order; column is Unix timestamp)
                 pageLength: 25,
                 language: {
                     search: "_INPUT_",

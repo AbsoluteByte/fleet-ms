@@ -160,6 +160,101 @@
                         </div>
                     @endif
 
+                    @php
+                        $activeCarInsurance = $agreement->car?->currentActiveInsurance();
+                        $ownInsuranceProofFiles = $agreement->ownInsuranceProofFileNames();
+                    @endphp
+                    <div class="mt-3 pt-3 border-top">
+                        <h6>Insurance Details</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-borderless table-sm mb-0">
+                                    <tr>
+                                        <td class="ps-0" style="width: 42%;"><strong>Insurance provided by:</strong></td>
+                                        <td>
+                                            @if($agreement->using_own_insurance)
+                                                <span class="badge bg-info">Client's</span>
+                                            @else
+                                                <span class="badge bg-primary">Company's</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                    @if($agreement->using_own_insurance)
+                                        <tr>
+                                            <td class="ps-0"><strong>Provider:</strong></td>
+                                            <td>{{ $agreement->own_insurance_provider_name ?: '—' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="ps-0"><strong>Insurance type:</strong></td>
+                                            <td>{{ $agreement->own_insurance_type ?: '—' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="ps-0"><strong>Policy number:</strong></td>
+                                            <td>{{ $agreement->own_insurance_policy_number ?: '—' }}</td>
+                                        </tr>
+                                    @else
+                                        <tr>
+                                            <td class="ps-0"><strong>Provider:</strong></td>
+                                            <td>{{ optional($activeCarInsurance?->insuranceProvider)->provider_name ?: '—' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="ps-0"><strong>Policy number:</strong></td>
+                                            <td>{{ optional($activeCarInsurance?->insuranceProvider)->policy_number ?: '—' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="ps-0"><strong>Status:</strong></td>
+                                            <td>
+                                                @if($activeCarInsurance)
+                                                    <span class="badge bg-success">Active</span>
+                                                @else
+                                                    <span class="badge bg-warning">No active insurance on vehicle</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endif
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-borderless table-sm mb-0">
+                                    @if($agreement->using_own_insurance)
+                                        <tr>
+                                            <td class="ps-0" style="width: 42%;"><strong>Start date:</strong></td>
+                                            <td>{{ $agreement->own_insurance_start_date?->format('M d, Y') ?: '—' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="ps-0"><strong>End date:</strong></td>
+                                            <td>{{ $agreement->own_insurance_end_date?->format('M d, Y') ?: '—' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="ps-0 align-top"><strong>Proof documents:</strong></td>
+                                            <td>
+                                                @if($ownInsuranceProofFiles !== [])
+                                                    <ul class="mb-0 ps-3">
+                                                        @foreach($ownInsuranceProofFiles as $proofName)
+                                                            <li>
+                                                                <a href="{{ asset('uploads/insurance_documents/' . $proofName) }}"
+                                                                   target="_blank" rel="noopener noreferrer">
+                                                                    View file {{ $loop->iteration }}
+                                                                </a>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                @else
+                                                    —
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @else
+                                        <tr>
+                                            <td class="ps-0" style="width: 42%;"><strong>Expiry date:</strong></td>
+                                            <td>{{ $activeCarInsurance?->expiry_date?->format('M d, Y') ?: '—' }}</td>
+                                        </tr>
+                                    @endif
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     @if($agreement->termination_notice_date && $agreement->termination_notes)
                         <div class="mt-3 pt-3 border-top">
                             <h6>Termination Notes</h6>

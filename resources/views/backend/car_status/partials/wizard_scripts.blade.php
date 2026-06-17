@@ -136,6 +136,18 @@
 
         $('#fleet_written_fault_type').on('change', toggleWrittenFault);
 
+        $('#fleet_sold_documents').on('change', function () {
+            const names = Array.from(this.files || []).map(function (file) {
+                return file.name;
+            });
+            const $preview = $('#fleet_sold_documents_selected');
+            if (!names.length) {
+                $preview.empty();
+                return;
+            }
+            $preview.html('<strong>Selected:</strong> ' + names.join(', '));
+        });
+
         function showPanel(status) {
             $('.fleet-status-panel').each(function () {
                 const match = $(this).data('status') === status;
@@ -290,13 +302,13 @@
             if (isEditMode) {
                 $('.fleet-status-panel').each(function () {
                     const isActivePanel = String($(this).data('status') || '') === oldTarget;
-                    $(this).find(':input').prop('disabled', !isActivePanel);
+                    $(this).find(':input:not([type="file"])').prop('disabled', !isActivePanel);
                 });
             } else {
                 $('#fleet_hidden_swapped_with_car_id').prop('disabled', false);
                 $('.fleet-status-panel').each(function () {
                     const hidden = $(this).hasClass('d-none');
-                    $(this).find(':input').prop('disabled', hidden);
+                    $(this).find(':input:not([type="file"])').prop('disabled', hidden);
                 });
                 const ts = $('#fleet_target_status').val();
                 if (ts !== 'vehicle_swap') {

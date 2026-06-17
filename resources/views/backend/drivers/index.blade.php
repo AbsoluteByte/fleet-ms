@@ -22,6 +22,7 @@
                                         <th>Email</th>
                                         <th>Phone</th>
                                         <th>License Expiry</th>
+                                        <th>Status</th>
                                         <th>Invitation Status</th>
                                         <th>Actions</th>
                                     </tr>
@@ -52,6 +53,13 @@
                                                     <span class="badge bg-success">
                                                         {{ $driver->driver_license_expiry_date->format('M d, Y') }}
                                                     </span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($driver->is_active)
+                                                    <span class="badge bg-success">Active</span>
+                                                @else
+                                                    <span class="badge bg-secondary">Inactive</span>
                                                 @endif
                                             </td>
                                             <td>
@@ -125,7 +133,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="6" class="text-center text-muted py-4">
+                                            <td colspan="7" class="text-center text-muted py-4">
                                                 <i class="fa fa-users fa-3x mb-3"></i>
                                                 <br>
                                                 No drivers found. <a href="{{ route('drivers.create') }}">Add your first

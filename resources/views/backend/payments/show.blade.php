@@ -171,3 +171,24 @@
         }
     </style>
 @endsection
+
+@section('js')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            function activateTabFromHash() {
+                const hash = window.location.hash;
+                if (!hash) {
+                    return;
+                }
+
+                const tabLink = document.querySelector('a[data-toggle="tab"][href="' + hash + '"]');
+                if (tabLink && window.jQuery && window.jQuery.fn.tab) {
+                    window.jQuery(tabLink).tab('show');
+                }
+            }
+
+            activateTabFromHash();
+            window.addEventListener('hashchange', activateTabFromHash);
+        });
+    </script>
+@endsection

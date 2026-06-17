@@ -85,6 +85,7 @@ class PaymentController extends Controller
         }
 
         $drivers = Driver::where('tenant_id', $tenant->id)
+            ->active()
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();

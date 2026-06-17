@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Driver;
+use App\Models\DriverDocumentArchive;
 use App\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -18,6 +19,15 @@ class DriverPersistenceService
         'dvla_license_summary',
         'misc_document',
         'proof_of_address_document',
+    ];
+
+    public const DOCUMENT_FIELD_LABELS = [
+        'driver_license_document' => 'Driver License Document',
+        'driver_phd_license_document' => 'PHD License Document',
+        'phd_card_document' => 'PHD Card Document',
+        'dvla_license_summary' => 'DVLA License Summary',
+        'misc_document' => 'Miscellaneous Document',
+        'proof_of_address_document' => 'Proof of Address',
     ];
 
     /**
@@ -37,7 +47,7 @@ class DriverPersistenceService
         $filename = $driver->{$field};
 
         if ($filename) {
-            $this->deleteDocument($filename);
+            $this->archiveDocument($driver, $field, $filename, 'removed');
             $driver->update([
                 $field => null,
                 'updatedBy' => Auth::id(),
@@ -72,12 +82,12 @@ class DriverPersistenceService
             'phd_license_expiry_date' => 'nullable|date',
             'next_of_kin' => 'required|string|max:255',
             'next_of_kin_phone' => 'required|string|max:20',
-            'driver_license_document' => 'nullable|file',
-            'driver_phd_license_document' => 'nullable|file',
-            'phd_card_document' => 'nullable|file',
-            'dvla_license_summary' => 'nullable|file',
-            'misc_document' => 'nullable|file',
-            'proof_of_address_document' => 'nullable|file',
+            'driver_license_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'driver_phd_license_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'phd_card_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'dvla_license_summary' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'misc_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'proof_of_address_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
         ];
     }
 
@@ -85,6 +95,7 @@ class DriverPersistenceService
     {
         $validated = $request->validate($this->validationRules());
         $validated = $this->attributesFromValidated($request, $validated);
+        $validated['is_active'] = $request->has('is_active');
 
         return $this->createFromValidatedAttributes($validated, $tenant);
     }
@@ -93,6 +104,7 @@ class DriverPersistenceService
     {
         $validated = $request->validate($this->validationRules($driver));
         $validated = $this->attributesFromValidated($request, $validated, $driver);
+        $validated['is_active'] = $request->has('is_active');
         $validated['tenant_id'] = $tenant->id;
         $validated['updatedBy'] = Auth::id();
         $driver->update($validated);
@@ -106,7 +118,12 @@ class DriverPersistenceService
      */
     public function attributesFromValidated(Request $request, array $validated, ?Driver $existing = null): array
     {
-        $driverAttributes = Arr::only($validated, array_keys($this->validationRules($existing)));
+        $attributeKeys = array_diff(
+            array_keys($this->validationRules($existing)),
+            self::DOCUMENT_FIELDS
+        );
+
+        $driverAttributes = Arr::only($validated, $attributeKeys);
 
         if (! filled($driverAttributes['county'] ?? null)) {
             $driverAttributes['county'] = null;
@@ -149,18 +166,26 @@ class DriverPersistenceService
     private function mergeUploadedDocuments(Request $request, array $validated, ?Driver $existing = null): array
     {
         foreach (self::DOCUMENT_FIELDS as $field) {
-            if (! $request->hasFile($field)) {
+            $file = $request->file($field);
+
+            if (! $file || ! $file->isValid()) {
                 continue;
             }
 
-            $storedName = $this->storeDocument($request->file($field));
+            $storedName = $this->storeDocument($file);
 
             if ($storedName === null) {
                 continue;
             }
 
-            if ($existing?->{$field}) {
-                $this->deleteDocument($existing->{$field});
+            if ($existing?->exists) {
+                $previousFilename = Driver::query()
+                    ->whereKey($existing->id)
+                    ->value($field);
+
+                if (filled($previousFilename) && $previousFilename !== $storedName) {
+                    $this->archiveDocument($existing, $field, (string) $previousFilename, 'replaced');
+                }
             }
 
             $validated[$field] = $storedName;
@@ -171,13 +196,16 @@ class DriverPersistenceService
 
     private function storeDocument($file): ?string
     {
-        $mimeType = $file->getMimeType();
+        $mimeType = $file->getMimeType() ?? '';
+        $extension = $file->getClientOriginalExtension() ?: $file->extension();
 
         if (str_starts_with($mimeType, 'image/')) {
-            $dims = getimagesize($file);
-            $name = time().'-'.$dims[0].'-'.$dims[1].'.'.$file->extension();
+            $dims = @getimagesize($file->getRealPath());
+            $name = $dims
+                ? time().'-'.$dims[0].'-'.$dims[1].'.'.$extension
+                : time().'-'.uniqid().'.'.$extension;
         } else {
-            $name = time().'-'.uniqid().'.'.$file->extension();
+            $name = time().'-'.uniqid().'.'.$extension;
         }
 
         $path = public_path('uploads/driver_licenses/');
@@ -187,6 +215,23 @@ class DriverPersistenceService
         }
 
         return $file->move($path, $name) ? $name : null;
+    }
+
+    private function archiveDocument(Driver $driver, string $field, string $filename, string $reason): void
+    {
+        if (! in_array($field, self::DOCUMENT_FIELDS, true)) {
+            abort(404);
+        }
+
+        DriverDocumentArchive::create([
+            'driver_id' => $driver->id,
+            'document_field' => $field,
+            'filename' => $filename,
+            'document_label' => self::DOCUMENT_FIELD_LABELS[$field] ?? $field,
+            'reason' => $reason,
+            'archived_by' => Auth::id(),
+            'archived_at' => now(),
+        ]);
     }
 
     private function deleteDocument(?string $filename): void

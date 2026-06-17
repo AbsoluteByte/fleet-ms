@@ -84,7 +84,12 @@ class DriverController extends Controller
                 ->with('error', 'No active company found!');
         }
         $model = Driver::where('tenant_id', $tenant->id)->findOrFail($id);
-        return view($this->dir.'edit', compact('model'));
+        $documentArchives = $model->documentArchives()
+            ->with('archivedBy')
+            ->orderByDesc('archived_at')
+            ->get();
+
+        return view($this->dir.'edit', compact('model', 'documentArchives'));
     }
 
     public function update(Request $request, Driver $driver, DriverPersistenceService $driverPersistence)
@@ -98,7 +103,7 @@ class DriverController extends Controller
 
         $driverPersistence->updateFromRequest($driver, $request, $tenant);
 
-        return redirect()->route($this->url.'index')
+        return redirect()->route($this->url.'edit', $driver)
             ->with('success', 'Driver updated successfully.');
     }
 
@@ -113,6 +118,33 @@ class DriverController extends Controller
         $driverPersistence->removeDocument($driver, $document);
 
         return response()->json(['ok' => true]);
+    }
+
+    public function documentArchives(Driver $driver)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $driver->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        $archives = $driver->documentArchives()
+            ->with('archivedBy')
+            ->orderByDesc('archived_at')
+            ->get()
+            ->map(fn ($archive) => [
+                'id' => $archive->id,
+                'document_field' => $archive->document_field,
+                'document_label' => $archive->document_label,
+                'filename' => $archive->filename,
+                'file_url' => $archive->fileUrl(),
+                'reason' => $archive->reason,
+                'reason_label' => $archive->reasonLabel(),
+                'archived_at' => $archive->archived_at?->format('d M, Y h:i A'),
+                'archived_by' => $archive->archivedBy?->name,
+            ]);
+
+        return response()->json(['archives' => $archives]);
     }
 
     public function destroy(Driver $driver)

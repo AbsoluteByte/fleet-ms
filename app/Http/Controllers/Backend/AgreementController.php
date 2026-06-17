@@ -66,7 +66,7 @@ class AgreementController extends Controller
                 ->with('error', 'No active company found!');
         }
         $companies = Company::where('tenant_id', $tenant->id)->get();
-        $drivers = Driver::where('tenant_id', $tenant->id)->get();
+        $drivers = Driver::where('tenant_id', $tenant->id)->active()->get();
         $cars = $this->carsForAgreementForm($tenant);
         $model = new Agreement;
         $statuses = Status::where('type', 'agreement')->get();
@@ -175,7 +175,8 @@ class AgreementController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
         $agreement->load([
-            'company', 'driver', 'car', 'status', 'insuranceProvider', 'terminationRecordedBy', 'parentAgreement.car', 'parentAgreement.driver',
+            'company', 'driver', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
+            'status', 'insuranceProvider', 'terminationRecordedBy', 'parentAgreement.car', 'parentAgreement.driver',
             'collections' => function ($query) {
                 $query->orderBy('due_date');
             },
@@ -197,7 +198,14 @@ class AgreementController extends Controller
         }
         $model = $agreement->load('collections');
         $companies = Company::where('tenant_id', $tenant->id)->get();
-        $drivers = Driver::where('tenant_id', $tenant->id)->get();
+        $drivers = Driver::where('tenant_id', $tenant->id)->active()->get();
+        if ($agreement->driver_id && ! $drivers->contains('id', $agreement->driver_id)) {
+            $currentDriver = Driver::where('tenant_id', $tenant->id)->find($agreement->driver_id);
+            if ($currentDriver) {
+                $drivers->push($currentDriver);
+                $drivers = $drivers->sortBy(fn (Driver $driver) => $driver->first_name.' '.$driver->last_name)->values();
+            }
+        }
         $cars = $this->carsForAgreementForm($tenant, $agreement->car_id);
         $statuses = Status::where('type', 'agreement')->get();
 

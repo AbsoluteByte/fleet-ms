@@ -65,6 +65,7 @@ class ReservationController extends Controller
 
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
+            ->active()
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();
@@ -95,12 +96,22 @@ class ReservationController extends Controller
 
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
+            ->active()
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();
 
         $reservation->load('driver');
         $driver = $reservation->driver ?? $this->legacyDriverStub($reservation);
+        if ($reservation->driver_id && ! $drivers->contains('id', $reservation->driver_id)) {
+            $currentDriver = Driver::query()
+                ->where('tenant_id', $tenant->id)
+                ->find($reservation->driver_id);
+            if ($currentDriver) {
+                $drivers->push($currentDriver);
+                $drivers = $drivers->sortBy(fn (Driver $driver) => $driver->first_name.' '.$driver->last_name)->values();
+            }
+        }
         $selectedDriverId = $reservation->driver_id;
         $driverMode = old('driver_mode', $reservation->driver_id ? 'existing' : 'new');
 

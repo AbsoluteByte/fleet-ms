@@ -118,6 +118,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('reservations', App\Http\Controllers\Backend\ReservationController::class)->except(['show']);
     Route::resource('vehicle-swaps', App\Http\Controllers\Backend\VehicleSwapController::class)->except(['show']);
     Route::delete('drivers/{driver}/documents/{document}', [App\Http\Controllers\Backend\DriverController::class, 'destroyDocument'])->name('drivers.documents.destroy');
+    Route::get('drivers/{driver}/document-archives', [App\Http\Controllers\Backend\DriverController::class, 'documentArchives'])->name('drivers.document-archives');
     Route::resource('drivers', App\Http\Controllers\Backend\DriverController::class);
 
     Route::post('drivers/{driver}/invite', [App\Http\Controllers\Backend\DriverController::class, 'invite'])->name('drivers.invite');

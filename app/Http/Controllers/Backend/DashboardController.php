@@ -14,6 +14,7 @@ use App\Models\CarService;
 use App\Models\Claim;
 use App\Models\Driver;
 use App\Models\Expense;
+use App\Models\Invoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -192,105 +193,96 @@ class DashboardController extends Controller
             ];
         }
 
-        // ✅ Update overdue collections
-        AgreementCollection::whereHas('agreement', function ($query) use ($tenant) {
-            $query->where('tenant_id', $tenant->id);
-        })
-            ->where('payment_status', 'pending')
-            ->where('due_date', '<', now())
-            ->update(['payment_status' => 'overdue']);
-
         $notifications = collect();
 
-        // ==================== 1. OVERDUE PAYMENTS ====================
-        $overdueCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->whereHas('agreement', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
-            })
-            ->where('payment_status', 'overdue')
+        $invoiceDriverFilter = function ($query) use ($tenant) {
+            $query->where('tenant_id', $tenant->id)->where('is_active', true);
+        };
+
+        $baseInvoiceQuery = fn () => Invoice::query()
+            ->with('driver')
+            ->where('balance_amount', '>', 0)
+            ->whereHas('driver', $invoiceDriverFilter);
+
+        // ==================== 1. OVERDUE INVOICES (Due Invoices tab match) ====================
+        $overdueInvoices = $baseInvoiceQuery()
+            ->whereDate('due_date', '<', now())
             ->orderBy('due_date')
             ->get();
 
-        foreach ($overdueCollections as $collection) {
-            $notifications->push([
-                'id' => 'overdue_'.$collection->id,
-                'type' => 'overdue_payment',
-                'priority' => 1,
-                'title' => 'Overdue Payment',
-                'message' => $collection->agreement->driver->full_name.' - Overdue by '.$collection->days_overdue.' days',
-                'simple_message' => $collection->agreement->driver->full_name.' - Overdue by '.$collection->days_overdue.' days',
-                'amount' => '£'.number_format($collection->remaining_amount, 2),
-                'vehicle' => $collection->agreement->car->registration,
-                'time_ago' => 'Due '.$collection->due_date->diffForHumans(),
-                'action_url' => route('agreements.show', $collection->agreement),
-                'icon' => 'icon-alert-triangle',
-                'color' => 'danger',
-                'bg_color' => 'rgba(239, 68, 68, 0.1)',
-                'border_color' => '#ef4444',
-                'created_at' => $collection->due_date,
-                'sort_key' => $collection->due_date->timestamp,
-            ]);
-        }
-
-        // ==================== 2. DUE TODAY PAYMENTS ====================
-        $dueTodayCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->whereHas('agreement', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
-            })
-            ->where('payment_status', 'pending')
+        // ==================== 2. DUE TODAY INVOICES ====================
+        $dueTodayInvoices = $baseInvoiceQuery()
             ->whereDate('due_date', now())
+            ->orderBy('due_date')
             ->get();
 
-        foreach ($dueTodayCollections as $collection) {
-            $notifications->push([
-                'id' => 'due_today_'.$collection->id,
-                'type' => 'due_today',
-                'priority' => 2,
-                'title' => 'Payment Due Today',
-                'message' => $collection->agreement->driver->full_name.' - Payment due today',
-                'simple_message' => $collection->agreement->driver->full_name.' - Due today',
-                'amount' => '£'.number_format($collection->amount, 2),
-                'vehicle' => $collection->agreement->car->registration,
-                'time_ago' => 'Due Today',
-                'action_url' => route('agreements.show', $collection->agreement),
-                'icon' => 'icon-clock',
-                'color' => 'warning',
-                'bg_color' => 'rgba(245, 158, 11, 0.1)',
-                'border_color' => '#f59e0b',
-                'created_at' => $collection->due_date,
-                'sort_key' => $collection->due_date->timestamp,
-            ]);
+        // ==================== 3. DUE THIS WEEK INVOICES ====================
+        $dueThisWeekInvoices = $baseInvoiceQuery()
+            ->whereBetween('due_date', [now()->addDay()->startOfDay(), now()->addWeek()->endOfDay()])
+            ->orderBy('due_date')
+            ->get();
+
+        $agreementsById = $this->agreementsByIdForInvoices(
+            $overdueInvoices->merge($dueTodayInvoices)->merge($dueThisWeekInvoices)
+        );
+
+        foreach ($overdueInvoices as $invoice) {
+            $daysOverdue = (int) $invoice->due_date->startOfDay()->diffInDays(now()->startOfDay());
+            $driverName = $invoice->driver?->full_name ?? 'Driver';
+
+            $notifications->push($this->invoicePaymentNotificationPayload(
+                $invoice,
+                'overdue_payment',
+                'overdue_'.$invoice->id,
+                1,
+                'Overdue Payment',
+                $driverName.' - Overdue by '.$daysOverdue.' day'.($daysOverdue === 1 ? '' : 's'),
+                'danger',
+                'icon-alert-triangle',
+                'rgba(239, 68, 68, 0.1)',
+                '#ef4444',
+                'Due '.$invoice->due_date->diffForHumans(),
+                $agreementsById
+            ));
         }
 
-        // ==================== 3. DUE THIS WEEK PAYMENTS ====================
-        $dueThisWeekCollections = AgreementCollection::with(['agreement.driver', 'agreement.car'])
-            ->whereHas('agreement', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
-            })
-            ->where('payment_status', 'pending')
-            ->whereBetween('due_date', [now()->addDay(), now()->addWeek()])
-            ->get();
+        foreach ($dueTodayInvoices as $invoice) {
+            $driverName = $invoice->driver?->full_name ?? 'Driver';
 
-        foreach ($dueThisWeekCollections as $collection) {
-            $daysUntilDue = (int) now()->diffInDays($collection->due_date);
-            $notifications->push([
-                'id' => 'due_week_'.$collection->id,
-                'type' => 'due_this_week',
-                'priority' => 3,
-                'title' => 'Payment Due Soon',
-                'message' => $collection->agreement->driver->full_name.' - Due in '.$daysUntilDue.' days',
-                'simple_message' => $collection->agreement->driver->full_name.' - Due in '.$daysUntilDue.' days',
-                'amount' => '£'.number_format($collection->amount, 2),
-                'vehicle' => $collection->agreement->car->registration,
-                'time_ago' => $collection->due_date->diffForHumans(),
-                'action_url' => route('agreements.show', $collection->agreement),
-                'icon' => 'icon-calendar',
-                'color' => 'info',
-                'bg_color' => 'rgba(59, 130, 246, 0.1)',
-                'border_color' => '#3b82f6',
-                'created_at' => $collection->due_date,
-                'sort_key' => $collection->due_date->timestamp,
-            ]);
+            $notifications->push($this->invoicePaymentNotificationPayload(
+                $invoice,
+                'due_today',
+                'due_today_'.$invoice->id,
+                2,
+                'Payment Due Today',
+                $driverName.' - Due today',
+                'warning',
+                'icon-clock',
+                'rgba(245, 158, 11, 0.1)',
+                '#f59e0b',
+                'Due Today',
+                $agreementsById
+            ));
+        }
+
+        foreach ($dueThisWeekInvoices as $invoice) {
+            $daysUntilDue = (int) now()->startOfDay()->diffInDays($invoice->due_date->startOfDay());
+            $driverName = $invoice->driver?->full_name ?? 'Driver';
+
+            $notifications->push($this->invoicePaymentNotificationPayload(
+                $invoice,
+                'due_this_week',
+                'due_week_'.$invoice->id,
+                3,
+                'Payment Due Soon',
+                $driverName.' - Due in '.$daysUntilDue.' day'.($daysUntilDue === 1 ? '' : 's'),
+                'info',
+                'icon-calendar',
+                'rgba(59, 130, 246, 0.1)',
+                '#3b82f6',
+                $invoice->due_date->diffForHumans(),
+                $agreementsById
+            ));
         }
 
         // ==================== 4. INSURANCE POLICIES (latest policy per car only) ====================
@@ -374,6 +366,57 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6366f1',
                 'created_at' => $policy->expiry_date,
                 'sort_key' => $policy->expiry_date->timestamp,
+            ]);
+        }
+
+        $clientInsuranceAgreements = Agreement::with(['driver', 'car'])
+            ->where('tenant_id', $tenant->id)
+            ->where('using_own_insurance', true)
+            ->whereNotNull('own_insurance_end_date')
+            ->whereDate('own_insurance_end_date', '<=', now()->addDays(3))
+            ->whereDate('end_date', '>=', now())
+            ->whereHas('driver', fn ($query) => $query->where('is_active', true))
+            ->whereHas('car', function ($query) use ($nonRoadTaxNotificationExcludedStatuses) {
+                $query->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
+            })
+            ->orderBy('own_insurance_end_date')
+            ->get();
+
+        foreach ($clientInsuranceAgreements as $agreement) {
+            $expiryDate = $agreement->own_insurance_end_date;
+            $daysDiff = (int) now()->diffInDays($expiryDate, false);
+            $registration = $agreement->car->registration ?? 'Vehicle';
+
+            if ($daysDiff > 0) {
+                $msg = 'Client insurance expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
+                $color = 'primary';
+                $priority = 4;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Client insurance expires today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Client insurance expired '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '').' ago';
+                $color = 'danger';
+                $priority = 1;
+            }
+
+            $notifications->push([
+                'id' => 'agreement_client_insurance_'.$agreement->id,
+                'type' => 'insurance_expiry',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'Client Insurance Expiring' : 'Client Insurance Expired',
+                'message' => $registration.' - '.$msg,
+                'simple_message' => $registration.' - '.$msg,
+                'vehicle' => $registration,
+                'time_ago' => $expiryDate->diffForHumans(),
+                'action_url' => route('agreements.show', $agreement),
+                'icon' => 'icon-shield',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#6366f1',
+                'created_at' => $expiryDate,
+                'sort_key' => $expiryDate->timestamp,
             ]);
         }
 
@@ -652,12 +695,33 @@ class DashboardController extends Controller
 
         // ==================== 10. DRIVER LICENSES ====================
         $expiringDriverLicenses = Driver::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
             ->where('driver_license_expiry_date', '<=', now()->addDays(30))
             ->orderBy('driver_license_expiry_date')
             ->get();
 
+        // ==================== 11. PHD LICENSES ====================
+        $expiringPhdLicenses = Driver::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->whereNotNull('phd_license_expiry_date')
+            ->where('phd_license_expiry_date', '<=', now()->addDays(30))
+            ->orderBy('phd_license_expiry_date')
+            ->get();
+
+        $latestAgreementsByDriver = Agreement::query()
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('driver_id', $expiringDriverLicenses->pluck('id')->merge($expiringPhdLicenses->pluck('id'))->unique())
+            ->with('car')
+            ->orderByDesc('start_date')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('driver_id')
+            ->keyBy('driver_id');
+
         foreach ($expiringDriverLicenses as $driver) {
             $daysDiff = (int) now()->diffInDays($driver->driver_license_expiry_date, false);
+            $driverLabel = $driver->selectOptionLabel();
+            $latestAgreement = $latestAgreementsByDriver->get($driver->id);
 
             if ($daysDiff > 0) {
                 $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
@@ -678,9 +742,11 @@ class DashboardController extends Controller
                 'type' => 'driver_license_expiry',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'Driver License Expiring' : 'Driver License Expired',
-                'message' => $driver->full_name.' - '.$msg,
-                'simple_message' => $driver->full_name.' - '.$msg,
-                'driver' => $driver->full_name,
+                'message' => $driverLabel.' - '.$msg,
+                'simple_message' => $driverLabel.' - '.$msg,
+                'driver' => $driverLabel,
+                'last_car_registration' => $latestAgreement?->car?->registration,
+                'last_car_agreement_url' => $latestAgreement ? route('agreements.show', $latestAgreement) : null,
                 'time_ago' => $driver->driver_license_expiry_date->diffForHumans(),
                 'action_url' => route('drivers.edit', $driver->id),
                 'icon' => 'icon-user',
@@ -692,15 +758,10 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 11. PHD LICENSES ====================
-        $expiringPhdLicenses = Driver::where('tenant_id', $tenant->id)
-            ->whereNotNull('phd_license_expiry_date')
-            ->where('phd_license_expiry_date', '<=', now()->addDays(30))
-            ->orderBy('phd_license_expiry_date')
-            ->get();
-
         foreach ($expiringPhdLicenses as $driver) {
             $daysDiff = (int) now()->diffInDays($driver->phd_license_expiry_date, false);
+            $driverLabel = $driver->selectOptionLabel();
+            $latestAgreement = $latestAgreementsByDriver->get($driver->id);
 
             if ($daysDiff > 0) {
                 $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
@@ -721,9 +782,11 @@ class DashboardController extends Controller
                 'type' => 'phd_license_expiry',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'PHD License Expiring' : 'PHD License Expired',
-                'message' => $driver->full_name.' - '.$msg,
-                'simple_message' => $driver->full_name.' - '.$msg,
-                'driver' => $driver->full_name,
+                'message' => $driverLabel.' - '.$msg,
+                'simple_message' => $driverLabel.' - '.$msg,
+                'driver' => $driverLabel,
+                'last_car_registration' => $latestAgreement?->car?->registration,
+                'last_car_agreement_url' => $latestAgreement ? route('agreements.show', $latestAgreement) : null,
                 'time_ago' => $driver->phd_license_expiry_date->diffForHumans(),
                 'action_url' => route('drivers.edit', $driver->id),
                 'icon' => 'icon-user-check',
@@ -743,11 +806,11 @@ class DashboardController extends Controller
 
         // Generate summary counts
         $summary = [
-            'overdue_payments' => $overdueCollections->count(),
-            'due_today' => $dueTodayCollections->count(),
-            'due_this_week' => $dueThisWeekCollections->count(),
+            'overdue_payments' => $overdueInvoices->count(),
+            'due_today' => $dueTodayInvoices->count(),
+            'due_this_week' => $dueThisWeekInvoices->count(),
             'insurance_applied' => $appliedInsurance->count(),
-            'expiring_insurance' => $expiringInsurance->count(),
+            'expiring_insurance' => $expiringInsurance->count() + $clientInsuranceAgreements->count(),
             'expiring_phv' => $expiringPhvs->count(),
             'expiring_mot' => $expiringMots->count(),
             'expiring_road_tax' => $expiringRoadTaxes->count() + $carsMissingRoadTax->count(),
@@ -883,7 +946,6 @@ class DashboardController extends Controller
 
             // ✅ Transform for DataTable
             $transformed = $paymentNotifications->map(function ($notification) {
-                $collectionId = explode('_', $notification['id'])[1] ?? null;
                 $amountRaw = isset($notification['amount']) ? str_replace(['£', ','], '', $notification['amount']) : 0;
 
                 return [
@@ -895,7 +957,8 @@ class DashboardController extends Controller
                     'due_date' => $notification['created_at']->format('d M, Y'),
                     'time_ago' => $notification['time_ago'],
                     'action_url' => $notification['action_url'] ?? '#',
-                    'collection_id' => $collectionId,
+                    'driver_id' => $notification['driver_id'] ?? null,
+                    'invoice_id' => $notification['invoice_id'] ?? null,
                     'color' => $notification['color'],
                 ];
             });
@@ -976,6 +1039,71 @@ class DashboardController extends Controller
                 return [optional($service->service_date)->timestamp ?? 0, $service->id];
             })->first();
         })->values();
+    }
+
+    private function agreementsByIdForInvoices(Collection $invoices): Collection
+    {
+        $sourceIds = $invoices
+            ->filter(function ($invoice) {
+                return in_array($invoice->invoice_type, ['agreement', 'agreement_deposit'], true) && $invoice->source_id;
+            })
+            ->pluck('source_id')
+            ->unique()
+            ->values();
+
+        if ($sourceIds->isEmpty()) {
+            return collect();
+        }
+
+        return Agreement::with('car')->whereIn('id', $sourceIds)->get()->keyBy('id');
+    }
+
+    private function invoiceVehicleRegistration(Invoice $invoice, Collection $agreementsById): string
+    {
+        if (! in_array($invoice->invoice_type, ['agreement', 'agreement_deposit'], true) || ! $invoice->source_id) {
+            return 'N/A';
+        }
+
+        return $agreementsById->get($invoice->source_id)?->car?->registration ?? 'N/A';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function invoicePaymentNotificationPayload(
+        Invoice $invoice,
+        string $type,
+        string $id,
+        int $priority,
+        string $title,
+        string $simpleMessage,
+        string $color,
+        string $icon,
+        string $bgColor,
+        string $borderColor,
+        string $timeAgo,
+        Collection $agreementsById
+    ): array {
+        return [
+            'id' => $id,
+            'type' => $type,
+            'priority' => $priority,
+            'title' => $title,
+            'message' => $simpleMessage,
+            'simple_message' => $simpleMessage,
+            'amount' => '£'.number_format((float) $invoice->balance_amount, 2),
+            'vehicle' => $this->invoiceVehicleRegistration($invoice, $agreementsById),
+            'driver_id' => $invoice->driver_id,
+            'invoice_id' => $invoice->id,
+            'time_ago' => $timeAgo,
+            'action_url' => route('payments.driver', $invoice->driver_id).'#due-invoices',
+            'icon' => $icon,
+            'color' => $color,
+            'bg_color' => $bgColor,
+            'border_color' => $borderColor,
+            'created_at' => $invoice->due_date,
+            'sort_key' => $invoice->due_date->timestamp,
+        ];
     }
 
 }

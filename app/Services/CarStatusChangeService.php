@@ -106,7 +106,7 @@ class CarStatusChangeService
             ]);
 
             if ($target === 'sold') {
-                $documents = $this->storeSoldDocuments($request, $history->id);
+                $documents = $this->mergeSoldDocumentUploads($request, $history->id, []);
                 $history->update([
                     'status_data' => array_merge($statusData, ['documents' => $documents]),
                 ]);
@@ -467,8 +467,6 @@ class CarStatusChangeService
             'payload.buyer_name' => 'required|string|max:255',
             'payload.buyer_contact' => 'required|string|max:255',
             'payload.buyer_address' => 'required|string',
-            'sold_documents' => 'nullable|array',
-            'sold_documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
         $this->cancelActiveReservationsAndSwapsForCar($car);
@@ -484,10 +482,31 @@ class CarStatusChangeService
     }
 
     /**
+     * @param  list<string>  $existingDocuments
+     * @return list<string>
+     */
+    public function mergeSoldDocumentUploads(Request $request, int $historyId, array $existingDocuments = []): array
+    {
+        if ($request->hasFile('sold_documents')) {
+            $request->validate([
+                'sold_documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
+            ]);
+        }
+
+        $newDocuments = $this->storeSoldDocuments($request, $historyId);
+
+        return array_values(array_unique(array_merge($existingDocuments, $newDocuments)));
+    }
+
+    /**
      * @return list<string>
      */
     private function storeSoldDocuments(Request $request, int $historyId): array
     {
+        if (! $request->hasFile('sold_documents')) {
+            return [];
+        }
+
         $relativeDir = 'uploads/cars/status_history/'.$historyId;
         $absoluteDir = public_path($relativeDir);
 
@@ -496,12 +515,8 @@ class CarStatusChangeService
         }
 
         $uploaded = [];
-
-        $soldDocs = $request->file('sold_documents');
-        $soldDocsList = [];
-        if ($soldDocs !== null) {
-            $soldDocsList = is_array($soldDocs) ? $soldDocs : [$soldDocs];
-        }
+        $soldDocsList = $request->file('sold_documents');
+        $soldDocsList = is_array($soldDocsList) ? $soldDocsList : [$soldDocsList];
 
         foreach ($soldDocsList as $file) {
             if ($file instanceof UploadedFile && $file->isValid()) {
@@ -520,9 +535,11 @@ class CarStatusChangeService
             $dims = @getimagesize($file->getRealPath());
             $width = $dims[0] ?? 0;
             $height = $dims[1] ?? 0;
-            $name = time().'-'.uniqid().'-'.$width.'-'.$height.'.'.$file->extension();
+            $extension = $file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg';
+            $name = time().'-'.uniqid().'-'.$width.'-'.$height.'.'.$extension;
         } else {
-            $name = time().'-'.uniqid().'.'.$file->extension();
+            $extension = $file->getClientOriginalExtension() ?: $file->extension() ?: 'pdf';
+            $name = time().'-'.uniqid().'.'.$extension;
         }
 
         $path = public_path($relativeDirectory);

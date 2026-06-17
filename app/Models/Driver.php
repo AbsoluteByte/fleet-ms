@@ -18,7 +18,8 @@ class Driver extends Model
         'driver_license_document', 'driver_phd_license_document',
         'phd_card_document', 'dvla_license_summary', 'misc_document',
         'proof_of_address_document', 'is_invited', 'invited_at',
-        'invitation_token', 'invitation_accepted_at', 'user_id', 'createdBy', 'updatedBy'
+        'invitation_token', 'invitation_accepted_at', 'user_id', 'is_active',
+        'createdBy', 'updatedBy'
     ];
 
     protected $casts = [
@@ -27,8 +28,19 @@ class Driver extends Model
         'phd_license_expiry_date' => 'date',
         'invited_at' => 'datetime',
         'invitation_accepted_at' => 'datetime',
-        'is_invited' => 'boolean'
+        'is_invited' => 'boolean',
+        'is_active' => 'boolean',
     ];
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function isInactive(): bool
+    {
+        return ! $this->is_active;
+    }
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
@@ -37,6 +49,15 @@ class Driver extends Model
     public function agreements()
     {
         return $this->hasMany(Agreement::class);
+    }
+
+    public function latestAgreement(): ?Agreement
+    {
+        return $this->agreements()
+            ->with('car')
+            ->orderByDesc('start_date')
+            ->orderByDesc('id')
+            ->first();
     }
 
     public function invoices()
@@ -52,6 +73,11 @@ class Driver extends Model
     public function reservations()
     {
         return $this->hasMany(CarReservation::class);
+    }
+
+    public function documentArchives()
+    {
+        return $this->hasMany(DriverDocumentArchive::class);
     }
 
     public function user()
