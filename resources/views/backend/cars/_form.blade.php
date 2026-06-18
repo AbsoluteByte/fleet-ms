@@ -1136,7 +1136,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-2">
+                            <div class="col-md-1">
                                 <div class="form-group">
                                     <label>Notify (days)</label>
                                     <input type="number" name="phvs[{{ $index }}][notify_before_expiry]"
@@ -2374,13 +2374,13 @@
                     <input type="date" name="phvs[${phvIndex}][expiry_date]" class="form-control">
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <div class="form-group">
                     <label>Notify (days)</label>
                     <input type="number" name="phvs[${phvIndex}][notify_before_expiry]" class="form-control" min="1">
                 </div>
             </div>
-            <div class="col-md-1">
+            <div class="col-md-2">
                 <div class="form-group">
                     <label>Document</label>
                     <input type="file" name="phvs[${phvIndex}][document]" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
