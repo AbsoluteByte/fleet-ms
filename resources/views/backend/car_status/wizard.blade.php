@@ -1,6 +1,8 @@
 @php
     $fleetLabels = [
+        \App\Models\Car::FLEET_STATUS_PREPARATION_FOR_PHVL => 'PHVL Preparation',
         'available_for_rent' => 'Available for Rent',
+        \App\Models\Car::FLEET_STATUS_NON_COMPLIANT => 'Non-Compliant',
         'reserved' => 'Reserved',
         'vehicle_swap' => 'Vehicle Swap',
         'damaged' => 'Damaged',

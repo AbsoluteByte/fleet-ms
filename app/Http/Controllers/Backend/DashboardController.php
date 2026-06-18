@@ -228,7 +228,7 @@ class DashboardController extends Controller
 
         foreach ($overdueInvoices as $invoice) {
             $daysOverdue = (int) $invoice->due_date->startOfDay()->diffInDays(now()->startOfDay());
-            $driverName = $invoice->driver?->full_name ?? 'Driver';
+            $driverName = $invoice->driver?->selectOptionLabel() ?? 'Driver';
 
             $notifications->push($this->invoicePaymentNotificationPayload(
                 $invoice,
@@ -247,7 +247,7 @@ class DashboardController extends Controller
         }
 
         foreach ($dueTodayInvoices as $invoice) {
-            $driverName = $invoice->driver?->full_name ?? 'Driver';
+            $driverName = $invoice->driver?->selectOptionLabel() ?? 'Driver';
 
             $notifications->push($this->invoicePaymentNotificationPayload(
                 $invoice,
@@ -267,7 +267,7 @@ class DashboardController extends Controller
 
         foreach ($dueThisWeekInvoices as $invoice) {
             $daysUntilDue = (int) now()->startOfDay()->diffInDays($invoice->due_date->startOfDay());
-            $driverName = $invoice->driver?->full_name ?? 'Driver';
+            $driverName = $invoice->driver?->selectOptionLabel() ?? 'Driver';
 
             $notifications->push($this->invoicePaymentNotificationPayload(
                 $invoice,

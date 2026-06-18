@@ -32,7 +32,7 @@
                                     @forelse($drivers as $driver)
                                         <tr>
                                             <td>
-                                                <strong>{{ $driver->full_name ?: 'N/A' }}</strong>
+                                                <strong>{{ $driver->selectOptionLabel() ?: 'N/A' }}</strong>
                                             </td>
                                             <td>{{ $driver->email ?? 'N/A' }}</td>
                                             <td>{{ $driver->phone_number ?? 'N/A' }}</td>

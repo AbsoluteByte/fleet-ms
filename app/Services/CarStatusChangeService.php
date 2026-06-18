@@ -23,7 +23,9 @@ class CarStatusChangeService
 
     /** @var list<string> */
     public const TARGET_STATUSES = [
+        Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
         'available_for_rent',
+        Car::FLEET_STATUS_NON_COMPLIANT,
         'reserved',
         'vehicle_swap',
         'damaged',
@@ -58,8 +60,16 @@ class CarStatusChangeService
             $statusData = [];
 
             switch ($target) {
+                case Car::FLEET_STATUS_PREPARATION_FOR_PHVL:
+                    $statusData = $this->applyPreparationForPhvl($car, $previousStatus);
+                    break;
+
                 case 'available_for_rent':
                     $statusData = $this->applyAvailableForRentWithCleanup($car, $previousStatus);
+                    break;
+
+                case Car::FLEET_STATUS_NON_COMPLIANT:
+                    $statusData = $this->applyNonCompliant($car, $previousStatus);
                     break;
 
                 case 'reserved':
@@ -145,6 +155,48 @@ class CarStatusChangeService
             'fleet_status' => 'available_for_rent',
             'available_from_date' => null,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function applyPreparationForPhvl(Car $car, ?string $previousStatus): array
+    {
+        $this->cancelActiveReservationsAndSwapsForCar($car);
+        $car->loadMissing(['mots', 'roadTaxes', 'phvs']);
+
+        $car->update([
+            'fleet_status' => Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
+            'available_from_date' => null,
+        ]);
+
+        $reasons = $car->hasPhvRecord() ? $car->complianceFailureReasons() : ['phv_missing'];
+
+        return [
+            'source' => 'manual',
+            'previous_snapshot' => ['fleet_status' => $previousStatus],
+            'reasons' => $reasons,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function applyNonCompliant(Car $car, ?string $previousStatus): array
+    {
+        $this->cancelActiveReservationsAndSwapsForCar($car);
+        $car->loadMissing(['mots', 'roadTaxes', 'phvs']);
+
+        $car->update([
+            'fleet_status' => Car::FLEET_STATUS_NON_COMPLIANT,
+            'available_from_date' => null,
+        ]);
+
+        return [
+            'source' => 'manual',
+            'previous_snapshot' => ['fleet_status' => $previousStatus],
+            'reasons' => $car->complianceFailureReasons(),
+        ];
     }
 
     /**

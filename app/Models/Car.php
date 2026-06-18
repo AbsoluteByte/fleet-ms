@@ -22,7 +22,7 @@ class Car extends Model
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
         'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
         'seller_notes', 'damaged_notes', 'phv_status', 'phv_applied_date', 'phv_applied_by',
-        'log_book_applied', 'log_book_applied_date', 'old_log_book',
+        'log_book_applied', 'log_book_applied_date', 'logbook_notes', 'old_log_book',
         'log_book_applied_by',
         'sorn_applied', 'sorn_applied_at', 'sorn_applied_by', 'sorn_document',
         'fleet_status', 'available_from_date',

@@ -89,7 +89,7 @@ class CarController extends Controller
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $carModels = CarModel::where('tenant_id', $tenant->id)->get();
         $counsels = Counsel::where('tenant_id', $tenant->id)->get();
-        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
+        $insuranceProviders = $this->insuranceProvidersForCarForm(null, $tenant->id);
         $this->ensureInsuranceAppliedStatus();
         $statuses = Status::where('type', 'insurance')->get();
 
@@ -106,18 +106,19 @@ class CarController extends Controller
                 ->with('error', 'No active company found!');
         }
         $this->ensureInsuranceAppliedStatus();
+        $this->prepareOptionalCarFormFields($request);
 
         // Build validation rules dynamically
         $rules = [
             'company_id' => 'required|exists:companies,id',
             'car_model_id' => 'required|exists:car_models,id',
-            'registration' => 'required|string|unique:cars',
+            'registration' => $this->registrationValidationRule($tenant->id),
             'color' => 'required|string',
             'vin' => 'required|string',
             'v5_document' => 'nullable|array',
             'v5_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
-            'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
+            'registration_year' => 'nullable|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
@@ -128,6 +129,7 @@ class CarController extends Controller
             'phv_applied_date' => 'nullable|date',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
+            'logbook_notes' => 'nullable|string',
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'available_from_date' => 'nullable|date',
@@ -380,7 +382,7 @@ class CarController extends Controller
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $carModels = CarModel::where('tenant_id', $tenant->id)->get();
         $counsels = Counsel::where('tenant_id', $tenant->id)->get();
-        $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
+        $insuranceProviders = $this->insuranceProvidersForCarForm($model, $tenant->id);
         $this->ensureInsuranceAppliedStatus();
         $statuses = Status::where('type', 'insurance')->get();
 
@@ -407,17 +409,18 @@ class CarController extends Controller
             ->orderByDesc('id')
             ->first();
         $this->ensureInsuranceAppliedStatus();
+        $this->prepareOptionalCarFormFields($request);
 
         $rules = [
             'company_id' => 'required|exists:companies,id',
             'car_model_id' => 'required|exists:car_models,id',
-            'registration' => 'required|string|unique:cars,registration,'.$car->id,
+            'registration' => $this->registrationValidationRule($tenant->id, $car->id),
             'color' => 'required|string',
             'vin' => 'required|string',
             'v5_document' => 'nullable|array',
             'v5_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
-            'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
+            'registration_year' => 'nullable|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
@@ -428,6 +431,7 @@ class CarController extends Controller
             'phv_applied_date' => 'nullable|date',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
+            'logbook_notes' => 'nullable|string',
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'available_from_date' => 'nullable|date',
@@ -1152,6 +1156,14 @@ class CarController extends Controller
             $data['available_from_date'] = null;
         }
 
+        if (array_key_exists('registration', $data)) {
+            $data['registration'] = $this->normalizeRegistration($data['registration'] ?? null);
+        }
+
+        if (array_key_exists('registration_year', $data) && ($data['registration_year'] === '' || $data['registration_year'] === null)) {
+            $data['registration_year'] = null;
+        }
+
         return $data;
     }
 
@@ -1340,6 +1352,7 @@ class CarController extends Controller
         if (! $isApplied) {
             $carData['log_book_applied_date'] = null;
             $carData['log_book_applied_by'] = null;
+            $carData['logbook_notes'] = null;
             if ($existing) {
                 foreach ($existing->oldLogBookFileNames() as $name) {
                     $this->deleteFile($name, 'uploads/cars/log_book');
@@ -1352,6 +1365,9 @@ class CarController extends Controller
 
         $rawDate = $request->input('log_book_applied_date');
         $carData['log_book_applied_date'] = ($rawDate !== null && $rawDate !== '') ? $rawDate : null;
+
+        $notes = trim((string) $request->input('logbook_notes', ''));
+        $carData['logbook_notes'] = $notes === '' ? null : $notes;
 
         if ($existing === null || ! $existing->log_book_applied) {
             $carData['log_book_applied_by'] = Auth::id();
@@ -1494,7 +1510,10 @@ class CarController extends Controller
         abort_unless(File::exists($path), 404);
 
         $extension = pathinfo($filename, PATHINFO_EXTENSION);
-        $registration = preg_replace('/[^A-Za-z0-9]/', '', $car->registration);
+        $registration = preg_replace('/[^A-Za-z0-9]/', '', (string) $car->registration);
+        if ($registration === '') {
+            $registration = 'car-'.$car->id;
+        }
 
         return response()->download($path, $registration.'-'.$type.'.'.$extension);
     }
@@ -1668,5 +1687,68 @@ class CarController extends Controller
         }
 
         return $statuses->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * @return array<int, string|\Illuminate\Validation\Rules\Unique>
+     */
+    private function registrationValidationRule(int $tenantId, ?int $ignoreCarId = null): array
+    {
+        $unique = Rule::unique('cars', 'registration')
+            ->where(fn ($query) => $query->where('tenant_id', $tenantId));
+
+        if ($ignoreCarId !== null) {
+            $unique->ignore($ignoreCarId);
+        }
+
+        return ['nullable', 'string', 'max:255', $unique];
+    }
+
+    private function normalizeRegistration(?string $registration): ?string
+    {
+        $trimmed = trim((string) $registration);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function prepareOptionalCarFormFields(Request $request): void
+    {
+        if (! $request->filled('registration_year')) {
+            $request->merge(['registration_year' => null]);
+        }
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, InsuranceProvider>
+     */
+    private function insuranceProvidersForCarForm(?Car $car, int $tenantId)
+    {
+        $providers = InsuranceProvider::query()
+            ->where('tenant_id', $tenantId)
+            ->notExpired()
+            ->orderBy('provider_name')
+            ->get();
+
+        if ($car === null) {
+            return $providers;
+        }
+
+        $latestInsurance = $car->insurances
+            ->sortByDesc(fn ($insurance) => [optional($insurance->created_at)->timestamp ?? 0, $insurance->id])
+            ->first();
+        $currentProviderId = $latestInsurance?->insurance_provider_id;
+
+        if ($currentProviderId && ! $providers->contains('id', $currentProviderId)) {
+            $currentProvider = InsuranceProvider::query()
+                ->where('tenant_id', $tenantId)
+                ->whereKey($currentProviderId)
+                ->first();
+
+            if ($currentProvider) {
+                $providers->push($currentProvider);
+            }
+        }
+
+        return $providers->sortBy('provider_name')->values();
     }
 }

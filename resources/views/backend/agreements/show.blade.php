@@ -48,7 +48,7 @@
                                 </tr>
                                 <tr>
                                     <td><strong>Driver:</strong></td>
-                                    <td>{{ $agreement->driver->full_name }}</td>
+                                    <td>{{ $agreement->driver->selectOptionLabel() }}</td>
                                 </tr>
                                 <tr>
                                     <td><strong>Vehicle:</strong></td>
@@ -61,7 +61,7 @@
                                             <a href="{{ route('agreements.show', $agreement->parentAgreement) }}">
                                                 #{{ $agreement->parentAgreement->id }}
                                                 — {{ $agreement->parentAgreement->car->registration ?? '—' }}
-                                                ({{ $agreement->parentAgreement->driver->full_name ?? '—' }})
+                                                ({{ $agreement->parentAgreement->driver?->selectOptionLabel() ?? '—' }})
                                             </a>
                                         </td>
                                     </tr>

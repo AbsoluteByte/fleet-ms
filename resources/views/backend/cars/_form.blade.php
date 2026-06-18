@@ -45,11 +45,11 @@
     {{-- Registration --}}
     <div class="col-md-6">
         <div class="form-group">
-            <label for="registration">Registration <span class="text-danger">*</span></label>
+            <label for="registration">Registration</label>
             <input type="text" name="registration" id="registration"
                    class="form-control @error('registration') is-invalid @enderror"
                    value="{{ old('registration') ?? (isset($model) && $model->id ? $model->registration : '') }}"
-                   placeholder="e.g. AB12 CDE" required>
+                   placeholder="e.g. AB12 CDE (optional if not yet registered)">
             @error('registration')
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
@@ -134,11 +134,11 @@
     {{-- Registration Year --}}
     <div class="col-md-6">
         <div class="form-group">
-            <label for="registration_year">Registration Year <span class="text-danger">*</span></label>
+            <label for="registration_year">Registration Year</label>
             <input type="number" name="registration_year" id="registration_year"
                    class="form-control @error('registration_year') is-invalid @enderror"
                    value="{{ old('registration_year') ?? (isset($model) && $model->id ? $model->registration_year : '') }}"
-                   min="1900" max="{{ date('Y') }}" required>
+                   min="1900" max="{{ date('Y') }}" placeholder="Optional">
             @error('registration_year')
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
@@ -280,6 +280,7 @@
             old('log_book_applied', (isset($model) && $model->id) ? ($model->log_book_applied ?? false) : false),
             FILTER_VALIDATE_BOOLEAN
         );
+        $logbookNotes = old('logbook_notes', (isset($model) && $model->id) ? ($model->logbook_notes ?? '') : '');
         $carHasV5Document = isset($model) && $model->id && $model->v5DocumentFileNames() !== [];
     @endphp
     <div class="col-12 @if($carHasV5Document) d-none @endif" id="log-book-ui-wrapper">
@@ -327,6 +328,18 @@
                         @enderror
                     </div>
                 </div>
+                <div class="col-12">
+                    <div class="form-group mb-0">
+                        <label for="logbook_notes">Logbook notes</label>
+                        <textarea name="logbook_notes" id="logbook_notes" rows="3"
+                                  class="form-control @error('logbook_notes') is-invalid @enderror"
+                                  placeholder="Optional notes about the log book application"
+                                  @if($carHasV5Document) disabled @endif>{{ $logbookNotes }}</textarea>
+                        @error('logbook_notes')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -335,6 +348,7 @@
             <input type="hidden" name="log_book_applied" value="{{ $logBookAppliedVal ? '1' : '0' }}">
             @if($logBookAppliedVal)
                 <input type="hidden" name="log_book_applied_date" value="{{ $logBookDate }}">
+                <textarea name="logbook_notes" class="d-none" aria-hidden="true">{{ $logbookNotes }}</textarea>
             @endif
         </div>
     @endif
@@ -1924,17 +1938,20 @@
             const cb = document.getElementById('log_book_applied');
             const dateInput = document.getElementById('log_book_applied_date');
             const fileInput = document.getElementById('old_log_book');
+            const notesInput = document.getElementById('logbook_notes');
             if (!wrapper || !jsPres) return;
 
             const hide = shouldHideLogBookForV5();
             const appliedWas = cb && cb.checked ? '1' : '0';
             const dateWas = dateInput ? (dateInput.value || '') : '';
+            const notesWas = notesInput ? (notesInput.value || '') : '';
 
             if (hide) {
                 wrapper.classList.add('d-none');
                 if (cb) cb.disabled = true;
                 if (dateInput) dateInput.disabled = true;
                 if (fileInput) fileInput.disabled = true;
+                if (notesInput) notesInput.disabled = true;
 
                 if (preservation) {
                     jsPres.innerHTML = '';
@@ -1951,6 +1968,13 @@
                         h2.name = 'log_book_applied_date';
                         h2.value = dateWas;
                         jsPres.appendChild(h2);
+
+                        const h3 = document.createElement('textarea');
+                        h3.name = 'logbook_notes';
+                        h3.className = 'd-none';
+                        h3.setAttribute('aria-hidden', 'true');
+                        h3.value = notesWas;
+                        jsPres.appendChild(h3);
                     }
                 }
             } else {
@@ -1958,6 +1982,7 @@
                 if (cb) cb.disabled = false;
                 if (dateInput) dateInput.disabled = false;
                 if (fileInput) fileInput.disabled = false;
+                if (notesInput) notesInput.disabled = false;
                 jsPres.innerHTML = '';
                 toggleLogBookSection();
             }
@@ -2059,13 +2084,25 @@
             });
         }
 
-        const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
-            return [
-                'id' => $provider->id,
-                'company_id' => $provider->company_id,
-                'provider_name' => $provider->provider_name
-            ];
-        }));
+        @php
+            $allInsuranceProvidersForForm = $insuranceProviders->map(function ($provider) {
+                return [
+                    'id' => $provider->id,
+                    'company_id' => $provider->company_id,
+                    'provider_name' => $provider->provider_name,
+                    'expiry_date' => $provider->expiry_date ? $provider->expiry_date->format('Y-m-d') : null,
+                ];
+            })->values();
+        @endphp
+        const allInsuranceProviders = @json($allInsuranceProvidersForForm);
+
+        function isInsuranceProviderExpired(provider) {
+            if (!provider.expiry_date) {
+                return false;
+            }
+
+            return provider.expiry_date < todayYmd;
+        }
 
         function filterInsuranceProviders() {
             const companyId = document.getElementById('company_id').value;
@@ -2075,7 +2112,17 @@
             insuranceProviderSelect.innerHTML = '<option value="">Select Provider</option>';
 
             if (companyId) {
-                const filteredProviders = allInsuranceProviders.filter(provider => provider.company_id == companyId);
+                const filteredProviders = allInsuranceProviders.filter(function (provider) {
+                    if (provider.company_id != companyId) {
+                        return false;
+                    }
+
+                    if (provider.id == selectedProviderId) {
+                        return true;
+                    }
+
+                    return !isInsuranceProviderExpired(provider);
+                });
 
                 filteredProviders.forEach(provider => {
                     const option = document.createElement('option');

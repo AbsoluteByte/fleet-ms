@@ -6,7 +6,7 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h3 class="card-title mb-0">Car Details - {{ $car->registration }}</h3>
+                        <h3 class="card-title mb-0">Car Details - {{ $car->registration ?: '—' }}</h3>
                         <div>
                             <a href="{{ route($url . 'edit', $car->id) }}" class="btn btn-primary btn-sm">
                                 <i class="fa fa-edit"></i> Edit
@@ -33,7 +33,7 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <strong>Registration:</strong>
-                                <p class="mb-0">{{ $car->registration }}</p>
+                                <p class="mb-0">{{ $car->registration ?: '—' }}</p>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <strong>Color:</strong>
@@ -49,7 +49,7 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <strong>Registration Year:</strong>
-                                <p class="mb-0">{{ $car->registration_year }}</p>
+                                <p class="mb-0">{{ $car->registration_year ?: '—' }}</p>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <strong>Purchase Date:</strong>
@@ -192,6 +192,10 @@
                                 <div class="col-md-6 mb-3">
                                     <strong>Applied Date:</strong>
                                     <p class="mb-0">{{ $car->log_book_applied_date ? $car->log_book_applied_date->format('d M, Y') : '—' }}</p>
+                                    @if($car->logbook_notes)
+                                        <strong class="d-block mt-3">Logbook notes:</strong>
+                                        <p class="mb-0" style="white-space: pre-wrap;">{{ $car->logbook_notes }}</p>
+                                    @endif
                                     @if($hasOldLogBookFile)
                                         <strong class="d-block mt-3">Old log book:</strong>
                                         <p class="mb-0">
@@ -220,6 +224,12 @@
                                         <strong>Applied Date:</strong>
                                         <p class="mb-0">{{ $car->log_book_applied_date ? $car->log_book_applied_date->format('d M, Y') : '—' }}</p>
                                     </div>
+                                    @if($car->logbook_notes)
+                                        <div class="col-md-6 mb-3">
+                                            <strong>Logbook notes:</strong>
+                                            <p class="mb-0" style="white-space: pre-wrap;">{{ $car->logbook_notes }}</p>
+                                        </div>
+                                    @endif
                                     @if($car->logBookAppliedBy)
                                         <div class="col-md-6 mb-3">
                                             <strong>Log book applied by:</strong>

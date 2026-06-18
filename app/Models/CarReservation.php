@@ -135,10 +135,10 @@ class CarReservation extends Model
     public function clientName(): string
     {
         if ($this->relationLoaded('driver') || $this->driver_id) {
-            $name = trim($this->driver?->full_name ?? '');
+            $label = trim($this->driver?->selectOptionLabel() ?? '');
 
-            if ($name !== '') {
-                return $name;
+            if ($label !== '') {
+                return $label;
             }
         }
 

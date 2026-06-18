@@ -29,7 +29,7 @@
                                     <tbody>
                                     @forelse($penalties as $penalty)
                                         <tr>
-                                            <td>{{ $penalty->agreement->driver->full_name }} - {{ $penalty->agreement->car->registration }}</td>
+                                            <td>{{ $penalty->agreement->driver->selectOptionLabel() }} - {{ $penalty->agreement->car->registration }}</td>
                                             <td>{{ $penalty->date->format('M d, Y') }}</td>
                                             <td>{{ $penalty->due_date->format('M d, Y') }}</td>
                                             <td>{{ $penalty->amount }}</td>

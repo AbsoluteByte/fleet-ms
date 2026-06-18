@@ -38,4 +38,12 @@ class InsuranceProvider extends Model
     {
         return $this->hasMany(CarInsurance::class);
     }
+
+    public function scopeNotExpired($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('expiry_date')
+                ->orWhereDate('expiry_date', '>=', now()->toDateString());
+        });
+    }
 }

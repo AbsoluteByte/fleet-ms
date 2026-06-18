@@ -72,6 +72,18 @@
         <p class="text-muted mb-0">Confirm marking this vehicle as available for rent. Submit to save.</p>
     </div>
 
+    {{-- PHVL Preparation --}}
+    <div class="fleet-status-panel {{ $activeTargetStatus === \App\Models\Car::FLEET_STATUS_PREPARATION_FOR_PHVL ? '' : 'd-none' }}"
+         data-status="{{ \App\Models\Car::FLEET_STATUS_PREPARATION_FOR_PHVL }}">
+        <p class="text-muted mb-0">Confirm marking this vehicle as PHVL preparation. Submit to save.</p>
+    </div>
+
+    {{-- Non-Compliant --}}
+    <div class="fleet-status-panel {{ $activeTargetStatus === \App\Models\Car::FLEET_STATUS_NON_COMPLIANT ? '' : 'd-none' }}"
+         data-status="{{ \App\Models\Car::FLEET_STATUS_NON_COMPLIANT }}">
+        <p class="text-muted mb-0">Confirm marking this vehicle as non-compliant. Submit to save.</p>
+    </div>
+
     {{-- Reserved --}}
     <div class="fleet-status-panel {{ $activeTargetStatus === 'reserved' ? '' : 'd-none' }}" data-status="reserved">
         <div class="row">

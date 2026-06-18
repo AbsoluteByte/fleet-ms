@@ -41,6 +41,12 @@
                 <div class="small text-muted mb-2">
                     Normal file upload still works. Scanner use requires the Scanner.js desktop/client bridge on this workstation.
                 </div>
+                <div class="custom-control custom-checkbox mb-2">
+                    <input type="checkbox" class="custom-control-input" id="fleetiqScannerCombinePdf" value="1">
+                    <label class="custom-control-label" for="fleetiqScannerCombinePdf">
+                        Combine all scanned pages into a single PDF file
+                    </label>
+                </div>
                 <div id="fleetiqScannerPreview" class="d-flex flex-wrap"></div>
             </div>
             <div class="modal-footer">

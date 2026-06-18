@@ -43,6 +43,7 @@
                                             $carStatusLabel = $car->fleetStatusLabel();
                                             $isAvailableByPhv = $car->isAvailableForRent();
                                             $isAwaitingPhv = $car->phvs->isEmpty();
+                                            $isAwaitingLogBook = $car->log_book_applied && $car->v5DocumentFileNames() === [];
                                             $latestInsurance = $car->insurances
                                                 ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->created_at)->timestamp ?? 0, $i->id])
                                                 ->first();
@@ -61,11 +62,12 @@
                                             data-fleet-status="{{ $car->fleet_status ?? 'available_for_rent' }}"
                                             data-available-by-phv="{{ $isAvailableByPhv ? '1' : '0' }}"
                                             data-awaiting-phv="{{ $isAwaitingPhv ? '1' : '0' }}"
+                                            data-awaiting-log-book="{{ $isAwaitingLogBook ? '1' : '0' }}"
                                             data-council="{{ $phvCounselLabel }}"
                                             data-insurance-status="{{ $insuranceStatusLabel }}"
                                         >
                                             <td>
-                                                <strong>{{ $car->registration }}</strong>
+                                                <strong>{{ $car->registration ?: '—' }}</strong>
                                             </td>
                                             <td>{{ $car->company->name }}</td>
                                             <td>{{ $car->carModel->name }}</td>
@@ -159,6 +161,14 @@
             </button>
         </div>
         <div class="cars-filter-panel__body">
+            <div class="form-group">
+                <label class="d-block mb-50">Log book</label>
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="carsFilterAwaitingLogBook">
+                    <label class="form-check-label" for="carsFilterAwaitingLogBook">Awaiting log book</label>
+                </div>
+            </div>
+
             <div class="form-group">
                 <label for="carsFilterCompany">Company</label>
                 <select id="carsFilterCompany" class="form-control cars-advanced-filter" data-filter-key="company">
@@ -428,7 +438,8 @@
                 insuranceStatus: '',
                 carStatus: '',
                 model: '',
-                color: ''
+                color: '',
+                logBook: ''
             };
             let quickFilter = '';
 
@@ -457,8 +468,17 @@
                     && (!advancedFilters.carStatus || row.dataset.fleetStatus === advancedFilters.carStatus)
                     && (!advancedFilters.model || row.dataset.model === advancedFilters.model)
                     && (!advancedFilters.color || row.dataset.color === advancedFilters.color)
+                    && passesLogBookFilter(row)
                     && passesQuickFilter(row);
             });
+
+            function passesLogBookFilter(row) {
+                if (advancedFilters.logBook !== 'awaiting') {
+                    return true;
+                }
+
+                return row.dataset.awaitingLogBook === '1';
+            }
 
             function passesQuickFilter(row) {
                 if (!quickFilter) {
@@ -503,6 +523,11 @@
                 dataTable.draw();
             });
 
+            $('#carsFilterAwaitingLogBook').on('change', function () {
+                advancedFilters.logBook = this.checked ? 'awaiting' : '';
+                dataTable.draw();
+            });
+
             $('.cars-quick-filter').on('click', function () {
                 const selectedFilter = $(this).data('quick-filter');
                 quickFilter = quickFilter === selectedFilter ? '' : selectedFilter;
@@ -512,6 +537,8 @@
 
             $('#carsFilterReset').on('click', function () {
                 $('.cars-advanced-filter').val('').trigger('change');
+                $('#carsFilterAwaitingLogBook').prop('checked', false);
+                advancedFilters.logBook = '';
                 quickFilter = '';
                 updateQuickFilterButtons();
                 dataTable.draw();

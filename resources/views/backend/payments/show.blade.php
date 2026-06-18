@@ -11,7 +11,7 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div>
-                        <h4 class="card-title mb-0">{{ $driver->full_name ?: 'Driver' }}</h4>
+                        <h4 class="card-title mb-0">{{ $driver->selectOptionLabel() ?: 'Driver' }}</h4>
                         <small class="text-muted">{{ $driver->email }} {{ $driver->phone_number ? ' | '.$driver->phone_number : '' }}</small>
                     </div>
                     <div>

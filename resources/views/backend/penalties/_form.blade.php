@@ -11,7 +11,7 @@
                 @foreach($agreements as $agreement)
                     <option value="{{ $agreement->id }}"
                         {{ (old('agreement_id') ?? (isset($model) ? $model->agreement_id : '')) == $agreement->id ? 'selected' : '' }}>
-                        {{ $agreement->driver->full_name }} - {{ $agreement->car->registration }}
+                        {{ $agreement->driver->selectOptionLabel() }} - {{ $agreement->car->registration }}
                         ({{ $agreement->company->name }}) -
                         {{ $agreement->start_date->format('M d, Y') }} to {{ $agreement->end_date->format('M d, Y') }}
                     </option>
