@@ -18,6 +18,7 @@ window.paceOptions = {
 window.fleetiqScannerAssets = {
     js: @json(asset('app-assets/vendors/js/scannerjs/scanner.js')),
     css: @json(asset('app-assets/vendors/js/scannerjs/scanner.css')),
+    jspdf: @json(asset('app-assets/vendors/js/jspdf/jspdf.umd.min.js')),
     scanAppDownloadUrl: 'https://cdn.asprise.com/scanapp/scan-setup.exe'
 };
 window.scannerjs_scan_app_download_url = window.fleetiqScannerAssets.scanAppDownloadUrl;

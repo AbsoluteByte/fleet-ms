@@ -2,11 +2,17 @@
     'use strict';
 
     var activeInput = null;
+    var activeScanCombinePdf = false;
     var scannedFiles = [];
     var scanCounter = 1;
     var scannerLoading = false;
     var scannerLoaded = false;
     var scannerLoadQueue = [];
+    var jspdfLoading = false;
+    var jspdfLoaded = false;
+    var jspdfLoadQueue = [];
+    var scanBatchImages = [];
+    var scanFinalizeTimer = null;
 
     var EXCLUDED_NAMES = [
         'logo',
@@ -26,6 +32,10 @@
 
     function scannerAvailable() {
         return Boolean(window.scanner && typeof window.scanner.scan === 'function');
+    }
+
+    function jspdfAvailable() {
+        return Boolean(window.jspdf && window.jspdf.jsPDF);
     }
 
     function ensureScannerConfig() {
@@ -55,6 +65,38 @@
         link.type = 'text/css';
         link.href = href;
         document.head.appendChild(link);
+    }
+
+    function loadScriptAsset(src, options) {
+        options = options || {};
+
+        return new Promise(function (resolve, reject) {
+            if (!src) {
+                reject(new Error('Missing script source.'));
+                return;
+            }
+
+            if (options.alreadyLoaded && options.alreadyLoaded()) {
+                resolve(true);
+                return;
+            }
+
+            if (document.querySelector('script[src="' + src + '"]')) {
+                resolve(true);
+                return;
+            }
+
+            var script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.onload = function () {
+                resolve(true);
+            };
+            script.onerror = function () {
+                reject(new Error('Could not load ' + src));
+            };
+            document.body.appendChild(script);
+        });
     }
 
     function loadScannerLibrary(callback) {
@@ -110,6 +152,47 @@
         };
 
         document.body.appendChild(script);
+    }
+
+    function loadJsPdfLibrary(callback) {
+        if (jspdfAvailable()) {
+            callback(true);
+            return;
+        }
+
+        if (jspdfLoaded) {
+            callback(true);
+            return;
+        }
+
+        if (jspdfLoading) {
+            jspdfLoadQueue.push(callback);
+            return;
+        }
+
+        var src = scannerAssets().jspdf;
+
+        if (!src) {
+            callback(false);
+            return;
+        }
+
+        jspdfLoading = true;
+
+        loadScriptAsset(src).then(function () {
+            jspdfLoaded = jspdfAvailable();
+            jspdfLoading = false;
+            callback(jspdfLoaded);
+            jspdfLoadQueue.splice(0).forEach(function (queuedCallback) {
+                queuedCallback(jspdfLoaded);
+            });
+        }).catch(function () {
+            jspdfLoading = false;
+            callback(false);
+            jspdfLoadQueue.splice(0).forEach(function (queuedCallback) {
+                queuedCallback(false);
+            });
+        });
     }
 
     function isMac() {
@@ -259,7 +342,12 @@
 
     function openScannerForInput(input) {
         activeInput = input;
+        activeScanCombinePdf = false;
         scannedFiles = [];
+        scanBatchImages = [];
+        clearTimeout(scanFinalizeTimer);
+        scanFinalizeTimer = null;
+
         var preview = byId('fleetiqScannerPreview');
 
         if (preview) {
@@ -268,6 +356,12 @@
 
         status('Click <strong>Start Scan</strong> to scan for <strong>' + (input.name || input.id || 'selected field') + '</strong>.', 'info');
         showModal();
+    }
+
+    function isCombinePdfSelected() {
+        var checkbox = byId('fleetiqScannerCombinePdf');
+
+        return Boolean(checkbox && checkbox.checked);
     }
 
     function dataUrlToFile(dataUrl, filename) {
@@ -285,14 +379,154 @@
         return new File([bytes], filename, { type: mime });
     }
 
-    function imageToFile(scannedImage, index) {
-        var src = scannedImage && scannedImage.src ? scannedImage.src : '';
+    function scannedImageDataUrl(scannedImage) {
+        if (!scannedImage) {
+            return '';
+        }
 
-        if (!src || src.indexOf('data:') !== 0) {
+        var src = scannedImage.src || '';
+
+        if (src.indexOf('data:') === 0) {
+            return src;
+        }
+
+        if (typeof scannedImage.getBase64NoPrefix === 'function') {
+            var mime = scannedImage.mimeType || 'image/jpeg';
+            return 'data:' + mime + ';base64,' + scannedImage.getBase64NoPrefix();
+        }
+
+        return '';
+    }
+
+    function scannedImageFormat(scannedImage) {
+        var dataUrl = scannedImageDataUrl(scannedImage);
+        var mimeMatch = dataUrl.match(/^data:([^;]+);/i);
+
+        if (!mimeMatch) {
+            return 'JPEG';
+        }
+
+        var mime = mimeMatch[1].toLowerCase();
+
+        if (mime.indexOf('png') !== -1) {
+            return 'PNG';
+        }
+
+        return 'JPEG';
+    }
+
+    function loadImageSize(dataUrl) {
+        return new Promise(function (resolve, reject) {
+            var img = new Image();
+            img.onload = function () {
+                resolve({
+                    width: img.naturalWidth || img.width,
+                    height: img.naturalHeight || img.height
+                });
+            };
+            img.onerror = function () {
+                reject(new Error('Could not read scanned image dimensions.'));
+            };
+            img.src = dataUrl;
+        });
+    }
+
+    function buildPdfFromScannedImages(images) {
+        return new Promise(function (resolve, reject) {
+            if (!images.length) {
+                reject(new Error('No scanned pages to combine.'));
+                return;
+            }
+
+            loadJsPdfLibrary(function (loaded) {
+                if (!loaded || !jspdfAvailable()) {
+                    reject(new Error('PDF library could not be loaded.'));
+                    return;
+                }
+
+                var JsPDF = window.jspdf.jsPDF;
+                var doc = null;
+                var chain = Promise.resolve();
+
+                images.forEach(function (scannedImage, index) {
+                    chain = chain.then(function () {
+                        var dataUrl = scannedImageDataUrl(scannedImage);
+
+                        if (!dataUrl) {
+                            throw new Error('Scanned page ' + (index + 1) + ' could not be read.');
+                        }
+
+                        return loadImageSize(dataUrl).then(function (size) {
+                            var format = scannedImageFormat(scannedImage);
+                            var orientation = size.width >= size.height ? 'landscape' : 'portrait';
+
+                            if (!doc) {
+                                doc = new JsPDF({
+                                    unit: 'pt',
+                                    format: [size.width, size.height],
+                                    orientation: orientation
+                                });
+                            } else {
+                                doc.addPage([size.width, size.height], orientation);
+                            }
+
+                            doc.addImage(dataUrl, format, 0, 0, size.width, size.height);
+                        });
+                    });
+                });
+
+                chain.then(function () {
+                    var blob = doc.output('blob');
+                    resolve(new File(
+                        [blob],
+                        'scan-' + Date.now() + '-' + (scanCounter++) + '.pdf',
+                        { type: 'application/pdf' }
+                    ));
+                }).catch(reject);
+            });
+        });
+    }
+
+    function scannedItemToFile(scannedImage, index) {
+        var dataUrl = scannedImageDataUrl(scannedImage);
+
+        if (!dataUrl) {
             return null;
         }
 
-        return dataUrlToFile(src, 'scan-' + Date.now() + '-' + (scanCounter++) + '-' + index + '.jpg');
+        return dataUrlToFile(
+            dataUrl,
+            'scan-' + Date.now() + '-' + (scanCounter++) + '-' + index + '.jpg'
+        );
+    }
+
+    function filesFromScannedImages(images, combineAsPdf) {
+        if (!images.length) {
+            return Promise.resolve([]);
+        }
+
+        if (!combineAsPdf) {
+            return Promise.resolve(images.map(function (image, index) {
+                return scannedItemToFile(image, index);
+            }).filter(Boolean));
+        }
+
+        if (images.length === 1) {
+            var singleDataUrl = scannedImageDataUrl(images[0]);
+
+            if (singleDataUrl.indexOf('application/pdf') !== -1) {
+                return Promise.resolve([
+                    dataUrlToFile(
+                        singleDataUrl,
+                        'scan-' + Date.now() + '-' + (scanCounter++) + '.pdf'
+                    )
+                ]);
+            }
+        }
+
+        return buildPdfFromScannedImages(images).then(function (pdfFile) {
+            return [pdfFile];
+        });
     }
 
     function renderPreview(files) {
@@ -309,23 +543,31 @@
             item.className = 'border rounded p-1 mr-1 mb-1 text-center';
             item.style.width = '120px';
 
-            var img = document.createElement('img');
-            img.src = URL.createObjectURL(file);
-            img.alt = file.name;
-            img.style.maxWidth = '100%';
-            img.style.maxHeight = '90px';
+            if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+                var icon = document.createElement('div');
+                icon.className = 'd-flex align-items-center justify-content-center text-danger';
+                icon.style.height = '90px';
+                icon.innerHTML = '<i class="fa fa-file-pdf-o fa-3x"></i>';
+                item.appendChild(icon);
+            } else {
+                var img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.alt = file.name;
+                img.style.maxWidth = '100%';
+                img.style.maxHeight = '90px';
+                item.appendChild(img);
+            }
 
             var caption = document.createElement('div');
             caption.className = 'small text-muted text-truncate mt-50';
             caption.textContent = file.name;
 
-            item.appendChild(img);
             item.appendChild(caption);
             preview.appendChild(item);
         });
     }
 
-    function assignFilesToInput(input, files) {
+    function assignFilesToInput(input, files, replaceExisting) {
         if (!input || !files.length) {
             return false;
         }
@@ -337,15 +579,20 @@
 
         var transfer = new DataTransfer();
 
-        if (input.multiple) {
+        if (input.multiple && !replaceExisting) {
             Array.prototype.slice.call(input.files || []).forEach(function (file) {
                 transfer.items.add(file);
             });
-            files.forEach(function (file) {
-                transfer.items.add(file);
-            });
-        } else {
-            transfer.items.add(files[0]);
+        }
+
+        files.forEach(function (file) {
+            transfer.items.add(file);
+        });
+
+        if (!input.multiple) {
+            while (transfer.items.length > 1) {
+                transfer.items.remove(0);
+            }
         }
 
         input.files = transfer.files;
@@ -365,14 +612,43 @@
         };
     }
 
+    function finalizeScannedBatch(images) {
+        var combineAsPdf = activeScanCombinePdf;
+
+        status(combineAsPdf ? 'Combining scanned pages into one PDF...' : 'Attaching scanned files...', 'info');
+
+        filesFromScannedImages(images, combineAsPdf).then(function (files) {
+            scannedFiles = files;
+
+            if (!scannedFiles.length) {
+                status('No scanned page was returned by the scanner.', 'warning');
+                return;
+            }
+
+            renderPreview(scannedFiles);
+
+            if (assignFilesToInput(activeInput, scannedFiles, true)) {
+                var successMessage = combineAsPdf
+                    ? 'Scanned pages combined into a single PDF and attached to the selected file field.'
+                    : 'Scanned document attached to the selected file field.';
+                status(successMessage, 'success');
+                window.setTimeout(hideModal, 700);
+            }
+        }).catch(function (error) {
+            status('Could not prepare scanned files: ' + (error && error.message ? error.message : 'Unknown error.'), 'danger');
+        });
+    }
+
     function scannerCallback(successful, mesg, response) {
         if (!successful) {
             status('Scanner failed: ' + (mesg || 'Unknown scanner error.'), 'danger');
+            scanBatchImages = [];
             return;
         }
 
         if (mesg && String(mesg).toLowerCase().indexOf('user cancel') >= 0) {
             status('Scan cancelled.', 'warning');
+            scanBatchImages = [];
             return;
         }
 
@@ -382,22 +658,25 @@
             images = window.scanner.getScannedImages(response, true, false) || [];
         } catch (e) {
             status('Scan completed, but scanned images could not be read.', 'danger');
+            scanBatchImages = [];
             return;
         }
 
-        scannedFiles = images.map(imageToFile).filter(Boolean);
-
-        if (!scannedFiles.length) {
+        if (!images.length) {
             status('No scanned page was returned by the scanner.', 'warning');
+            scanBatchImages = [];
             return;
         }
 
-        renderPreview(scannedFiles);
+        scanBatchImages = scanBatchImages.concat(images);
 
-        if (assignFilesToInput(activeInput, scannedFiles)) {
-            status('Scanned document attached to the selected file field.', 'success');
-            window.setTimeout(hideModal, 700);
-        }
+        clearTimeout(scanFinalizeTimer);
+        scanFinalizeTimer = window.setTimeout(function () {
+            var batch = scanBatchImages.slice();
+            scanBatchImages = [];
+            scanFinalizeTimer = null;
+            finalizeScannedBatch(batch);
+        }, 250);
     }
 
     function runScan() {
@@ -406,7 +685,16 @@
             return;
         }
 
-        status('Opening scanner...', 'info');
+        activeScanCombinePdf = isCombinePdfSelected();
+        scanBatchImages = [];
+        clearTimeout(scanFinalizeTimer);
+        scanFinalizeTimer = null;
+
+        if (activeScanCombinePdf) {
+            status('Opening scanner... scanned pages will be merged into one PDF.', 'info');
+        } else {
+            status('Opening scanner...', 'info');
+        }
 
         try {
             if (typeof window.scanner.initialize === 'function') {
@@ -445,6 +733,18 @@
         loadScannerLibrary(function (loaded) {
             if (!loaded) {
                 status('Scanner.js could not be loaded. Please use normal file upload.', 'warning');
+                return;
+            }
+
+            if (isCombinePdfSelected()) {
+                loadJsPdfLibrary(function (pdfLoaded) {
+                    if (!pdfLoaded) {
+                        status('PDF combiner could not be loaded. Please use normal file upload.', 'warning');
+                        return;
+                    }
+
+                    runScan();
+                });
                 return;
             }
 
