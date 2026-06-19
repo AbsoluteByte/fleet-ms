@@ -34,7 +34,8 @@ window.scannerjs_scan_app_download_url = window.fleetiqScannerAssets.scanAppDown
 <script src="{{ asset('app-assets/js/scripts/components.js') }}"></script>
 <script src="{{ asset('app-assets/js/scripts/navs/navs.js') }}"></script>
 <script src="{{ asset('app-assets/js/scripts/extensions/toastr.js') }}"></script>
-<script src="{{ asset('app-assets/js/scripts/fleetiq-scanner-uploads.js') }}"></script>
+<script src="{{ asset('app-assets/vendors/js/jspdf/jspdf.umd.min.js') }}"></script>
+<script src="{{ asset('app-assets/js/scripts/fleetiq-scanner-uploads.js') }}?v=20260616"></script>
 <!-- END: Theme JS-->
 
 <script>

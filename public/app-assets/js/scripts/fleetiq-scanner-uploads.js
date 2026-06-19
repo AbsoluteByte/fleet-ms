@@ -8,11 +8,9 @@
     var scannerLoading = false;
     var scannerLoaded = false;
     var scannerLoadQueue = [];
-    var jspdfLoading = false;
-    var jspdfLoaded = false;
-    var jspdfLoadQueue = [];
     var scanBatchImages = [];
     var scanFinalizeTimer = null;
+    var scanSessionId = 0;
 
     var EXCLUDED_NAMES = [
         'logo',
@@ -65,38 +63,6 @@
         link.type = 'text/css';
         link.href = href;
         document.head.appendChild(link);
-    }
-
-    function loadScriptAsset(src, options) {
-        options = options || {};
-
-        return new Promise(function (resolve, reject) {
-            if (!src) {
-                reject(new Error('Missing script source.'));
-                return;
-            }
-
-            if (options.alreadyLoaded && options.alreadyLoaded()) {
-                resolve(true);
-                return;
-            }
-
-            if (document.querySelector('script[src="' + src + '"]')) {
-                resolve(true);
-                return;
-            }
-
-            var script = document.createElement('script');
-            script.src = src;
-            script.async = true;
-            script.onload = function () {
-                resolve(true);
-            };
-            script.onerror = function () {
-                reject(new Error('Could not load ' + src));
-            };
-            document.body.appendChild(script);
-        });
     }
 
     function loadScannerLibrary(callback) {
@@ -154,19 +120,9 @@
         document.body.appendChild(script);
     }
 
-    function loadJsPdfLibrary(callback) {
+    function ensureJsPdfReady(callback) {
         if (jspdfAvailable()) {
             callback(true);
-            return;
-        }
-
-        if (jspdfLoaded) {
-            callback(true);
-            return;
-        }
-
-        if (jspdfLoading) {
-            jspdfLoadQueue.push(callback);
             return;
         }
 
@@ -177,22 +133,22 @@
             return;
         }
 
-        jspdfLoading = true;
+        if (document.getElementById('fleetiq-jspdf-js')) {
+            callback(jspdfAvailable());
+            return;
+        }
 
-        loadScriptAsset(src).then(function () {
-            jspdfLoaded = jspdfAvailable();
-            jspdfLoading = false;
-            callback(jspdfLoaded);
-            jspdfLoadQueue.splice(0).forEach(function (queuedCallback) {
-                queuedCallback(jspdfLoaded);
-            });
-        }).catch(function () {
-            jspdfLoading = false;
+        var script = document.createElement('script');
+        script.id = 'fleetiq-jspdf-js';
+        script.src = src;
+        script.async = true;
+        script.onload = function () {
+            callback(jspdfAvailable());
+        };
+        script.onerror = function () {
             callback(false);
-            jspdfLoadQueue.splice(0).forEach(function (queuedCallback) {
-                queuedCallback(false);
-            });
-        });
+        };
+        document.body.appendChild(script);
     }
 
     function isMac() {
@@ -206,6 +162,18 @@
         var isMobile = /android|iphone|ipad|ipod|mobile|tablet/i.test(ua);
 
         return isWindows && !isMobile;
+    }
+
+    function shouldCombinePdf() {
+        if (activeScanCombinePdf) {
+            return true;
+        }
+
+        if (isCombinePdfSelected()) {
+            return true;
+        }
+
+        return Boolean(activeInput && activeInput.dataset.fleetiqScanCombinePdf === '1');
     }
 
     function status(message, type) {
@@ -379,28 +347,57 @@
         return new File([bytes], filename, { type: mime });
     }
 
+    function fileToDataUrl(file) {
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function () {
+                resolve(String(reader.result || ''));
+            };
+            reader.onerror = function () {
+                reject(new Error('Could not read scanned file.'));
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
     function scannedImageDataUrl(scannedImage) {
         if (!scannedImage) {
             return '';
         }
 
-        var src = scannedImage.src || '';
+        var src = String(scannedImage.src || '');
 
         if (src.indexOf('data:') === 0) {
             return src;
         }
 
-        if (typeof scannedImage.getBase64NoPrefix === 'function') {
-            var mime = scannedImage.mimeType || 'image/jpeg';
-            return 'data:' + mime + ';base64,' + scannedImage.getBase64NoPrefix();
+        if (src.indexOf('http://') === 0 || src.indexOf('https://') === 0) {
+            return src;
         }
 
-        return '';
+        var mime = scannedImage.mimeType || 'image/jpeg';
+
+        if (typeof scannedImage.getBase64NoPrefix === 'function') {
+            var base64 = scannedImage.getBase64NoPrefix();
+
+            if (base64) {
+                if (String(base64).indexOf('data:') === 0) {
+                    return String(base64);
+                }
+
+                return 'data:' + mime + ';base64,' + base64;
+            }
+        }
+
+        if (src && scannedImage.srcIsBase64) {
+            return 'data:' + mime + ';base64,' + src;
+        }
+
+        return src;
     }
 
-    function scannedImageFormat(scannedImage) {
-        var dataUrl = scannedImageDataUrl(scannedImage);
-        var mimeMatch = dataUrl.match(/^data:([^;]+);/i);
+    function dataUrlFormat(dataUrl) {
+        var mimeMatch = String(dataUrl || '').match(/^data:([^;]+);/i);
 
         if (!mimeMatch) {
             return 'JPEG';
@@ -410,6 +407,10 @@
 
         if (mime.indexOf('png') !== -1) {
             return 'PNG';
+        }
+
+        if (mime.indexOf('pdf') !== -1) {
+            return 'PDF';
         }
 
         return 'JPEG';
@@ -431,60 +432,96 @@
         });
     }
 
-    function buildPdfFromScannedImages(images) {
+    function pageSizeForDataUrl(dataUrl, scannedImage) {
+        var width = scannedImage && typeof scannedImage.getWidth === 'function' ? scannedImage.getWidth() : 0;
+        var height = scannedImage && typeof scannedImage.getHeight === 'function' ? scannedImage.getHeight() : 0;
+
+        if (width && height) {
+            return Promise.resolve({ width: width, height: height });
+        }
+
+        return loadImageSize(dataUrl);
+    }
+
+    function buildPdfFromPageData(pages) {
         return new Promise(function (resolve, reject) {
-            if (!images.length) {
+            if (!pages.length) {
                 reject(new Error('No scanned pages to combine.'));
                 return;
             }
 
-            loadJsPdfLibrary(function (loaded) {
-                if (!loaded || !jspdfAvailable()) {
-                    reject(new Error('PDF library could not be loaded.'));
-                    return;
-                }
+            if (!jspdfAvailable()) {
+                reject(new Error('PDF library is not available.'));
+                return;
+            }
 
-                var JsPDF = window.jspdf.jsPDF;
-                var doc = null;
-                var chain = Promise.resolve();
+            var JsPDF = window.jspdf.jsPDF;
+            var doc = null;
+            var chain = Promise.resolve();
 
-                images.forEach(function (scannedImage, index) {
-                    chain = chain.then(function () {
-                        var dataUrl = scannedImageDataUrl(scannedImage);
+            pages.forEach(function (page, index) {
+                chain = chain.then(function () {
+                    return pageSizeForDataUrl(page.dataUrl, page.scannedImage).then(function (size) {
+                        var format = page.format || dataUrlFormat(page.dataUrl);
+                        var orientation = size.width >= size.height ? 'landscape' : 'portrait';
 
-                        if (!dataUrl) {
-                            throw new Error('Scanned page ' + (index + 1) + ' could not be read.');
+                        if (!doc) {
+                            doc = new JsPDF({
+                                unit: 'pt',
+                                format: [size.width, size.height],
+                                orientation: orientation
+                            });
+                        } else {
+                            doc.addPage([size.width, size.height], orientation);
                         }
 
-                        return loadImageSize(dataUrl).then(function (size) {
-                            var format = scannedImageFormat(scannedImage);
-                            var orientation = size.width >= size.height ? 'landscape' : 'portrait';
-
-                            if (!doc) {
-                                doc = new JsPDF({
-                                    unit: 'pt',
-                                    format: [size.width, size.height],
-                                    orientation: orientation
-                                });
-                            } else {
-                                doc.addPage([size.width, size.height], orientation);
-                            }
-
-                            doc.addImage(dataUrl, format, 0, 0, size.width, size.height);
-                        });
+                        doc.addImage(page.dataUrl, format, 0, 0, size.width, size.height, undefined, 'FAST');
                     });
                 });
-
-                chain.then(function () {
-                    var blob = doc.output('blob');
-                    resolve(new File(
-                        [blob],
-                        'scan-' + Date.now() + '-' + (scanCounter++) + '.pdf',
-                        { type: 'application/pdf' }
-                    ));
-                }).catch(reject);
             });
+
+            chain.then(function () {
+                var blob = doc.output('blob');
+                resolve(new File(
+                    [blob],
+                    'scan-' + Date.now() + '-' + (scanCounter++) + '.pdf',
+                    { type: 'application/pdf' }
+                ));
+            }).catch(reject);
         });
+    }
+
+    function buildPdfFromScannedImages(images) {
+        var pages = images.map(function (scannedImage) {
+            return {
+                scannedImage: scannedImage,
+                dataUrl: scannedImageDataUrl(scannedImage),
+                format: scannedImageFormat(scannedImage)
+            };
+        }).filter(function (page) {
+            return page.dataUrl !== '';
+        });
+
+        return buildPdfFromPageData(pages);
+    }
+
+    function buildPdfFromImageFiles(files) {
+        var chain = Promise.all(files.map(function (file) {
+            return fileToDataUrl(file).then(function (dataUrl) {
+                return {
+                    dataUrl: dataUrl,
+                    format: dataUrlFormat(dataUrl)
+                };
+            });
+        }));
+
+        return chain.then(function (pages) {
+            return buildPdfFromPageData(pages);
+        });
+    }
+
+    function scannedImageFormat(scannedImage) {
+        return dataUrlFormat(scannedImageDataUrl(scannedImage));
     }
 
     function scannedItemToFile(scannedImage, index) {
@@ -514,7 +551,7 @@
         if (images.length === 1) {
             var singleDataUrl = scannedImageDataUrl(images[0]);
 
-            if (singleDataUrl.indexOf('application/pdf') !== -1) {
+            if (singleDataUrl.indexOf('application/pdf') !== -1 || scannedImageFormat(images[0]) === 'PDF') {
                 return Promise.resolve([
                     dataUrlToFile(
                         singleDataUrl,
@@ -567,7 +604,7 @@
         });
     }
 
-    function assignFilesToInput(input, files, replaceExisting) {
+    function assignFilesToInput(input, files, replaceExisting, forceSingleFile) {
         if (!input || !files.length) {
             return false;
         }
@@ -575,6 +612,16 @@
         if (typeof DataTransfer === 'undefined') {
             status('Your browser cannot attach scanned files automatically. Please use normal file upload.', 'warning');
             return false;
+        }
+
+        var filesToAssign = files.slice();
+
+        if (forceSingleFile) {
+            var pdfFile = filesToAssign.find(function (file) {
+                return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+            });
+
+            filesToAssign = [pdfFile || filesToAssign[0]];
         }
 
         var transfer = new DataTransfer();
@@ -585,7 +632,7 @@
             });
         }
 
-        files.forEach(function (file) {
+        filesToAssign.forEach(function (file) {
             transfer.items.add(file);
         });
 
@@ -612,12 +659,48 @@
         };
     }
 
-    function finalizeScannedBatch(images) {
-        var combineAsPdf = activeScanCombinePdf;
+    function finalizeScannedBatch(images, sessionId) {
+        if (sessionId !== scanSessionId) {
+            return;
+        }
 
-        status(combineAsPdf ? 'Combining scanned pages into one PDF...' : 'Attaching scanned files...', 'info');
+        var combineAsPdf = shouldCombinePdf();
 
-        filesFromScannedImages(images, combineAsPdf).then(function (files) {
+        status(combineAsPdf ? 'Combining ' + images.length + ' scanned page(s) into one PDF...' : 'Attaching scanned files...', 'info');
+
+        var prepareFiles = function () {
+            if (!combineAsPdf) {
+                return filesFromScannedImages(images, false);
+            }
+
+            return ensureJsPdfReadyAsync().then(function (pdfReady) {
+                if (!pdfReady) {
+                    throw new Error('PDF combiner could not be loaded. Please refresh the page and try again.');
+                }
+
+                return filesFromScannedImages(images, true).then(function (files) {
+                    if (files.length <= 1) {
+                        return files;
+                    }
+
+                    var imageFiles = files.filter(function (file) {
+                        return file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name);
+                    });
+
+                    if (!imageFiles.length) {
+                        return [files[0]];
+                    }
+
+                    return buildPdfFromImageFiles(imageFiles);
+                });
+            });
+        };
+
+        prepareFiles().then(function (files) {
+            if (sessionId !== scanSessionId) {
+                return;
+            }
+
             scannedFiles = files;
 
             if (!scannedFiles.length) {
@@ -627,15 +710,31 @@
 
             renderPreview(scannedFiles);
 
-            if (assignFilesToInput(activeInput, scannedFiles, true)) {
+            if (assignFilesToInput(activeInput, scannedFiles, true, combineAsPdf)) {
+                var pageCount = images.length;
                 var successMessage = combineAsPdf
-                    ? 'Scanned pages combined into a single PDF and attached to the selected file field.'
+                    ? 'Combined ' + pageCount + ' scanned page(s) into a single PDF and attached to the file field.'
                     : 'Scanned document attached to the selected file field.';
                 status(successMessage, 'success');
                 window.setTimeout(hideModal, 700);
             }
         }).catch(function (error) {
+            if (sessionId !== scanSessionId) {
+                return;
+            }
+
             status('Could not prepare scanned files: ' + (error && error.message ? error.message : 'Unknown error.'), 'danger');
+        });
+    }
+
+    function ensureJsPdfReadyAsync() {
+        return new Promise(function (resolve) {
+            if (jspdfAvailable()) {
+                resolve(true);
+                return;
+            }
+
+            ensureJsPdfReady(resolve);
         });
     }
 
@@ -653,6 +752,7 @@
         }
 
         var images = [];
+        var sessionId = scanSessionId;
 
         try {
             images = window.scanner.getScannedImages(response, true, false) || [];
@@ -675,8 +775,8 @@
             var batch = scanBatchImages.slice();
             scanBatchImages = [];
             scanFinalizeTimer = null;
-            finalizeScannedBatch(batch);
-        }, 250);
+            finalizeScannedBatch(batch, sessionId);
+        }, 1200);
     }
 
     function runScan() {
@@ -686,9 +786,14 @@
         }
 
         activeScanCombinePdf = isCombinePdfSelected();
+        scanSessionId += 1;
         scanBatchImages = [];
         clearTimeout(scanFinalizeTimer);
         scanFinalizeTimer = null;
+
+        if (activeInput) {
+            activeInput.dataset.fleetiqScanCombinePdf = activeScanCombinePdf ? '1' : '0';
+        }
 
         if (activeScanCombinePdf) {
             status('Opening scanner... scanned pages will be merged into one PDF.', 'info');
@@ -730,26 +835,30 @@
 
         status('Loading scanner...', 'info');
 
-        loadScannerLibrary(function (loaded) {
-            if (!loaded) {
-                status('Scanner.js could not be loaded. Please use normal file upload.', 'warning');
-                return;
-            }
+        var begin = function () {
+            loadScannerLibrary(function (loaded) {
+                if (!loaded) {
+                    status('Scanner.js could not be loaded. Please use normal file upload.', 'warning');
+                    return;
+                }
 
-            if (isCombinePdfSelected()) {
-                loadJsPdfLibrary(function (pdfLoaded) {
-                    if (!pdfLoaded) {
-                        status('PDF combiner could not be loaded. Please use normal file upload.', 'warning');
-                        return;
-                    }
+                runScan();
+            });
+        };
 
-                    runScan();
-                });
-                return;
-            }
+        if (isCombinePdfSelected()) {
+            ensureJsPdfReady(function (pdfLoaded) {
+                if (!pdfLoaded) {
+                    status('PDF combiner could not be loaded. Please refresh the page and try again.', 'warning');
+                    return;
+                }
 
-            runScan();
-        });
+                begin();
+            });
+            return;
+        }
+
+        begin();
     }
 
     function init() {
