@@ -492,7 +492,7 @@
                                multiple>
                         @if(isset($model) && $model->id && $model->ownInsuranceProofFileNames() !== [])
                             @foreach($model->ownInsuranceProofFileNames() as $proofName)
-                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}: <a href="{{ asset('uploads/insurance_documents/' . $proofName) }}" target="_blank">View</a></small>
+                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}: <a href="{{ document_view_url(asset('uploads/insurance_documents/' . $proofName)) }}" target="_blank" class="document-view-link">View</a></small>
                             @endforeach
                         @endif
                         <div class="form-text">Accepted formats: PDF, JPG, JPEG, PNG (Max: 2MB per file)</div>

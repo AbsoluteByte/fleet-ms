@@ -188,6 +188,23 @@
                         <span class="menu-title">Reports</span>
                     </a>
                 </li>
+                <li class="nav-item {{ Request::is('admin/ai*') ? 'active' : '' }}">
+                    <a href="{{ route('ai.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-sparkles">
+                            <path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z"></path>
+                            <path d="M16 4a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z"></path>
+                            <path d="M3 11a2 2 0 0 1 2 2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2a2 2 0 0 1 2 -2z"></path>
+                            <path d="M21 11a2 2 0 0 1 2 2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2a2 2 0 0 1 2 -2z"></path>
+                            <path d="M10.5 8.5l2 -2"></path>
+                            <path d="M13.5 13.5l2 -2"></path>
+                            <path d="M8.5 13.5l-2 -2"></path>
+                            <path d="M15.5 8.5l-2 -2"></path>
+                        </svg>
+                        <span class="menu-title">AI</span>
+                    </a>
+                </li>
                 <li class="nav-item {{ Request::is('admin/drivers/*') ? 'active' : '' }} {{ Request::is('admin/drivers') ? 'active' : '' }}">
                     <a href="{{ route('drivers.index') }}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"

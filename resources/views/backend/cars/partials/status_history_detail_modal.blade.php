@@ -63,7 +63,7 @@
                         <ul class="mb-3">
                             @foreach($docs as $docPath)
                                 @if(is_string($docPath) && $docPath !== '')
-                                    <li><a href="{{ asset($docPath) }}" target="_blank" rel="noopener">View file</a></li>
+                                    <li><a href="{{ document_view_url(asset($docPath)) }}" target="_blank" rel="noopener" class="document-view-link">View file</a></li>
                                 @endif
                             @endforeach
                         </ul>

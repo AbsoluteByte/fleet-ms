@@ -41,7 +41,7 @@
                                     @endif
                                 </td>
                                 <td class="text-right">
-                                    <a href="{{ $archive->fileUrl() }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+                                    <a href="{{ $archive->fileUrl() }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary document-view-link">
                                         <i class="fa fa-eye"></i> View
                                     </a>
                                 </td>

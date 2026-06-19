@@ -725,7 +725,7 @@
                         <ul class="mb-0 pl-3">
                             @foreach($existingSoldDocs as $docPath)
                                 <li>
-                                    <a href="{{ asset($docPath) }}" target="_blank" rel="noopener noreferrer">View file</a>
+                                    <a href="{{ document_view_url(asset($docPath)) }}" target="_blank" rel="noopener noreferrer" class="document-view-link">View file</a>
                                 </li>
                             @endforeach
                         </ul>

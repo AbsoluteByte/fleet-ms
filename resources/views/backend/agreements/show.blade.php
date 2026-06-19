@@ -232,8 +232,8 @@
                                                     <ul class="mb-0 ps-3">
                                                         @foreach($ownInsuranceProofFiles as $proofName)
                                                             <li>
-                                                                <a href="{{ asset('uploads/insurance_documents/' . $proofName) }}"
-                                                                   target="_blank" rel="noopener noreferrer">
+                                                                <a href="{{ document_view_url(asset('uploads/insurance_documents/' . $proofName)) }}"
+                                                                   target="_blank" rel="noopener noreferrer" class="document-view-link">
                                                                     View file {{ $loop->iteration }}
                                                                 </a>
                                                             </li>
@@ -344,8 +344,8 @@
                         {{-- ✅ SIGNED STATUS - Show Download Button --}}
                         @if($agreement->hellosign_status == 'signed' && $agreement->esign_document_path)
                             <div class="d-grid gap-2">
-                                <a href="{{ route('agreements.view-signed', $agreement) }}"
-                                   class="btn btn-success btn-sm w-100" target="_blank">
+                                <a href="{{ document_view_url(route('agreements.view-signed', $agreement)) }}"
+                                   class="btn btn-success btn-sm w-100 document-view-link" target="_blank">
                                     <i class="fa fa-file-pdf me-1"></i>
                                     View Signed Document
                                 </a>

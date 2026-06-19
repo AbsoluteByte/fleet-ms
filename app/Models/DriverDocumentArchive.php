@@ -33,7 +33,7 @@ class DriverDocumentArchive extends Model
 
     public function fileUrl(): string
     {
-        return asset('uploads/driver_licenses/'.$this->filename);
+        return document_view_url(asset('uploads/driver_licenses/'.$this->filename));
     }
 
     public function reasonLabel(): string

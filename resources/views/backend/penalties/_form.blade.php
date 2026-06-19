@@ -98,7 +98,7 @@
             @if(isset($model) && $model->document)
                 <small class="text-muted mt-1 d-block">
                     Current Document:
-                    <a href="{{ asset('uploads/penalties/' . $model->document) }}" target="_blank" class="text-primary">
+                    <a href="{{ document_view_url(asset('uploads/penalties/' . $model->document)) }}" target="_blank" class="document-view-link text-primary">
                         <i class="fa fa-file"></i> View Document
                     </a>
                 </small>

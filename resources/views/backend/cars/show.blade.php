@@ -174,7 +174,7 @@
                                     <strong>Log book applied:</strong>
                                     <p class="mb-0">
                                         @foreach($oldLogBookFiles as $lbName)
-                                            <a href="{{ asset('uploads/cars/log_book/' . $lbName) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1">
+                                            <a href="{{ document_view_url(asset('uploads/cars/log_book/' . $lbName)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1">
                                                 <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
                                             </a>
                                         @endforeach
@@ -200,7 +200,7 @@
                                         <strong class="d-block mt-3">Old log book:</strong>
                                         <p class="mb-0">
                                             @foreach($oldLogBookFiles as $lbName)
-                                                <a href="{{ asset('uploads/cars/log_book/' . $lbName) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1">
+                                                <a href="{{ document_view_url(asset('uploads/cars/log_book/' . $lbName)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1">
                                                     <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
                                                 </a>
                                             @endforeach
@@ -242,7 +242,7 @@
                                         <strong>Old log book:</strong>
                                         <p class="mb-0">
                                             @foreach($oldLogBookFiles as $lbName)
-                                                <a href="{{ asset('uploads/cars/log_book/' . $lbName) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1">
+                                                <a href="{{ document_view_url(asset('uploads/cars/log_book/' . $lbName)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1">
                                                     <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
                                                 </a>
                                             @endforeach
@@ -255,7 +255,7 @@
                                     <strong>V5 Document:</strong>
                                     <p class="mb-0">
                                         @foreach($v5DocumentFiles as $v5Name)
-                                            <a href="{{ route('cars.view.v5', [$car, $loop->index]) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1" rel="noopener">
+                                            <a href="{{ document_view_url(route('cars.view.v5', [$car, $loop->index])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1" rel="noopener">
                                                 <i class="fa fa-file"></i> View @if(count($v5DocumentFiles) > 1)#{{ $loop->iteration }}@endif
                                             </a>
                                         @endforeach
@@ -296,7 +296,7 @@
                                                     <td>{{ $latestMot->term }}</td>
                                                     <td>
                                                         @if($latestMot->document)
-                                                            <a href="{{ route('cars.mots.download', [$car, $latestMot->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                            <a href="{{ document_view_url(route('cars.mots.download', [$car, $latestMot->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                                                 <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
@@ -341,7 +341,7 @@
                                                         <td>{{ $mot->term }}</td>
                                                         <td>
                                                             @if($mot->document)
-                                                                <a href="{{ route('cars.mots.download', [$car, $mot->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                                <a href="{{ document_view_url(route('cars.mots.download', [$car, $mot->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -495,7 +495,7 @@
                                                     </td>
                                                     <td>
                                                         @if($latestPhv->document)
-                                                            <a href="{{ route('cars.phvs.download', [$car, $latestPhv->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                            <a href="{{ document_view_url(route('cars.phvs.download', [$car, $latestPhv->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                                                 <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
@@ -551,7 +551,7 @@
                                                         </td>
                                                         <td>
                                                             @if($phv->document)
-                                                                <a href="{{ route('cars.phvs.download', [$car, $phv->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                                <a href="{{ document_view_url(route('cars.phvs.download', [$car, $phv->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -615,7 +615,7 @@
                                                     </td>
                                                     <td>
                                                         @if($latestInsurance->insurance_document)
-                                                            <a href="{{ asset('uploads/cars/insurance_documents/' . $latestInsurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                            <a href="{{ document_view_url(asset('uploads/cars/insurance_documents/' . $latestInsurance->insurance_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                                                 <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
@@ -666,7 +666,7 @@
                                                         <td>{{ $insurance->canceled_date ? $insurance->canceled_date->format('d M, Y') : '—' }}</td>
                                                         <td>
                                                             @if($insurance->insurance_document)
-                                                                <a href="{{ asset('uploads/cars/insurance_documents/' . $insurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                                <a href="{{ document_view_url(asset('uploads/cars/insurance_documents/' . $insurance->insurance_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif

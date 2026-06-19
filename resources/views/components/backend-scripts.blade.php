@@ -115,3 +115,36 @@ window.scannerjs_scan_app_download_url = window.fleetiqScannerAssets.scanAppDown
     });
 })();
 </script>
+
+<script>
+(function () {
+    function documentViewUrlWithFreshTime(url) {
+        if (!url) {
+            return url;
+        }
+
+        var hashIndex = url.indexOf('#');
+        var hash = hashIndex >= 0 ? url.substring(hashIndex) : '';
+        var base = hashIndex >= 0 ? url.substring(0, hashIndex) : url;
+        base = base.replace(/([?&])time=\d+/g, '$1').replace(/[?&]$/, '');
+
+        var separator = base.indexOf('?') >= 0 ? '&' : '?';
+
+        return base + separator + 'time=' + Date.now() + hash;
+    }
+
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest('a.document-view-link');
+        if (!link || !link.href) {
+            return;
+        }
+
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+            return;
+        }
+
+        e.preventDefault();
+        window.open(documentViewUrlWithFreshTime(link.getAttribute('href') || link.href), '_blank', 'noopener');
+    });
+})();
+</script>

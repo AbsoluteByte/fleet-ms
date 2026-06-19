@@ -1,0 +1,363 @@
+<?php
+
+namespace App\Http\Controllers\Backend;
+
+use App\Http\Controllers\Controller;
+use App\Services\RoadTaxBulkImportService;
+use App\Services\RoadTaxSlipExtractionService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use ZipArchive;
+
+class AiController extends Controller
+{
+    protected $dir = 'backend.ai.';
+
+    /** @var list<string> */
+    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+
+    public function __construct()
+    {
+        $this->middleware('role:admin|manager|user');
+        view()->share('dir', $this->dir);
+    }
+
+    public function index()
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+
+        return view($this->dir.'index');
+    }
+
+    public function analyzeRoadTax(Request $request, RoadTaxSlipExtractionService $extractionService)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+
+        $validated = $request->validate([
+            'upload_zip' => 'nullable|file|mimes:zip|max:51200',
+            'upload_files' => 'nullable|array',
+            'upload_files.*' => 'file|mimes:jpeg,jpg,png,webp|max:10240',
+        ]);
+
+        $imagePaths = [];
+        $batchId = (string) Str::uuid();
+        $batchDir = storage_path('app/road-tax-import/'.$batchId);
+        File::ensureDirectoryExists($batchDir);
+
+        try {
+            if ($request->hasFile('upload_zip')) {
+                $zipPaths = $this->extractImagePathsFromZip(
+                    $request->file('upload_zip')->getRealPath(),
+                    $batchDir
+                );
+                $imagePaths = array_merge($imagePaths, $zipPaths);
+            }
+
+            if ($request->hasFile('upload_files')) {
+                foreach ($request->file('upload_files') as $file) {
+                    $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+                    $target = $batchDir.DIRECTORY_SEPARATOR.Str::uuid().'.'.$extension;
+                    $file->move(dirname($target), basename($target));
+                    $imagePaths[] = $target;
+                }
+            }
+
+            if ($imagePaths === []) {
+                File::deleteDirectory($batchDir);
+
+                return redirect()->to(route('ai.index').'#add-road-tax')
+                    ->with('error', 'Please upload at least one image file or a ZIP containing images.');
+            }
+
+            $rows = [];
+
+            foreach ($imagePaths as $imagePath) {
+                $filename = basename($imagePath);
+                $rowId = (string) Str::uuid();
+                $extracted = $extractionService->extractFromImage($imagePath);
+
+                $rows[] = [
+                    'row_id' => $rowId,
+                    'filename' => $filename,
+                    'file_path' => 'road-tax-import/'.$batchId.'/'.basename($imagePath),
+                    'registration' => $extracted['registration'],
+                    'start_date' => $extracted['start_date'],
+                    'term' => $extracted['term'],
+                    'amount' => $extracted['amount'],
+                    'confidence' => $extracted['confidence'],
+                    'notes' => $extracted['notes'],
+                    'needs_review' => $extracted['needs_review'],
+                    'extraction_status' => $extracted['extraction_status'],
+                    'message' => $extracted['message'],
+                ];
+            }
+
+            $accountWarning = $this->detectAccountWarning($rows);
+
+            session([
+                'road_tax_import_review' => [
+                    'batch_id' => $batchId,
+                    'analyzed_at' => now()->format('d M Y H:i'),
+                    'tenant_id' => $tenant->id,
+                    'rows' => $rows,
+                    'account_warning' => $accountWarning,
+                ],
+            ]);
+
+            $redirect = redirect()->route('ai.road-tax.review');
+
+            if ($accountWarning) {
+                return $redirect->with('warning', $accountWarning);
+            }
+
+            return $redirect;
+        } catch (\Throwable $e) {
+            if (is_dir($batchDir)) {
+                File::deleteDirectory($batchDir);
+            }
+
+            return redirect()->to(route('ai.index').'#add-road-tax')
+                ->with('error', 'Could not analyze road tax slips: '.$e->getMessage());
+        }
+    }
+
+    public function reviewRoadTax()
+    {
+        $review = session('road_tax_import_review');
+
+        if (! $review || empty($review['rows'])) {
+            return redirect()->to(route('ai.index').'#add-road-tax')
+                ->with('error', 'No road tax analysis available. Please upload slips first.');
+        }
+
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || (int) ($review['tenant_id'] ?? 0) !== (int) $tenant->id) {
+            session()->forget('road_tax_import_review');
+
+            return redirect()->to(route('ai.index').'#add-road-tax')
+                ->with('error', 'Analysis session expired or belongs to another company.');
+        }
+
+        return view($this->dir.'road-tax-review', compact('review'));
+    }
+
+    public function applyRoadTax(Request $request, RoadTaxBulkImportService $importService)
+    {
+        $review = session('road_tax_import_review');
+
+        if (! $review || empty($review['rows'])) {
+            return redirect()->to(route('ai.index').'#add-road-tax')
+                ->with('error', 'No road tax analysis available. Please upload slips first.');
+        }
+
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || (int) ($review['tenant_id'] ?? 0) !== (int) $tenant->id) {
+            session()->forget('road_tax_import_review');
+
+            return redirect()->to(route('ai.index').'#add-road-tax')
+                ->with('error', 'Analysis session expired or belongs to another company.');
+        }
+
+        $validated = $request->validate([
+            'rows' => 'required|array|min:1',
+            'rows.*.row_id' => 'required|string',
+            'rows.*.include' => 'nullable|in:0,1',
+            'rows.*.registration' => 'nullable|string|max:20',
+            'rows.*.start_date' => 'nullable|date',
+            'rows.*.term' => ['nullable', Rule::in(['6 months', '12 months'])],
+            'rows.*.amount' => 'nullable|numeric|min:0',
+        ]);
+
+        $reviewRowsById = collect($review['rows'])->keyBy('row_id');
+        $applyRows = [];
+        $errors = [];
+
+        foreach ($validated['rows'] as $index => $inputRow) {
+            if (empty($inputRow['include']) || (string) $inputRow['include'] !== '1') {
+                continue;
+            }
+
+            $rowId = $inputRow['row_id'];
+            $sourceRow = $reviewRowsById->get($rowId);
+
+            if (! $sourceRow) {
+                $errors[] = 'Row '.($index + 1).': unknown slip reference.';
+
+                continue;
+            }
+
+            $registration = trim((string) ($inputRow['registration'] ?? ''));
+            $startDate = $inputRow['start_date'] ?? null;
+            $term = $inputRow['term'] ?? null;
+            $amount = $inputRow['amount'] ?? null;
+
+            if ($registration === '' || ! $startDate || ! $term || $amount === null || $amount === '') {
+                $errors[] = ($sourceRow['filename'] ?? 'Slip').': please complete registration, start date, term, and amount.';
+
+                continue;
+            }
+
+            $applyRows[] = [
+                'row_id' => $rowId,
+                'filename' => $sourceRow['filename'],
+                'registration' => $registration,
+                'start_date' => $startDate,
+                'term' => $term,
+                'amount' => $amount,
+            ];
+        }
+
+        if ($errors !== []) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', implode(' ', $errors));
+        }
+
+        if ($applyRows === []) {
+            return redirect()->back()
+                ->with('error', 'Please include at least one slip to save.');
+        }
+
+        $report = $importService->apply($tenant->id, $applyRows);
+
+        $batchId = $review['batch_id'] ?? null;
+        if ($batchId) {
+            $batchDir = storage_path('app/road-tax-import/'.$batchId);
+            if (is_dir($batchDir)) {
+                File::deleteDirectory($batchDir);
+            }
+        }
+
+        session()->forget('road_tax_import_review');
+        session(['road_tax_import_report' => $report]);
+
+        return redirect()->route('ai.road-tax.report');
+    }
+
+    public function roadTaxReport()
+    {
+        $report = session('road_tax_import_report');
+
+        if (! $report) {
+            return redirect()->to(route('ai.index').'#add-road-tax')
+                ->with('error', 'No road tax import report available.');
+        }
+
+        return view($this->dir.'road-tax-report', compact('report'));
+    }
+
+    public function roadTaxPreview(string $batchId, string $filename)
+    {
+        $review = session('road_tax_import_review');
+
+        if (! $review || ($review['batch_id'] ?? '') !== $batchId) {
+            abort(404);
+        }
+
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || (int) ($review['tenant_id'] ?? 0) !== (int) $tenant->id) {
+            abort(403);
+        }
+
+        $safeName = basename($filename);
+        $path = storage_path('app/road-tax-import/'.$batchId.'/'.$safeName);
+
+        if (! is_file($path)) {
+            abort(404);
+        }
+
+        return response()->file($path);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function extractImagePathsFromZip(string $zipPath, string $targetDir): array
+    {
+        $zip = new ZipArchive();
+
+        if ($zip->open($zipPath) !== true) {
+            throw new \RuntimeException('Could not open ZIP file.');
+        }
+
+        $imagePaths = [];
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entry = $zip->getNameIndex($i);
+
+            if (! is_string($entry) || str_ends_with($entry, '/')) {
+                continue;
+            }
+
+            $extension = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+
+            if (! in_array($extension, self::IMAGE_EXTENSIONS, true)) {
+                continue;
+            }
+
+            $basename = basename($entry);
+            $target = $targetDir.DIRECTORY_SEPARATOR.$basename;
+
+            if (file_exists($target)) {
+                $target = $targetDir.DIRECTORY_SEPARATOR.Str::uuid().'_'.$basename;
+            }
+
+            copy('zip://'.$zipPath.'#'.$entry, $target);
+            $imagePaths[] = $target;
+        }
+
+        $zip->close();
+
+        return $imagePaths;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function detectAccountWarning(array $rows): ?string
+    {
+        if ($rows === []) {
+            return null;
+        }
+
+        $failed = array_filter($rows, fn ($row) => ($row['extraction_status'] ?? '') !== 'ok');
+
+        if (count($failed) !== count($rows)) {
+            return null;
+        }
+
+        $messages = array_filter(array_map(fn ($row) => strtolower((string) ($row['message'] ?? '')), $failed));
+
+        foreach ($messages as $message) {
+            if (str_contains($message, 'quota exceeded') || str_contains($message, 'exceeded your current quota')) {
+                return 'OpenAI account quota exceeded — AI could not read the slips. Add billing or credits at platform.openai.com. You can still fill in each row manually below and save.';
+            }
+
+            if (str_contains($message, 'invalid') && str_contains($message, 'api key')) {
+                return 'OpenAI API key is invalid. Update OPENAI_API_KEY in .env, or enter slip details manually below.';
+            }
+
+            if (str_contains($message, 'rate limit')) {
+                return 'OpenAI rate limit reached. Wait and try again, or enter slip details manually below.';
+            }
+        }
+
+        return 'AI could not read the uploaded slips. Please enter registration, start date, term, and amount manually for each row below.';
+    }
+}

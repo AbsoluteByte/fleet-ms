@@ -127,7 +127,7 @@
                                             </td>
                                             <td>
                                                 @if($sornH->sorn_document)
-                                                    <a href="{{ asset('uploads/cars/sorn_documents/'.$sornH->sorn_document) }}" target="_blank" rel="noopener noreferrer" title="View proof"><i class="fa fa-file"></i></a>
+                                                    <a href="{{ document_view_url(asset('uploads/cars/sorn_documents/'.$sornH->sorn_document)) }}" target="_blank" rel="noopener noreferrer" class="document-view-link" title="View proof"><i class="fa fa-file"></i></a>
                                                 @else
                                                     —
                                                 @endif

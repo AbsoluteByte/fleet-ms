@@ -232,7 +232,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>Driver License Document:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->driver_license_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ document_view_url(asset('uploads/driver_licenses/' . $driver->driver_license_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                             <i class="fa fa-file-pdf"></i> View Document
                                         </a>
                                     </p>
@@ -242,7 +242,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>PHD License Document:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->driver_phd_license_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ document_view_url(asset('uploads/driver_licenses/' . $driver->driver_phd_license_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                             <i class="fa fa-file-pdf"></i> View Document
                                         </a>
                                     </p>
@@ -252,7 +252,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>Proof of Address:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->proof_of_address_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ document_view_url(asset('uploads/driver_licenses/' . $driver->proof_of_address_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                             <i class="fa fa-file-pdf"></i> View Document
                                         </a>
                                     </p>
@@ -262,7 +262,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>DVLA License Summary:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->dvla_license_summary) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ document_view_url(asset('uploads/driver_licenses/' . $driver->dvla_license_summary)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                             <i class="fa fa-file-pdf"></i> View Document
                                         </a>
                                     </p>
@@ -272,7 +272,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>MISC Document:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->misc_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ document_view_url(asset('uploads/driver_licenses/' . $driver->misc_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                             <i class="fa fa-file-pdf"></i> View Document
                                         </a>
                                     </p>
@@ -282,7 +282,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>PHD Card Document:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ asset('uploads/driver_licenses/' . $driver->phd_card_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ document_view_url(asset('uploads/driver_licenses/' . $driver->phd_card_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
                                             <i class="fa fa-file-pdf"></i> View Document
                                         </a>
                                     </p>

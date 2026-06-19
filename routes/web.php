@@ -87,6 +87,14 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('phvl/archive/{archive}/timeline', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'timeline'])->name('phvl.archive.timeline');
 
     Route::get('reports', [App\Http\Controllers\Backend\ReportController::class, 'index'])->name('reports.index');
+    Route::get('ai', [App\Http\Controllers\Backend\AiController::class, 'index'])->name('ai.index');
+    Route::post('ai/road-tax/analyze', [App\Http\Controllers\Backend\AiController::class, 'analyzeRoadTax'])->name('ai.road-tax.analyze');
+    Route::get('ai/road-tax/review', [App\Http\Controllers\Backend\AiController::class, 'reviewRoadTax'])->name('ai.road-tax.review');
+    Route::post('ai/road-tax/apply', [App\Http\Controllers\Backend\AiController::class, 'applyRoadTax'])->name('ai.road-tax.apply');
+    Route::get('ai/road-tax/report', [App\Http\Controllers\Backend\AiController::class, 'roadTaxReport'])->name('ai.road-tax.report');
+    Route::get('ai/road-tax/preview/{batchId}/{filename}', [App\Http\Controllers\Backend\AiController::class, 'roadTaxPreview'])
+        ->name('ai.road-tax.preview')
+        ->where('filename', '.*');
 
     Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
     Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');

@@ -888,7 +888,7 @@ class CarController extends Controller
             'sorn_applied_by_name' => Auth::user()?->name,
             'sorn_applied_at_formatted' => $car->sorn_applied_at?->format('d M Y').' at '.$car->sorn_applied_at?->format('h:i A'),
             'sorn_proof_url' => $car->sorn_document
-                ? asset('uploads/cars/sorn_documents/'.$car->sorn_document)
+                ? document_view_url(asset('uploads/cars/sorn_documents/'.$car->sorn_document))
                 : null,
         ]);
     }
