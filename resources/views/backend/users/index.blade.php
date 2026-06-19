@@ -21,6 +21,7 @@
                                         <th>Name</th>
                                         <th>Email</th>
                                         <th>Role</th>
+                                        <th>Status</th>
                                         <th>Action</th>
                                     </tr>
                                     </thead>
@@ -31,6 +32,13 @@
                                             <td>{{ $user->email }}</td>
                                             <td>{{ $user->roles->first()->name ?? 'No Role' }}</td>
                                             <td>
+                                                @if($user->is_active)
+                                                    <span class="badge bg-success">Active</span>
+                                                @else
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                @endif
+                                            </td>
+                                            <td>
                                                 <div class="btn-group" role="group">
                                                     <a href="{{ route('users.show', $user) }}" class="btn btn-sm btn-outline-info">
                                                         <i class="fa fa-eye"></i>
@@ -38,6 +46,17 @@
                                                     <a href="{{ route('users.edit', $user) }}" class="btn btn-sm btn-outline-warning">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
+                                                    @if((int) $user->id !== (int) auth()->id())
+                                                        <form action="{{ route('users.toggle-status', $user) }}" method="POST" style="display: inline;">
+                                                            @csrf
+                                                            <button type="submit"
+                                                                    class="btn btn-sm {{ $user->is_active ? 'btn-outline-secondary' : 'btn-outline-success' }}"
+                                                                    title="{{ $user->is_active ? 'Deactivate user' : 'Activate user' }}"
+                                                                    onclick="return confirm('{{ $user->is_active ? 'Deactivate this user? They will not be able to log in.' : 'Activate this user?' }}')">
+                                                                <i class="fa {{ $user->is_active ? 'fa-ban' : 'fa-check' }}"></i>
+                                                            </button>
+                                                        </form>
+                                                    @endif
                                                     <form action="{{ route('users.destroy', $user) }}" method="POST" style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')

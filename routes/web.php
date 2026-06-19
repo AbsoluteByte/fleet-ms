@@ -145,6 +145,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('payment-settings', App\Http\Controllers\Backend\PaymentSettingController::class)
         ->parameters(['payment-settings' => 'paymentSetting']);
     Route::resource('users', App\Http\Controllers\Backend\UserController::class);
+    Route::post('users/{user}/toggle-status', [App\Http\Controllers\Backend\UserController::class, 'toggleStatus'])->name('users.toggle-status');
     Route::resource('statuses', App\Http\Controllers\Backend\StatusController::class);
     Route::resource('car-models', App\Http\Controllers\Backend\CarModelController::class);
     Route::resource('counsels', App\Http\Controllers\Backend\CounselController::class);

@@ -79,6 +79,7 @@ class UserController extends Controller
             $model->name = request('name', null);
             $model->email = request('email', null);
             $model->password = Hash::make(request('password'));
+            $model->is_active = true;
             $model->save();
 
             // Assign role
@@ -147,20 +148,64 @@ class UserController extends Controller
         }
 
         // Check if user belongs to current tenant
-        $model = $tenant->users()->where('users.id', $id)->firstOrFail();
+        $model = $this->tenantUserOrFail($tenant, $id);
 
-        $this->validate($request, [
+        $rules = [
             'name' => ['required', 'string', 'max:50'],
             'email' => ['required', 'string', 'email', 'unique:users,email,' . $model->id],
-        ]);
+            'is_active' => ['nullable', 'boolean'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ];
+
+        $this->validate($request, $rules);
 
         $model->name = request('name', null);
         $model->email = request('email', null);
+
+        if ((int) $model->id !== (int) Auth::id()) {
+            $model->is_active = $request->boolean('is_active');
+        }
+
+        if ($request->filled('password')) {
+            $model->password = Hash::make($request->input('password'));
+        }
+
         $model->save();
 
         return redirect()
             ->route($this->url . 'index')
             ->with('success', Str::singular($this->name) . ' updated successfully!');
+    }
+
+    public function toggleStatus($id)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->back()
+                ->with('error', 'No active company found!');
+        }
+
+        $model = $this->tenantUserOrFail($tenant, $id);
+
+        if ((int) $model->id === (int) Auth::id()) {
+            return redirect()
+                ->back()
+                ->with('error', 'You cannot deactivate your own account.');
+        }
+
+        $model->update(['is_active' => ! $model->is_active]);
+
+        $status = $model->is_active ? 'activated' : 'deactivated';
+
+        return redirect()
+            ->back()
+            ->with('success', Str::singular($this->name) . " {$status} successfully!");
+    }
+
+    private function tenantUserOrFail($tenant, $id): User
+    {
+        return $tenant->users()->where('users.id', $id)->firstOrFail();
     }
 
     public function destroy($id)

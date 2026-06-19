@@ -19,6 +19,16 @@
                                 <td>{{ $model->email }}</td>
                             </tr>
                             <tr>
+                                <th>Status</th>
+                                <td>
+                                    @if($model->is_active)
+                                        <span class="badge bg-success">Active</span>
+                                    @else
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    @endif
+                                </td>
+                            </tr>
+                            <tr>
                                 <th>Roles</th>
                                 <td>
                                     {{ $model->roles->pluck('name')->join(', ') ?: 'No role assigned' }}
