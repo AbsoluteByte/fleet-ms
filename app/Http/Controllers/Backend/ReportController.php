@@ -6,20 +6,25 @@ use App\Http\Controllers\Controller;
 use App\Models\Car;
 use App\Models\CarMot;
 use App\Models\CarPhv;
+use App\Models\Company;
+use App\Models\InsuranceProvider;
+use App\Services\InsuranceDateRangeReportService;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class ReportController extends Controller
 {
     protected $dir = 'backend.reports.';
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly InsuranceDateRangeReportService $insuranceReportService,
+    ) {
         $this->middleware('role:admin|manager|user');
         view()->share('dir', $this->dir);
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -57,7 +62,83 @@ class ReportController extends Controller
             return $car;
         });
 
-        return view($this->dir.'index', compact('cars'));
+        $insuranceFrom = $request->query('insurance_from');
+        $insuranceTo = $request->query('insurance_to');
+        $insuranceCompanyId = $request->filled('insurance_company_id')
+            ? (int) $request->query('insurance_company_id')
+            : null;
+        $insuranceProviderId = $request->filled('insurance_provider_id')
+            ? (int) $request->query('insurance_provider_id')
+            : null;
+        $insuranceDateError = null;
+        $insuranceRemovedInRange = collect();
+        $insuranceActivatedStillActive = collect();
+        $insuranceActivatedAndEnded = collect();
+        $insurancePreExisting = collect();
+
+        $reportCompanies = Company::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $reportInsuranceProviders = InsuranceProvider::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('provider_name')
+            ->get(['id', 'provider_name']);
+
+        if ($insuranceCompanyId && ! $reportCompanies->contains('id', $insuranceCompanyId)) {
+            $insuranceCompanyId = null;
+        }
+
+        if ($insuranceProviderId && ! $reportInsuranceProviders->contains('id', $insuranceProviderId)) {
+            $insuranceProviderId = null;
+        }
+
+        if ($insuranceFrom !== null || $insuranceTo !== null) {
+            $parsedRange = $this->insuranceReportService->parseDateRange($insuranceFrom, $insuranceTo);
+
+            if ($parsedRange === null) {
+                $insuranceDateError = 'Please select a valid date range (From must be on or before To).';
+            } else {
+                [$from, $to] = $parsedRange;
+                $insuranceRemovedInRange = $this->insuranceReportService->removedInRange(
+                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                );
+                $insuranceActivatedStillActive = $this->insuranceReportService->activatedStillActive(
+                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                );
+                $insuranceActivatedAndEnded = $this->insuranceReportService->activatedAndEndedInRange(
+                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                );
+                $insurancePreExisting = $this->insuranceReportService->preExistingPolicies(
+                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                );
+            }
+        }
+
+        $selectedInsuranceCompany = $insuranceCompanyId
+            ? $reportCompanies->firstWhere('id', $insuranceCompanyId)
+            : null;
+        $selectedInsuranceProvider = $insuranceProviderId
+            ? $reportInsuranceProviders->firstWhere('id', $insuranceProviderId)
+            : null;
+
+        return view($this->dir.'index', compact(
+            'cars',
+            'insuranceFrom',
+            'insuranceTo',
+            'insuranceCompanyId',
+            'insuranceProviderId',
+            'insuranceDateError',
+            'insuranceRemovedInRange',
+            'insuranceActivatedStillActive',
+            'insuranceActivatedAndEnded',
+            'insurancePreExisting',
+            'reportCompanies',
+            'reportInsuranceProviders',
+            'selectedInsuranceCompany',
+            'selectedInsuranceProvider',
+        ));
     }
 
     private function latestMotForCar(Car $car): ?CarMot

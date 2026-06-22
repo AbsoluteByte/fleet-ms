@@ -17,7 +17,7 @@ class AiController extends Controller
     protected $dir = 'backend.ai.';
 
     /** @var list<string> */
-    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+    private const SLIP_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
 
     public function __construct()
     {
@@ -49,64 +49,81 @@ class AiController extends Controller
         $validated = $request->validate([
             'upload_zip' => 'nullable|file|mimes:zip|max:51200',
             'upload_files' => 'nullable|array',
-            'upload_files.*' => 'file|mimes:jpeg,jpg,png,webp|max:10240',
+            'upload_files.*' => 'file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
         ]);
 
-        $imagePaths = [];
+        /** @var list<array{path: string, display: string}> */
+        $slipFiles = [];
         $batchId = (string) Str::uuid();
         $batchDir = storage_path('app/road-tax-import/'.$batchId);
         File::ensureDirectoryExists($batchDir);
 
         try {
             if ($request->hasFile('upload_zip')) {
-                $zipPaths = $this->extractImagePathsFromZip(
+                $zipFiles = $this->extractSlipFilesFromZip(
                     $request->file('upload_zip')->getRealPath(),
                     $batchDir
                 );
-                $imagePaths = array_merge($imagePaths, $zipPaths);
+                $slipFiles = array_merge($slipFiles, $zipFiles);
             }
 
             if ($request->hasFile('upload_files')) {
                 foreach ($request->file('upload_files') as $file) {
+                    $originalName = $file->getClientOriginalName();
                     $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
                     $target = $batchDir.DIRECTORY_SEPARATOR.Str::uuid().'.'.$extension;
                     $file->move(dirname($target), basename($target));
-                    $imagePaths[] = $target;
+                    $slipFiles[] = [
+                        'path' => $target,
+                        'display' => $originalName,
+                    ];
                 }
             }
 
-            if ($imagePaths === []) {
+            if ($slipFiles === []) {
                 File::deleteDirectory($batchDir);
 
                 return redirect()->to(route('ai.index').'#add-road-tax')
-                    ->with('error', 'Please upload at least one image file or a ZIP containing images.');
+                    ->with('error', 'Please upload at least one image or PDF file, or a ZIP containing slip files.');
             }
 
             $rows = [];
+            $analyzeIndex = 0;
 
-            foreach ($imagePaths as $index => $imagePath) {
-                if ($index > 0) {
+            foreach ($slipFiles as $slipFile) {
+                if ($analyzeIndex > 0) {
                     sleep(1);
                 }
 
-                $filename = basename($imagePath);
-                $rowId = (string) Str::uuid();
-                $extracted = $extractionService->extractFromImage($imagePath);
+                $slipPath = $slipFile['path'];
+                $displayName = $slipFile['display'];
+                $isPdf = strtolower(pathinfo($slipPath, PATHINFO_EXTENSION)) === 'pdf';
+                $extractions = $extractionService->extractFromSlipFile($slipPath);
 
-                $rows[] = [
-                    'row_id' => $rowId,
-                    'filename' => $filename,
-                    'file_path' => 'road-tax-import/'.$batchId.'/'.basename($imagePath),
-                    'registration' => $extracted['registration'],
-                    'start_date' => $extracted['start_date'],
-                    'term' => $extracted['term'],
-                    'amount' => $extracted['amount'],
-                    'confidence' => $extracted['confidence'],
-                    'notes' => $extracted['notes'],
-                    'needs_review' => $extracted['needs_review'],
-                    'extraction_status' => $extracted['extraction_status'],
-                    'message' => $extracted['message'],
-                ];
+                foreach ($extractions as $pageIndex => $extracted) {
+                    $filename = $displayName;
+
+                    if ($isPdf && count($extractions) > 1) {
+                        $filename = pathinfo($displayName, PATHINFO_FILENAME).'.pdf (page '.($pageIndex + 1).')';
+                    }
+
+                    $rows[] = [
+                        'row_id' => (string) Str::uuid(),
+                        'filename' => $filename,
+                        'file_path' => 'road-tax-import/'.$batchId.'/'.basename($slipPath),
+                        'registration' => $extracted['registration'],
+                        'start_date' => $extracted['start_date'],
+                        'term' => $extracted['term'],
+                        'amount' => $extracted['amount'],
+                        'confidence' => $extracted['confidence'],
+                        'notes' => $extracted['notes'],
+                        'needs_review' => $extracted['needs_review'],
+                        'extraction_status' => $extracted['extraction_status'],
+                        'message' => $extracted['message'],
+                    ];
+                }
+
+                $analyzeIndex++;
             }
 
             $accountWarning = $this->detectAccountWarning($rows);
@@ -290,9 +307,9 @@ class AiController extends Controller
     }
 
     /**
-     * @return list<string>
+     * @return list<array{path: string, display: string}>
      */
-    private function extractImagePathsFromZip(string $zipPath, string $targetDir): array
+    private function extractSlipFilesFromZip(string $zipPath, string $targetDir): array
     {
         $zip = new ZipArchive;
 
@@ -300,7 +317,7 @@ class AiController extends Controller
             throw new \RuntimeException('Could not open ZIP file.');
         }
 
-        $imagePaths = [];
+        $slipFiles = [];
 
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $entry = $zip->getNameIndex($i);
@@ -311,7 +328,7 @@ class AiController extends Controller
 
             $extension = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
 
-            if (! in_array($extension, self::IMAGE_EXTENSIONS, true)) {
+            if (! in_array($extension, self::SLIP_EXTENSIONS, true)) {
                 continue;
             }
 
@@ -323,12 +340,15 @@ class AiController extends Controller
             }
 
             copy('zip://'.$zipPath.'#'.$entry, $target);
-            $imagePaths[] = $target;
+            $slipFiles[] = [
+                'path' => $target,
+                'display' => $basename,
+            ];
         }
 
         $zip->close();
 
-        return $imagePaths;
+        return $slipFiles;
     }
 
     /**

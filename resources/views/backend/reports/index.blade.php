@@ -21,17 +21,26 @@
                         <div class="card-body card-dashboard">
                             @include('alerts')
 
+                            @php
+                                $insuranceReportRequested = filled($insuranceFrom) || filled($insuranceTo);
+                                $insuranceReportReady = filled($insuranceFrom) && filled($insuranceTo) && ! $insuranceDateError;
+                                $activeMainTab = $insuranceReportRequested ? 'insurance' : 'mots';
+                            @endphp
+
                             <ul class="nav nav-pills mb-2" id="reports-tabs" role="tablist">
                                 <li class="nav-item">
-                                    <a class="nav-link active" id="reports-mots-tab" data-toggle="pill" href="#reports-mots-pane" role="tab" aria-controls="reports-mots-pane" aria-selected="true">MOTs</a>
+                                    <a class="nav-link {{ $activeMainTab === 'mots' ? 'active' : '' }}" id="reports-mots-tab" data-toggle="pill" href="#reports-mots-pane" role="tab" aria-controls="reports-mots-pane" aria-selected="{{ $activeMainTab === 'mots' ? 'true' : 'false' }}">MOTs</a>
                                 </li>
                                 <li class="nav-item">
-                                    <a class="nav-link" id="reports-phvl-tab" data-toggle="pill" href="#reports-phvl-pane" role="tab" aria-controls="reports-phvl-pane" aria-selected="false">PHVL</a>
+                                    <a class="nav-link {{ $activeMainTab === 'phvl' ? 'active' : '' }}" id="reports-phvl-tab" data-toggle="pill" href="#reports-phvl-pane" role="tab" aria-controls="reports-phvl-pane" aria-selected="{{ $activeMainTab === 'phvl' ? 'true' : 'false' }}">PHVL</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link {{ $activeMainTab === 'insurance' ? 'active' : '' }}" id="reports-insurance-tab" data-toggle="pill" href="#reports-insurance-pane" role="tab" aria-controls="reports-insurance-pane" aria-selected="{{ $activeMainTab === 'insurance' ? 'true' : 'false' }}">Insurance</a>
                                 </li>
                             </ul>
 
                             <div class="tab-content" id="reports-tab-content">
-                                <div class="tab-pane fade show active" id="reports-mots-pane" role="tabpanel" aria-labelledby="reports-mots-tab">
+                                <div class="tab-pane fade {{ $activeMainTab === 'mots' ? 'show active' : '' }}" id="reports-mots-pane" role="tabpanel" aria-labelledby="reports-mots-tab">
                                     <div class="table-responsive">
                                         <table id="reportsMotsTable" class="table datatable table-bordered table-striped">
                                             <thead>
@@ -61,7 +70,7 @@
                                     </div>
                                 </div>
 
-                                <div class="tab-pane fade" id="reports-phvl-pane" role="tabpanel" aria-labelledby="reports-phvl-tab">
+                                <div class="tab-pane fade {{ $activeMainTab === 'phvl' ? 'show active' : '' }}" id="reports-phvl-pane" role="tabpanel" aria-labelledby="reports-phvl-tab">
                                     <div class="table-responsive">
                                         <table id="reportsPhvlTable" class="table datatable table-bordered table-striped">
                                             <thead>
@@ -89,6 +98,128 @@
                                             </tbody>
                                         </table>
                                     </div>
+                                </div>
+
+                                <div class="tab-pane fade {{ $activeMainTab === 'insurance' ? 'show active' : '' }}" id="reports-insurance-pane" role="tabpanel" aria-labelledby="reports-insurance-tab">
+                                    <form method="GET" action="{{ route('reports.index') }}" class="mb-2" id="reportsInsuranceDateForm">
+                                        <div class="form-row align-items-end">
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="insurance_from">From</label>
+                                                <input type="date" name="insurance_from" id="insurance_from" class="form-control" value="{{ $insuranceFrom }}" required>
+                                            </div>
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="insurance_to">To</label>
+                                                <input type="date" name="insurance_to" id="insurance_to" class="form-control" value="{{ $insuranceTo }}" required>
+                                            </div>
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="insurance_company_id">Company <span class="text-muted">(optional)</span></label>
+                                                <select name="insurance_company_id" id="insurance_company_id" class="form-control">
+                                                    <option value="">All companies</option>
+                                                    @foreach($reportCompanies as $company)
+                                                        <option value="{{ $company->id }}" @selected((int) ($insuranceCompanyId ?? 0) === (int) $company->id)>{{ $company->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="form-group col-md-3 col-lg-3 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="insurance_provider_id">Insurance provider <span class="text-muted">(optional)</span></label>
+                                                <select name="insurance_provider_id" id="insurance_provider_id" class="form-control">
+                                                    <option value="">All providers</option>
+                                                    @foreach($reportInsuranceProviders as $provider)
+                                                        <option value="{{ $provider->id }}" @selected((int) ($insuranceProviderId ?? 0) === (int) $provider->id)>{{ $provider->provider_name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <button type="submit" class="btn btn-primary btn-block">Run report</button>
+                                            </div>
+                                        </div>
+                                    </form>
+
+                                    @if($insuranceDateError)
+                                        <div class="alert alert-danger">{{ $insuranceDateError }}</div>
+                                    @elseif(! $insuranceReportReady)
+                                        <p class="text-muted mb-2">Select a date range and submit to view insurance results.</p>
+                                    @else
+                                        <p class="text-muted small mb-1">
+                                            Showing insurance activity from {{ \Carbon\Carbon::parse($insuranceFrom)->format('d M, Y') }}
+                                            to {{ \Carbon\Carbon::parse($insuranceTo)->format('d M, Y') }}.
+                                            @if($selectedInsuranceCompany)
+                                                Company: <strong>{{ $selectedInsuranceCompany->name }}</strong>.
+                                            @endif
+                                            @if($selectedInsuranceProvider)
+                                                Provider: <strong>{{ $selectedInsuranceProvider->provider_name }}</strong>.
+                                            @endif
+                                        </p>
+
+                                        <ul class="nav nav-pills mb-2" id="reports-insurance-subtabs" role="tablist">
+                                            <li class="nav-item">
+                                                <a class="nav-link active" id="reports-insurance-removed-tab" data-toggle="pill" href="#reports-insurance-removed-pane" role="tab">
+                                                    Removed in range
+                                                    <span class="badge badge-light ml-25">{{ $insuranceRemovedInRange->count() }}</span>
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="reports-insurance-active-tab" data-toggle="pill" href="#reports-insurance-active-pane" role="tab">
+                                                    Activated &amp; still active
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedStillActive->count() }}</span>
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="reports-insurance-ended-tab" data-toggle="pill" href="#reports-insurance-ended-pane" role="tab">
+                                                    Activated &amp; ended in range
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedAndEnded->count() }}</span>
+                                                </a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" id="reports-insurance-preexisting-tab" data-toggle="pill" href="#reports-insurance-preexisting-pane" role="tab">
+                                                    Pre-existing policies
+                                                    <span class="badge badge-light ml-25">{{ $insurancePreExisting->count() }}</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+
+                                        <div class="tab-content" id="reports-insurance-subtab-content">
+                                            @php
+                                                $insuranceSubTabs = [
+                                                    'removed' => ['id' => 'reportsInsuranceRemovedTable', 'pane' => 'reports-insurance-removed-pane', 'tab' => 'reports-insurance-removed-tab', 'rows' => $insuranceRemovedInRange, 'active' => true],
+                                                    'active' => ['id' => 'reportsInsuranceActiveTable', 'pane' => 'reports-insurance-active-pane', 'tab' => 'reports-insurance-active-tab', 'rows' => $insuranceActivatedStillActive, 'active' => false],
+                                                    'ended' => ['id' => 'reportsInsuranceEndedTable', 'pane' => 'reports-insurance-ended-pane', 'tab' => 'reports-insurance-ended-tab', 'rows' => $insuranceActivatedAndEnded, 'active' => false],
+                                                    'preexisting' => ['id' => 'reportsInsurancePreExistingTable', 'pane' => 'reports-insurance-preexisting-pane', 'tab' => 'reports-insurance-preexisting-tab', 'rows' => $insurancePreExisting, 'active' => false],
+                                                ];
+                                            @endphp
+
+                                            @foreach($insuranceSubTabs as $subTab)
+                                                <div class="tab-pane fade {{ $subTab['active'] ? 'show active' : '' }}" id="{{ $subTab['pane'] }}" role="tabpanel" aria-labelledby="{{ $subTab['tab'] }}">
+                                                    <div class="table-responsive">
+                                                        <table id="{{ $subTab['id'] }}" class="table datatable table-bordered table-striped reports-insurance-table">
+                                                            <thead>
+                                                            <tr>
+                                                                <th>Registration</th>
+                                                                <th>Company</th>
+                                                                <th>Model</th>
+                                                                <th>Provider</th>
+                                                                <th>Start Date</th>
+                                                                <th>Expiry</th>
+                                                                <th>Cancelled Date</th>
+                                                                <th>Current Status</th>
+                                                                <th>Actions</th>
+                                                            </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                            @forelse($subTab['rows'] as $row)
+                                                                @include('backend.reports.partials.insurance-report-row', ['row' => $row])
+                                                            @empty
+                                                                <tr>
+                                                                    <td colspan="9" class="text-center text-muted py-4">No records found for this category.</td>
+                                                                </tr>
+                                                            @endforelse
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         </div>
@@ -195,21 +326,24 @@
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
     <style>
         #reportsMotsTable_filter,
-        #reportsPhvlTable_filter {
+        #reportsPhvlTable_filter,
+        .reports-insurance-table_filter {
             display: flex;
             justify-content: flex-end;
             align-items: center;
         }
 
         #reportsMotsTable_filter label,
-        #reportsPhvlTable_filter label {
+        #reportsPhvlTable_filter label,
+        .reports-insurance-table_filter label {
             display: flex;
             align-items: center;
             margin-bottom: 0;
         }
 
         #reportsMotsTable_filter input,
-        #reportsPhvlTable_filter input {
+        #reportsPhvlTable_filter input,
+        .reports-insurance-table_filter input {
             margin-left: .5rem;
         }
 
@@ -315,6 +449,16 @@
             color: #fff;
         }
 
+        #reports-insurance-subtabs .nav-link.active {
+            background-color: #7367f0;
+            color: #fff;
+        }
+
+        #reports-insurance-subtabs .nav-link.active .badge-light {
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #7367f0;
+        }
+
         .reports-expiring-month-group {
             position: relative;
             overflow: visible;
@@ -349,7 +493,8 @@
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
     <script>
         $(document).ready(function () {
-            let activeReportTab = 'mots';
+            let activeReportTab = @json($activeMainTab ?? 'mots');
+            let activeInsuranceSubTab = 'removed';
 
             const motFilters = { company: '', from: '', to: '', includeMissing: false };
             const phvlFilters = { company: '', from: '', to: '', includeMissing: false };
@@ -409,6 +554,44 @@
                 responsive: true,
                 order: [[7, 'asc']]
             });
+
+            const insuranceDataTables = {};
+            const insuranceTableIds = {
+                removed: 'reportsInsuranceRemovedTable',
+                active: 'reportsInsuranceActiveTable',
+                ended: 'reportsInsuranceEndedTable',
+                preexisting: 'reportsInsurancePreExistingTable'
+            };
+
+            function initInsuranceDataTable(key) {
+                if (insuranceDataTables[key]) {
+                    return insuranceDataTables[key];
+                }
+
+                const tableId = insuranceTableIds[key];
+                const $table = $('#' + tableId);
+                if (!$table.length) {
+                    return null;
+                }
+
+                insuranceDataTables[key] = $table.DataTable({
+                    processing: true,
+                    responsive: true,
+                    order: [[4, 'asc']]
+                });
+
+                return insuranceDataTables[key];
+            }
+
+            function initAllInsuranceDataTables() {
+                Object.keys(insuranceTableIds).forEach(function (key) {
+                    initInsuranceDataTable(key);
+                });
+            }
+
+            @if($insuranceReportReady ?? false)
+            initAllInsuranceDataTables();
+            @endif
 
             $('#reportsMotsTable_filter').append(
                 '<button type="button" class="cars-filter-button" id="reportsMotsFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
@@ -493,11 +676,43 @@
             });
 
             $('a[data-toggle="pill"]').on('shown.bs.tab', function (e) {
-                activeReportTab = e.target.getAttribute('href') === '#reports-phvl-pane' ? 'phvl' : 'mots';
+                const href = e.target.getAttribute('href') || '';
+
+                if (href.indexOf('#reports-insurance-') === 0 && href !== '#reports-insurance-pane') {
+                    if (href === '#reports-insurance-removed-pane') {
+                        activeInsuranceSubTab = 'removed';
+                    } else if (href === '#reports-insurance-active-pane') {
+                        activeInsuranceSubTab = 'active';
+                    } else if (href === '#reports-insurance-ended-pane') {
+                        activeInsuranceSubTab = 'ended';
+                    } else if (href === '#reports-insurance-preexisting-pane') {
+                        activeInsuranceSubTab = 'preexisting';
+                    }
+
+                    const table = initInsuranceDataTable(activeInsuranceSubTab);
+                    if (table) {
+                        table.columns.adjust().responsive.recalc();
+                    }
+                    return;
+                }
+
+                if (href === '#reports-phvl-pane') {
+                    activeReportTab = 'phvl';
+                } else if (href === '#reports-insurance-pane') {
+                    activeReportTab = 'insurance';
+                    initAllInsuranceDataTables();
+                    const table = initInsuranceDataTable(activeInsuranceSubTab);
+                    if (table) {
+                        table.columns.adjust().responsive.recalc();
+                    }
+                } else {
+                    activeReportTab = 'mots';
+                }
+
                 closeAllFilterPanels();
                 if (activeReportTab === 'phvl') {
                     phvlDataTable.columns.adjust().responsive.recalc();
-                } else {
+                } else if (activeReportTab === 'mots') {
                     motsDataTable.columns.adjust().responsive.recalc();
                 }
             });
@@ -505,6 +720,11 @@
             const reportExportHeaders = [
                 'Registration', 'Company', 'Model', 'Color', 'Status',
                 'PHV Council', 'Insurance Status'
+            ];
+
+            const insuranceExportHeaders = [
+                'Registration', 'Company', 'Model', 'Provider',
+                'Start Date', 'Expiry', 'Cancelled Date', 'Current Status'
             ];
 
             function formatYmd(date) {
@@ -588,15 +808,16 @@
                 URL.revokeObjectURL(url);
             }
 
-            function collectExportRows(tableApi) {
+            function collectExportRows(tableApi, maxCells) {
+                const limit = maxCells || 9;
                 const rows = [];
                 tableApi.rows({ search: 'applied', order: 'applied' }).every(function () {
                     const node = this.node();
                     if (!node) return;
                     const cells = node.querySelectorAll('td');
-                    if (cells.length < 9) return;
+                    if (cells.length < limit) return;
                     const row = [];
-                    for (let i = 0; i < 9; i++) {
+                    for (let i = 0; i < limit; i++) {
                         row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
                     }
                     rows.push(row);
@@ -604,10 +825,11 @@
                 return rows;
             }
 
-            function exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix) {
-                const headers = reportExportHeaders.concat([expiryLabel, statusLabel]);
+            function exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix, options) {
+                options = options || {};
+                const headers = options.headers || reportExportHeaders.concat([expiryLabel, statusLabel]);
                 const lines = [headers.map(csvEscape).join(',')];
-                const bodyRows = collectExportRows(tableApi);
+                const bodyRows = collectExportRows(tableApi, options.maxCells || 9);
 
                 bodyRows.forEach(function (row) {
                     lines.push(row.map(csvEscape).join(','));
@@ -621,9 +843,10 @@
                 downloadCsv(filePrefix + '-' + new Date().toISOString().slice(0, 10) + '.csv', lines);
             }
 
-            function exportTablePdf(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle) {
-                const headers = reportExportHeaders.concat([expiryLabel, statusLabel]);
-                const bodyRows = collectExportRows(tableApi);
+            function exportTablePdf(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle, options) {
+                options = options || {};
+                const headers = options.headers || reportExportHeaders.concat([expiryLabel, statusLabel]);
+                const bodyRows = collectExportRows(tableApi, options.maxCells || 9);
 
                 if (bodyRows.length === 0) {
                     alert('No records to export. Adjust your search or filters and try again.');
@@ -659,7 +882,7 @@
                         {
                             table: {
                                 headerRows: 1,
-                                widths: ['*', '*', '*', '*', '*', '*', '*', '*', '*'],
+                                widths: headers.map(function () { return '*'; }),
                                 body: tableBody
                             },
                             layout: 'lightHorizontalLines'
@@ -677,6 +900,29 @@
             }
 
             function runActiveTabExport(exportFn) {
+                if (activeReportTab === 'insurance') {
+                    const table = initInsuranceDataTable(activeInsuranceSubTab);
+                    if (!table) {
+                        alert('Run an insurance report first, then export from the active sub-tab.');
+                        return;
+                    }
+
+                    const subTabLabels = {
+                        removed: 'Removed in range',
+                        active: 'Activated and still active',
+                        ended: 'Activated and ended in range',
+                        preexisting: 'Pre-existing policies'
+                    };
+                    const label = subTabLabels[activeInsuranceSubTab] || 'Insurance';
+                    const filePrefix = 'insurance-' + activeInsuranceSubTab + '-report';
+
+                    exportFn(table, null, null, filePrefix, 'Insurance Report — ' + label, {
+                        headers: insuranceExportHeaders,
+                        maxCells: 8
+                    });
+                    return;
+                }
+
                 if (activeReportTab === 'phvl') {
                     exportFn(phvlDataTable, 'PHVL Expiry', 'PHVL Status', 'phvl-report', 'PHVL Report');
                 } else {

@@ -767,6 +767,8 @@ class CarController extends Controller
         }
 
         try {
+            $registration = $car->registration;
+
             DB::transaction(function () use ($car) {
                 $car->load(['mots', 'phvs', 'insurances', 'services']);
                 $this->deleteCarFiles($car);
@@ -794,8 +796,11 @@ class CarController extends Controller
                 $car->delete();
             });
 
+            $registrationLabel = strtoupper(trim((string) $registration));
+
             return redirect()->route($this->url.'index')
-                ->with('success', 'Car deleted successfully.');
+                ->with('car_deleted_registration', $registrationLabel)
+                ->with('success', 'Car '.$registrationLabel.' deleted successfully.');
 
         } catch (\Exception $e) {
             return redirect()->back()

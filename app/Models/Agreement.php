@@ -16,7 +16,7 @@ class Agreement extends Model
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
         'deposit_amount', 'discount_type', 'discount_value', 'discount_notes', 'security_deposit', 'mileage_out', 'mileage_in',
         'collection_type', 'auto_schedule_collections', 'next_collection_date',
-        'condition_report', 'notes', 'status_id', 'parent_agreement_id',
+        'condition_report', 'notes', 'status_id', 'parent_agreement_id', 'upgraded_from_agreement_id',
         // New insurance fields
         'using_own_insurance', 'insurance_provider_id',
         'own_insurance_provider_name', 'own_insurance_start_date',
@@ -85,6 +85,26 @@ class Agreement extends Model
     public function replacementVehicleAgreements()
     {
         return $this->hasMany(self::class, 'parent_agreement_id');
+    }
+
+    public function upgradedFromAgreement()
+    {
+        return $this->belongsTo(self::class, 'upgraded_from_agreement_id');
+    }
+
+    public function upgradedToAgreement()
+    {
+        return $this->hasOne(self::class, 'upgraded_from_agreement_id');
+    }
+
+    public function isUpgradedAgreement(): bool
+    {
+        return $this->upgraded_from_agreement_id !== null;
+    }
+
+    public function hasBeenUpgraded(): bool
+    {
+        return $this->upgradedToAgreement()->exists();
     }
 
     public function isReplacementVehicle(): bool

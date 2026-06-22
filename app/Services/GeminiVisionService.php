@@ -9,30 +9,47 @@ use Illuminate\Support\Facades\Log;
 class GeminiVisionService
 {
     /**
+     * @param  array<string, mixed>|null  $responseSchema
      * @return array<string, mixed>
      */
-    public function chatWithImage(string $systemPrompt, string $userPrompt, string $imagePath): array
-    {
+    public function chatWithImage(
+        string $systemPrompt,
+        string $userPrompt,
+        string $filePath,
+        ?array $responseSchema = null,
+        int $maxOutputTokens = 1024,
+    ): array {
         $apiKey = config('services.gemini.key');
 
         if (! is_string($apiKey) || trim($apiKey) === '') {
             throw new \RuntimeException('Gemini API key is not configured. Set GEMINI_API_KEY in your .env file.');
         }
 
-        if (! is_file($imagePath)) {
-            throw new \RuntimeException('Image file not found for Gemini analysis.');
+        if (! is_file($filePath)) {
+            throw new \RuntimeException('Document file not found for Gemini analysis.');
         }
 
-        $mime = mime_content_type($imagePath) ?: 'image/jpeg';
-        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $mime = mime_content_type($filePath) ?: 'image/jpeg';
+        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
 
         if (! in_array($mime, $allowed, true)) {
-            throw new \RuntimeException('Unsupported image type for Gemini analysis: '.$mime);
+            throw new \RuntimeException('Unsupported file type for Gemini analysis: '.$mime);
         }
 
-        $base64 = base64_encode((string) file_get_contents($imagePath));
+        $base64 = base64_encode((string) file_get_contents($filePath));
         $model = config('services.gemini.model', 'gemini-2.5-flash');
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/'.$model.':generateContent';
+
+        $generationConfig = [
+            'responseMimeType' => 'application/json',
+            'maxOutputTokens' => $maxOutputTokens,
+        ];
+
+        if ($responseSchema !== null) {
+            $generationConfig['responseSchema'] = $responseSchema;
+        } else {
+            $generationConfig['responseSchema'] = $this->defaultSlipResponseSchema();
+        }
 
         $payload = [
             'systemInstruction' => [
@@ -54,29 +71,7 @@ class GeminiVisionService
                     ],
                 ],
             ],
-            'generationConfig' => [
-                'responseMimeType' => 'application/json',
-                'maxOutputTokens' => 1024,
-                'responseSchema' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'registration' => ['type' => 'string'],
-                        'start_date' => ['type' => 'string'],
-                        'term' => ['type' => 'string'],
-                        'amount_paid' => ['type' => 'number'],
-                        'confidence' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'registration' => ['type' => 'string'],
-                                'start_date' => ['type' => 'string'],
-                                'term' => ['type' => 'string'],
-                                'amount_paid' => ['type' => 'string'],
-                            ],
-                        ],
-                        'notes' => ['type' => 'string'],
-                    ],
-                ],
-            ],
+            'generationConfig' => $generationConfig,
         ];
 
         $response = $this->requestWithRetry($url, $apiKey, $payload);
@@ -248,5 +243,31 @@ class GeminiVisionService
         }
 
         return 'Gemini request failed: '.$message;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultSlipResponseSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'registration' => ['type' => 'string'],
+                'start_date' => ['type' => 'string'],
+                'term' => ['type' => 'string'],
+                'amount_paid' => ['type' => 'number'],
+                'confidence' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'registration' => ['type' => 'string'],
+                        'start_date' => ['type' => 'string'],
+                        'term' => ['type' => 'string'],
+                        'amount_paid' => ['type' => 'string'],
+                    ],
+                ],
+                'notes' => ['type' => 'string'],
+            ],
+        ];
     }
 }

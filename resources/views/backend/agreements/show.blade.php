@@ -19,6 +19,12 @@
                 <i class="fa fa-file-text-o me-2"></i>
                 Permission Letter
             </a>
+            @if($canUpgradeCar)
+                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#upgradeCarModal">
+                    <i class="fa fa-arrow-up me-2"></i>
+                    Upgrade Car
+                </button>
+            @endif
             <a href="{{ route('agreements.edit', $agreement) }}" class="btn btn-warning">
                 <i class="fa fa-edit me-2"></i>
                 Edit
@@ -62,6 +68,28 @@
                                                 #{{ $agreement->parentAgreement->id }}
                                                 — {{ $agreement->parentAgreement->car->registration ?? '—' }}
                                                 ({{ $agreement->parentAgreement->driver?->selectOptionLabel() ?? '—' }})
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endif
+                                @if($agreement->isUpgradedAgreement() && $agreement->upgradedFromAgreement)
+                                    <tr>
+                                        <td><strong>Upgraded from:</strong></td>
+                                        <td>
+                                            <a href="{{ route('agreements.show', $agreement->upgradedFromAgreement) }}">
+                                                #{{ $agreement->upgradedFromAgreement->id }}
+                                                — {{ $agreement->upgradedFromAgreement->car->registration ?? '—' }}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endif
+                                @if($agreement->upgradedToAgreement)
+                                    <tr>
+                                        <td><strong>Upgraded to:</strong></td>
+                                        <td>
+                                            <a href="{{ route('agreements.show', $agreement->upgradedToAgreement) }}">
+                                                #{{ $agreement->upgradedToAgreement->id }}
+                                                — {{ $agreement->upgradedToAgreement->car->registration ?? '—' }}
                                             </a>
                                         </td>
                                     </tr>
@@ -469,37 +497,128 @@
         </div>
     </div>
 
+    @if($canUpgradeCar)
+        <div class="modal fade" id="upgradeCarModal" tabindex="-1" role="dialog" aria-labelledby="upgradeCarModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <form method="POST" action="{{ route('agreements.upgrade-car', $agreement) }}" id="upgradeCarForm">
+                        @csrf
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="upgradeCarModalLabel">Upgrade Car</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info">
+                                The current agreement will be closed and a new agreement will be created.
+                                Billing stays aligned to the original cycle (next anchor:
+                                <strong>{{ \Carbon\Carbon::parse($upgradePreview['next_anchor'])->format('M d, Y') }}</strong>).
+                            </div>
+
+                            <div class="form-group">
+                                <label for="upgrade_car_id">Select Vehicle *</label>
+                                <select name="car_id" id="upgrade_car_id" class="form-control select-search" required>
+                                    <option value="">Loading available vehicles...</option>
+                                </select>
+                                <div id="upgradeCarLoadError" class="text-danger small mt-1 d-none"></div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="upgrade_agreed_rent">Agreed Rent *</label>
+                                        <div class="input-group">
+                                            <div class="input-group-prepend">
+                                                <span class="input-group-text">£</span>
+                                            </div>
+                                            <input type="number" name="agreed_rent" id="upgrade_agreed_rent"
+                                                   class="form-control @error('agreed_rent') is-invalid @enderror"
+                                                   step="0.01" min="0.01" required
+                                                   value="{{ old('agreed_rent') }}">
+                                        </div>
+                                        <small class="form-text text-muted">Must be greater than current rent (£{{ number_format($agreement->agreed_rent, 2) }}).</small>
+                                        @error('agreed_rent')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="upgrade_deposit_amount">Deposit *</label>
+                                        <div class="input-group">
+                                            <div class="input-group-prepend">
+                                                <span class="input-group-text">£</span>
+                                            </div>
+                                            <input type="number" name="deposit_amount" id="upgrade_deposit_amount"
+                                                   class="form-control @error('deposit_amount') is-invalid @enderror"
+                                                   step="0.01" min="0" required
+                                                   value="{{ old('deposit_amount') }}">
+                                        </div>
+                                        @error('deposit_amount')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <h6 class="mb-1">Estimated first rent invoice (proration)</h6>
+                                    <p class="mb-0" id="upgradeProrationPreview">
+                                        Enter a new agreed rent to see the estimated proration amount.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="upgradeCarSubmitBtn">
+                                <i class="fa fa-check mr-50"></i>
+                                Upgrade &amp; Create Agreement
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <!-- Payment Modal -->
-    <div class="modal fade" id="paymentModal" tabindex="-1">
-        <div class="modal-dialog">
+    <div class="modal fade" id="paymentModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <form id="paymentForm" method="POST">
                     @csrf
                     <div class="modal-header">
                         <h5 class="modal-title">Record Payment</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label for="amount_paid" class="form-label">Amount Paid *</label>
+                        <div class="form-group">
+                            <label for="amount_paid">Amount Paid *</label>
                             <div class="input-group">
-                                <span class="input-group-text">£</span>
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">£</span>
+                                </div>
                                 <input type="number" name="amount_paid" id="amount_paid"
                                        class="form-control" step="0.01" min="0" required>
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="payment_date" class="form-label">Payment Date *</label>
+                        <div class="form-group">
+                            <label for="payment_date">Payment Date *</label>
                             <input type="date" name="payment_date" id="payment_date"
                                    class="form-control" value="{{ date('Y-m-d') }}" required>
                         </div>
-                        <div class="mb-3">
-                            <label for="payment_notes" class="form-label">Notes</label>
+                        <div class="form-group">
+                            <label for="payment_notes">Notes</label>
                             <textarea name="notes" id="payment_notes" class="form-control" rows="3"></textarea>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-primary">Record Payment</button>
                     </div>
                 </form>
@@ -510,8 +629,10 @@
 
 @section('js')
     <script>
+        const upgradePreview = @json($upgradePreview);
+        const currentAgreedRent = {{ (float) $agreement->agreed_rent }};
+
         function showPaymentModal(collectionId, remainingAmount) {
-            const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
             const form = document.getElementById('paymentForm');
             const amountInput = document.getElementById('amount_paid');
 
@@ -519,7 +640,7 @@
             amountInput.value = remainingAmount;
             amountInput.max = remainingAmount;
 
-            modal.show();
+            jQuery('#paymentModal').modal('show');
         }
 
         function regenerateCollections() {
@@ -541,5 +662,127 @@
                     });
             }
         }
+
+        function formatMoney(amount) {
+            return '£' + Number(amount).toFixed(2);
+        }
+
+        function calculateProration(newRent) {
+            if (!upgradePreview || newRent <= currentAgreedRent) {
+                return null;
+            }
+
+            const rentDiff = newRent - currentAgreedRent;
+            const amount = (rentDiff / upgradePreview.period_days) * upgradePreview.remaining_days;
+
+            return {
+                amount: Math.max(amount, 0),
+                rentDiff,
+            };
+        }
+
+        function updateUpgradeProrationPreview() {
+            const previewEl = document.getElementById('upgradeProrationPreview');
+            const rentInput = document.getElementById('upgrade_agreed_rent');
+
+            if (!previewEl || !rentInput || !upgradePreview) {
+                return;
+            }
+
+            const newRent = parseFloat(rentInput.value || '0');
+            const proration = calculateProration(newRent);
+
+            if (!proration) {
+                previewEl.textContent = 'Enter a new agreed rent greater than the current rent to see the estimated proration.';
+                return;
+            }
+
+            if (upgradePreview.remaining_days === 0) {
+                previewEl.innerHTML = 'Upgrade is on a billing anchor day, so no proration invoice will be created. The first full rent invoice will be on the next billing date.';
+                return;
+            }
+
+            previewEl.innerHTML = `
+                Rent difference: <strong>${formatMoney(proration.rentDiff)}</strong> per period<br>
+                Remaining days until next billing anchor: <strong>${upgradePreview.remaining_days}</strong><br>
+                Estimated proration invoice: <strong>${formatMoney(proration.amount)}</strong>
+            `;
+        }
+
+        function loadUpgradeCars() {
+            const carSelect = document.getElementById('upgrade_car_id');
+            const errorEl = document.getElementById('upgradeCarLoadError');
+
+            if (!carSelect) {
+                return;
+            }
+
+            carSelect.innerHTML = '<option value="">Loading available vehicles...</option>';
+            errorEl.classList.add('d-none');
+            errorEl.textContent = '';
+
+            fetch(`{{ route('agreements.upgrade-cars', $agreement) }}`, {
+                headers: {
+                    'Accept': 'application/json',
+                },
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Unable to load available vehicles.');
+                    }
+
+                    return response.json();
+                })
+                .then(data => {
+                    const cars = data.cars || [];
+
+                    if (cars.length === 0) {
+                        carSelect.innerHTML = '<option value="">No eligible vehicles available</option>';
+                        return;
+                    }
+
+                    carSelect.innerHTML = '<option value="">Select a vehicle</option>';
+                    cars.forEach(car => {
+                        const option = document.createElement('option');
+                        option.value = car.id;
+                        option.textContent = `${car.registration} - ${car.model || 'Unknown model'}${car.company ? ` (${car.company})` : ''}`;
+                        carSelect.appendChild(option);
+                    });
+
+                    if (window.jQuery && window.jQuery.fn.select2) {
+                        const $carSelect = window.jQuery(carSelect);
+                        if ($carSelect.hasClass('select2-hidden-accessible')) {
+                            $carSelect.select2('destroy');
+                        }
+                        if (window.initBackendSelect2) {
+                            window.initBackendSelect2(carSelect.parentElement);
+                        }
+                    }
+                })
+                .catch(error => {
+                    carSelect.innerHTML = '<option value="">Unable to load vehicles</option>';
+                    errorEl.textContent = error.message;
+                    errorEl.classList.remove('d-none');
+                });
+        }
+
+        jQuery(document).ready(function () {
+            const upgradeModal = jQuery('#upgradeCarModal');
+            const rentInput = document.getElementById('upgrade_agreed_rent');
+
+            if (rentInput) {
+                rentInput.addEventListener('input', updateUpgradeProrationPreview);
+                updateUpgradeProrationPreview();
+            }
+
+            if (upgradeModal.length) {
+                upgradeModal.on('show.bs.modal', loadUpgradeCars);
+            }
+
+            @if($errors->has('car_id') || $errors->has('agreed_rent') || $errors->has('deposit_amount'))
+                upgradeModal.modal('show');
+                loadUpgradeCars();
+            @endif
+        });
     </script>
 @endsection

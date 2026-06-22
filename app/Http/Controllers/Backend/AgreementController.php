@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Services\AgreementInvoiceService;
+use App\Services\AgreementUpgradeService;
 use App\Services\PaymentAllocationService;
 use App\Services\PermissionLetterService;
 // Add this
@@ -177,6 +178,7 @@ class AgreementController extends Controller
         $agreement->load([
             'company', 'driver', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
             'status', 'insuranceProvider', 'terminationRecordedBy', 'parentAgreement.car', 'parentAgreement.driver',
+            'upgradedFromAgreement.car', 'upgradedToAgreement.car',
             'collections' => function ($query) {
                 $query->orderBy('due_date');
             },
@@ -185,7 +187,71 @@ class AgreementController extends Controller
         // Update overdue collections
         $agreement->updateOverdueCollections();
 
-        return view($this->dir.'show', compact('agreement'));
+        $upgradeService = app(AgreementUpgradeService::class);
+        $canUpgradeCar = $upgradeService->canUpgrade($agreement);
+        $upgradePreview = $canUpgradeCar ? $upgradeService->upgradePreview($agreement) : null;
+
+        return view($this->dir.'show', compact('agreement', 'canUpgradeCar', 'upgradePreview'));
+    }
+
+    public function upgradeCars(Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this agreement');
+        }
+
+        $upgradeService = app(AgreementUpgradeService::class);
+
+        if (! $upgradeService->canUpgrade($agreement)) {
+            return response()->json(['message' => 'This agreement is not eligible for a car upgrade.'], 422);
+        }
+
+        $cars = $upgradeService->availableCars($agreement)->map(function (Car $car) {
+            $insurance = $car->currentActiveInsurance();
+
+            return [
+                'id' => $car->id,
+                'registration' => $car->registration,
+                'model' => $car->carModel?->name,
+                'company' => $car->company?->name,
+                'has_active_insurance' => $car->isInsuranceCurrentlyActive(),
+                'insurance_provider' => $insurance?->insuranceProvider?->name,
+            ];
+        })->values();
+
+        return response()->json([
+            'cars' => $cars,
+            'preview' => $upgradeService->upgradePreview($agreement),
+        ]);
+    }
+
+    public function upgradeCar(Request $request, Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this agreement');
+        }
+
+        $validated = $request->validate([
+            'car_id' => 'required|exists:cars,id',
+            'agreed_rent' => 'required|numeric|min:0',
+            'deposit_amount' => 'required|numeric|min:0',
+        ]);
+
+        try {
+            $newAgreement = app(AgreementUpgradeService::class)->upgrade($agreement, $validated);
+
+            return redirect()->route('agreements.show', $newAgreement)
+                ->with('success', 'Car upgraded successfully. A new agreement has been created.');
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Error upgrading car: '.$e->getMessage());
+        }
     }
 
     public function edit(Agreement $agreement)

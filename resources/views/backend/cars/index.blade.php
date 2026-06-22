@@ -22,7 +22,24 @@
                     <hr>
                     <div class="card-content">
                         <div class="card-body card-dashboard">
-                            @include('alerts')
+                            @php
+                                $deletedCarRegistration = session('car_deleted_registration');
+                                $successMessage = session('success');
+                                $genericCarDeleteMessage = $successMessage === 'Car deleted successfully.';
+                            @endphp
+                            @if ($deletedCarRegistration)
+                                <div class="alert alert-success" id="carDeletedAlert">
+                                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+                                    Car {{ $deletedCarRegistration }} deleted successfully.
+                                </div>
+                            @elseif ($genericCarDeleteMessage)
+                                <div class="alert alert-success" id="carDeletedAlert">
+                                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+                                    Car deleted successfully.
+                                </div>
+                            @else
+                                @include('alerts')
+                            @endif
                             <div class="table-responsive">
                                 <table id="dataTable" class="table datatable table-bordered table-striped">
                                     <thead>
@@ -118,7 +135,8 @@
                                                         @csrf
                                                         @method('DELETE')
                                                         <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                                onclick="return confirm('Are you sure?')">
+                                                                data-car-registration="{{ $car->registration }}"
+                                                                onclick="if (!confirm('Are you sure?')) { return false; } try { sessionStorage.setItem('fleetiq_deleted_car_registration', this.dataset.carRegistration || ''); } catch (e) {} return true;">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
                                                     </form>
@@ -432,6 +450,33 @@
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
     <script>
         $(document).ready(function () {
+            (function applyDeletedCarRegistrationAlert() {
+                var registration = '';
+                try {
+                    registration = sessionStorage.getItem('fleetiq_deleted_car_registration') || '';
+                    sessionStorage.removeItem('fleetiq_deleted_car_registration');
+                } catch (e) {}
+
+                if (!registration) {
+                    return;
+                }
+
+                var $alert = $('#carDeletedAlert');
+                if (!$alert.length) {
+                    $('.card-dashboard').first().prepend(
+                        '<div class="alert alert-success" id="carDeletedAlert">' +
+                        '<button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>' +
+                        '</div>'
+                    );
+                    $alert = $('#carDeletedAlert');
+                }
+
+                $alert.html(
+                    '<button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>' +
+                    'Car ' + $('<div>').text(registration).html() + ' deleted successfully.'
+                );
+            })();
+
             const advancedFilters = {
                 company: '',
                 council: '',

@@ -31,7 +31,7 @@
                                         </p>
                                         <p class="text-muted small mb-3">
                                             Start date is calculated as the day after the printed tax expiry date.
-                                            Supported formats: JPG, PNG, WEBP (or a ZIP of images).
+                                            Supported formats: JPG, PNG, WEBP, PDF (or a ZIP of images/PDFs).
                                         </p>
 
                                         <form method="POST" action="{{ route('ai.road-tax.analyze') }}"
@@ -46,20 +46,20 @@
                                                     @error('upload_zip')
                                                     <div class="invalid-feedback d-block">{{ $message }}</div>
                                                     @enderror
-                                                    <small class="text-muted">ZIP may contain multiple slip images (max 50 MB).</small>
+                                                    <small class="text-muted">ZIP may contain multiple slip images or PDFs (max 50 MB).</small>
                                                 </div>
                                                 <div class="col-md-6 form-group">
-                                                    <label for="upload_files">Image files (optional)</label>
+                                                    <label for="upload_files">Slip files (optional)</label>
                                                     <input type="file" name="upload_files[]" id="upload_files"
                                                            class="form-control @error('upload_files') is-invalid @enderror @error('upload_files.*') is-invalid @enderror"
-                                                           accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple>
+                                                           accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" multiple>
                                                     @error('upload_files')
                                                     <div class="invalid-feedback d-block">{{ $message }}</div>
                                                     @enderror
                                                     @error('upload_files.*')
                                                     <div class="invalid-feedback d-block">{{ $message }}</div>
                                                     @enderror
-                                                    <small class="text-muted">Select one or more images (max 10 MB each).</small>
+                                                    <small class="text-muted">Select one or more images or PDFs (max 10 MB each).</small>
                                                 </div>
                                             </div>
                                             <button type="submit" class="btn btn-primary" id="btnAnalyzeRoadTax">
