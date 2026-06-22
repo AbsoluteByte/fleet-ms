@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
@@ -12,7 +13,9 @@ use Illuminate\Support\Str;
 class InsuranceProviderController extends Controller
 {
     protected $url = 'insurance-providers.';
+
     protected $dir = 'backend.insuranceProviders.';
+
     protected $name = 'Insurance Providers';
 
     public function __construct()
@@ -28,11 +31,12 @@ class InsuranceProviderController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->with(['status', 'company'])->get();
+
         return view($this->dir.'index', compact('insuranceProviders'));
     }
 
@@ -40,12 +44,13 @@ class InsuranceProviderController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
         $statuses = Status::where('type', 'insurance')->get();
         $companies = Company::where('tenant_id', $tenant->id)->get();
+
         return view($this->dir.'create', compact('statuses', 'companies'));
     }
 
@@ -53,7 +58,7 @@ class InsuranceProviderController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -84,6 +89,7 @@ class InsuranceProviderController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
         $insuranceProvider->load(['status', 'company']);
+
         return view($this->dir.'show', compact('insuranceProvider'));
     }
 
@@ -91,7 +97,7 @@ class InsuranceProviderController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -99,6 +105,7 @@ class InsuranceProviderController extends Controller
         $model = InsuranceProvider::where('tenant_id', $tenant->id)->findOrFail($id);
         $statuses = Status::where('type', 'insurance')->get();
         $companies = Company::where('tenant_id', $tenant->id)->get();
+
         return view($this->dir.'edit', compact('model', 'statuses', 'companies'));
     }
 
@@ -106,7 +113,7 @@ class InsuranceProviderController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }

@@ -7,7 +7,7 @@ use Carbon\Carbon;
 class RoadTaxSlipExtractionService
 {
     public function __construct(
-        private readonly OpenAiVisionService $openAi,
+        private readonly GeminiVisionService $gemini,
         private readonly InsuranceCertificateParser $registrationParser,
     ) {}
 
@@ -44,7 +44,7 @@ class RoadTaxSlipExtractionService
         ];
 
         try {
-            $raw = $this->openAi->chatWithImage(
+            $raw = $this->gemini->chatWithImage(
                 $this->systemPrompt(),
                 $this->userPrompt(),
                 $imagePath

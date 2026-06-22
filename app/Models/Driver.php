@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +11,7 @@ class Driver extends Model
     use HasFactory;
 
     protected $fillable = [
-        'tenant_id','first_name', 'middle_name', 'last_name', 'dob', 'email',
+        'tenant_id', 'first_name', 'middle_name', 'last_name', 'dob', 'email',
         'phone_number', 'ni_number', 'address1', 'address2', 'post_code', 'town',
         'county', 'country_id', 'driver_license_number',
         'driver_license_expiry_date', 'phd_license_number',
@@ -19,7 +20,7 @@ class Driver extends Model
         'phd_card_document', 'dvla_license_summary', 'misc_document',
         'proof_of_address_document', 'is_invited', 'invited_at',
         'invitation_token', 'invitation_accepted_at', 'user_id', 'is_active',
-        'createdBy', 'updatedBy'
+        'createdBy', 'updatedBy',
     ];
 
     protected $casts = [
@@ -41,6 +42,7 @@ class Driver extends Model
     {
         return ! $this->is_active;
     }
+
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
@@ -87,7 +89,7 @@ class Driver extends Model
 
     public function getFullNameAttribute()
     {
-        return trim($this->first_name . ' ' . $this->middle_name . ' ' . $this->last_name);
+        return trim($this->first_name.' '.$this->middle_name.' '.$this->last_name);
     }
 
     /**
@@ -149,12 +151,13 @@ class Driver extends Model
     {
         $this->invitation_token = Str::random(64);
         $this->save();
+
         return $this->invitation_token;
     }
 
     public function getInvitationUrlAttribute()
     {
-        if (!$this->invitation_token) {
+        if (! $this->invitation_token) {
             return null;
         }
 
@@ -163,7 +166,7 @@ class Driver extends Model
 
     public function isInvitationExpired()
     {
-        if (!$this->invited_at) {
+        if (! $this->invited_at) {
             return false;
         }
 
@@ -173,12 +176,12 @@ class Driver extends Model
 
     public function canBeInvited()
     {
-        return !$this->is_invited || $this->isInvitationExpired();
+        return ! $this->is_invited || $this->isInvitationExpired();
     }
 
     public function hasAcceptedInvitation()
     {
-        return !is_null($this->invitation_accepted_at);
+        return ! is_null($this->invitation_accepted_at);
     }
 
     // Get driver's active agreements

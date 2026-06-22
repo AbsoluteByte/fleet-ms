@@ -1,8 +1,9 @@
 <?php
+
 namespace App\Http\Controllers;
 
-use App\Models\Subscription;
 use App\Models\Invoice;
+use App\Models\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -22,7 +23,8 @@ class StripeWebhookController extends Controller
                 $event = json_decode($payload);
             }
         } catch (\Exception $e) {
-            Log::error('Webhook signature verification failed: ' . $e->getMessage());
+            Log::error('Webhook signature verification failed: '.$e->getMessage());
+
             return response()->json(['error' => 'Invalid signature'], 400);
         }
 
@@ -49,7 +51,7 @@ class StripeWebhookController extends Controller
                 break;
 
             default:
-                Log::info('Unhandled webhook event type: ' . $event->type);
+                Log::info('Unhandled webhook event type: '.$event->type);
         }
 
         return response()->json(['status' => 'success'], 200);
@@ -58,13 +60,14 @@ class StripeWebhookController extends Controller
     // ==================== HANDLE PAYMENT SUCCEEDED ====================
     private function handleInvoicePaymentSucceeded($invoice)
     {
-        Log::info('Payment succeeded for invoice: ' . $invoice->id);
+        Log::info('Payment succeeded for invoice: '.$invoice->id);
 
         // Find subscription by Stripe subscription ID
         $subscription = Subscription::where('stripe_subscription_id', $invoice->subscription)->first();
 
-        if (!$subscription) {
-            Log::warning('Subscription not found for invoice: ' . $invoice->id);
+        if (! $subscription) {
+            Log::warning('Subscription not found for invoice: '.$invoice->id);
+
             return;
         }
 
@@ -96,17 +99,17 @@ class StripeWebhookController extends Controller
             $tenant->activate();
         }
 
-        Log::info('Subscription renewed successfully for tenant: ' . $subscription->tenant_id);
+        Log::info('Subscription renewed successfully for tenant: '.$subscription->tenant_id);
     }
 
     // ==================== HANDLE PAYMENT FAILED ====================
     private function handleInvoicePaymentFailed($invoice)
     {
-        Log::warning('Payment failed for invoice: ' . $invoice->id);
+        Log::warning('Payment failed for invoice: '.$invoice->id);
 
         $subscription = Subscription::where('stripe_subscription_id', $invoice->subscription)->first();
 
-        if (!$subscription) {
+        if (! $subscription) {
             return;
         }
 
@@ -133,7 +136,7 @@ class StripeWebhookController extends Controller
         // Optionally suspend tenant after X failed attempts
         // You can implement retry logic here
 
-        Log::info('Payment failed for tenant: ' . $subscription->tenant_id);
+        Log::info('Payment failed for tenant: '.$subscription->tenant_id);
     }
 
     // ==================== HANDLE SUBSCRIPTION UPDATED ====================
@@ -141,7 +144,7 @@ class StripeWebhookController extends Controller
     {
         $subscription = Subscription::where('stripe_subscription_id', $stripeSubscription->id)->first();
 
-        if (!$subscription) {
+        if (! $subscription) {
             return;
         }
 
@@ -151,7 +154,7 @@ class StripeWebhookController extends Controller
             'current_period_end' => \Carbon\Carbon::createFromTimestamp($stripeSubscription->current_period_end),
         ]);
 
-        Log::info('Subscription updated: ' . $stripeSubscription->id);
+        Log::info('Subscription updated: '.$stripeSubscription->id);
     }
 
     // ==================== HANDLE SUBSCRIPTION DELETED ====================
@@ -159,7 +162,7 @@ class StripeWebhookController extends Controller
     {
         $subscription = Subscription::where('stripe_subscription_id', $stripeSubscription->id)->first();
 
-        if (!$subscription) {
+        if (! $subscription) {
             return;
         }
 
@@ -174,13 +177,13 @@ class StripeWebhookController extends Controller
             $tenant->suspend('Subscription cancelled');
         }
 
-        Log::info('Subscription cancelled: ' . $stripeSubscription->id);
+        Log::info('Subscription cancelled: '.$stripeSubscription->id);
     }
 
     // ==================== HANDLE SUBSCRIPTION CREATED ====================
     private function handleSubscriptionCreated($stripeSubscription)
     {
-        Log::info('Subscription created: ' . $stripeSubscription->id);
+        Log::info('Subscription created: '.$stripeSubscription->id);
         // Already handled in subscribe() method
     }
 }

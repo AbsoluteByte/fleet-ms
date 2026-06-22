@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Car;
 use App\Models\CarInsurance;
-use App\Models\Status;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -71,7 +70,7 @@ class CarInsuranceAutoCancelService
 
         $cancelledCount = 0;
 
-        DB::transaction(function () use ($activeStatusId, $cancelledStatusId, $asOfDate, &$cancelledCount) {
+        DB::transaction(function () use ($asOfDate, &$cancelledCount) {
             $carIds = CarInsurance::query()
                 ->distinct()
                 ->pluck('car_id');

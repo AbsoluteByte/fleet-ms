@@ -1,5 +1,7 @@
 <?php
+
 // app/Models/User.php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,7 +11,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, HasRoles, Notifiable;
 
     protected $fillable = [
         'name',
@@ -108,8 +110,10 @@ class User extends Authenticatable
     {
         if ($this->hasAccessToTenant($tenantId)) {
             session(['current_tenant_id' => $tenantId]);
+
             return true;
         }
+
         return false;
     }
 
@@ -123,6 +127,7 @@ class User extends Authenticatable
     public function getRoleInTenant($tenantId): ?string
     {
         $tenant = $this->tenants()->where('tenants.id', $tenantId)->first();
+
         return $tenant?->pivot->role;
     }
 

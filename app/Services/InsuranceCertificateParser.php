@@ -41,7 +41,7 @@ class InsuranceCertificateParser
     public function parseFromPdf(string $path): ?ParsedCertificateData
     {
         try {
-            $text = (new Parser())->parseFile($path)->getText();
+            $text = (new Parser)->parseFile($path)->getText();
         } catch (\Throwable) {
             return null;
         }

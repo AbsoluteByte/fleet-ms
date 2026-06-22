@@ -26,7 +26,7 @@
                                         <h5 class="mb-1">Add Road Tax from V11 slips</h5>
                                         <p class="text-muted">
                                             Upload photos or scans of UK DVLA <strong>Vehicle tax reminder (V11)</strong> slips.
-                                            ChatGPT will read each slip and extract registration, start date, term, and amount paid.
+                                            Google Gemini will read each slip and extract registration, start date, term, and amount paid.
                                             You can review and correct anything unclear before saving to the matching car.
                                         </p>
                                         <p class="text-muted small mb-3">

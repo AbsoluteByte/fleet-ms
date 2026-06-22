@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Driver;
 use App\Models\Agreement;
-use App\Models\AgreementCollection;
+use App\Models\Driver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -19,7 +18,7 @@ class DriverDashboardController extends Controller
     {
         $driver = $this->getAuthenticatedDriver();
 
-        if (!$driver) {
+        if (! $driver) {
             return redirect()->route('login')
                 ->with('error', 'Driver profile not found. Please contact support.');
         }
@@ -53,7 +52,6 @@ class DriverDashboardController extends Controller
             ->orderBy('due_date')
             ->get();
 
-
         return view('driver.dashboard', compact(
             'driver', 'activeAgreements', 'totalAgreements',
             'pendingPayments', 'overduePayments', 'recentAgreements',
@@ -82,7 +80,7 @@ class DriverDashboardController extends Controller
             abort(403, 'Unauthorized access to this agreement.');
         }
 
-        $agreement->load(['car', 'company', 'status', 'collections' => function($query) {
+        $agreement->load(['car', 'company', 'status', 'collections' => function ($query) {
             $query->orderBy('due_date');
         }]);
 
@@ -104,6 +102,7 @@ class DriverDashboardController extends Controller
     public function profile()
     {
         $driver = $this->getAuthenticatedDriver();
+
         return view('driver.profile', compact('driver'));
     }
 

@@ -55,22 +55,22 @@ return new class extends Migration
 
         Schema::table('payments', function (Blueprint $table) {
             // Add nullable first for existing rows, then backfill and add unique index safely.
-            if (!Schema::hasColumn('payments', 'payment_no')) {
+            if (! Schema::hasColumn('payments', 'payment_no')) {
                 $table->string('payment_no')->nullable()->after('id');
             }
-            if (!Schema::hasColumn('payments', 'driver_id')) {
+            if (! Schema::hasColumn('payments', 'driver_id')) {
                 $table->foreignId('driver_id')->nullable()->after('payment_no')->constrained()->nullOnDelete();
             }
-            if (!Schema::hasColumn('payments', 'payment_method')) {
+            if (! Schema::hasColumn('payments', 'payment_method')) {
                 $table->string('payment_method')->nullable()->after('driver_id');
             }
-            if (!Schema::hasColumn('payments', 'payment_date')) {
+            if (! Schema::hasColumn('payments', 'payment_date')) {
                 $table->date('payment_date')->nullable()->after('payment_method');
             }
-            if (!Schema::hasColumn('payments', 'amount')) {
+            if (! Schema::hasColumn('payments', 'amount')) {
                 $table->decimal('amount', 12, 2)->default(0)->after('payment_date');
             }
-            if (!Schema::hasColumn('payments', 'notes')) {
+            if (! Schema::hasColumn('payments', 'notes')) {
                 $table->text('notes')->nullable()->after('amount');
             }
         });
@@ -83,7 +83,7 @@ return new class extends Migration
                 foreach ($payments as $payment) {
                     DB::table('payments')
                         ->where('id', $payment->id)
-                        ->update(['payment_no' => 'Payment #' . $counter]);
+                        ->update(['payment_no' => 'Payment #'.$counter]);
                     $counter++;
                 }
             });

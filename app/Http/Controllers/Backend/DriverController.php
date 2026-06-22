@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
@@ -14,7 +15,9 @@ use Illuminate\Support\Str;
 class DriverController extends Controller
 {
     protected $url = 'drivers.';
+
     protected $dir = 'backend.drivers.';
+
     protected $name = 'Drivers';
 
     public function __construct()
@@ -30,22 +33,24 @@ class DriverController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
         $drivers = Driver::where('tenant_id', $tenant->id)->get();
-        return view($this->dir .'index', compact('drivers'));
+
+        return view($this->dir.'index', compact('drivers'));
     }
 
     public function create()
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
+
         return view($this->dir.'create');
     }
 
@@ -53,7 +58,7 @@ class DriverController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -72,6 +77,7 @@ class DriverController extends Controller
         if ($driver->tenant_id !== $tenant->id) {
             abort(403, 'Unauthorized access to this car');
         }
+
         return view($this->dir.'show', compact('driver'));
     }
 
@@ -79,7 +85,7 @@ class DriverController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -96,7 +102,7 @@ class DriverController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -168,7 +174,7 @@ class DriverController extends Controller
 
             foreach ($files as $file) {
                 if ($file) {
-                    $path = public_path('uploads/driver_licenses/' . $file);
+                    $path = public_path('uploads/driver_licenses/'.$file);
                     if (File::exists($path)) {
                         File::delete($path);
                     }
@@ -184,7 +190,7 @@ class DriverController extends Controller
 
     public function invite(Driver $driver)
     {
-        if (!$driver->canBeInvited()) {
+        if (! $driver->canBeInvited()) {
             return redirect()->back()
                 ->with('error', 'Driver has already been invited or invitation is still pending.');
         }
@@ -195,18 +201,18 @@ class DriverController extends Controller
             // Update invitation status
             $driver->update([
                 'is_invited' => true,
-                'invited_at' => now()
+                'invited_at' => now(),
             ]);
 
             // Send invitation email
             Mail::to($driver->email)->send(new DriverInvitationMail($driver));
 
             return redirect()->back()
-                ->with('success', 'Invitation sent successfully to ' . $driver->full_name);
+                ->with('success', 'Invitation sent successfully to '.$driver->full_name);
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Failed to send invitation: ' . $e->getMessage());
+                ->with('error', 'Failed to send invitation: '.$e->getMessage());
         }
     }
 
@@ -228,11 +234,11 @@ class DriverController extends Controller
             Mail::to($driver->email)->send(new DriverInvitationMail($driver));
 
             return redirect()->back()
-                ->with('success', 'Invitation resent successfully to ' . $driver->full_name);
+                ->with('success', 'Invitation resent successfully to '.$driver->full_name);
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Failed to resend invitation: ' . $e->getMessage());
+                ->with('error', 'Failed to resend invitation: '.$e->getMessage());
         }
     }
 }

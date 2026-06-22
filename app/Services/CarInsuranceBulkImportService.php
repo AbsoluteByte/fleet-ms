@@ -6,7 +6,6 @@ use App\Models\Car;
 use App\Models\CarInsurance;
 use App\Models\InsuranceProvider;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 class CarInsuranceBulkImportService
@@ -134,7 +133,6 @@ class CarInsuranceBulkImportService
         try {
             return DB::transaction(function () use (
                 $pdfPath,
-                $filename,
                 $base,
                 $parsed,
                 $tenantId,

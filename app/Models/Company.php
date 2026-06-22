@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,7 @@ class Company extends Model
     protected $fillable = [
         'name', 'director_name', 'company_registration_number', 'logo', 'address_line_1',
         'address_line_2', 'postcode', 'town', 'county',
-        'country_id', 'phone', 'email', 'tenant_id', 'createdBy', 'updatedBy'
+        'country_id', 'phone', 'email', 'tenant_id', 'createdBy', 'updatedBy',
     ];
 
     public function payments()

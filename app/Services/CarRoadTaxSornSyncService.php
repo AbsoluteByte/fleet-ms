@@ -3,10 +3,8 @@
 namespace App\Services;
 
 use App\Models\Car;
-use App\Models\CarRoadTax;
 use App\Models\CarSornHistory;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 class CarRoadTaxSornSyncService

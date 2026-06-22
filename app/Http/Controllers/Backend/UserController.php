@@ -6,14 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
     protected $url = 'users.';
+
     protected $dir = 'backend.users.';
+
     protected $name = 'Users';
 
     public function __construct()
@@ -29,7 +31,7 @@ class UserController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -41,27 +43,28 @@ class UserController extends Controller
             })
             ->get();
 
-        return view($this->dir . 'index', compact('users'));
+        return view($this->dir.'index', compact('users'));
     }
 
     public function create()
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
 
-        $model = new User();
-        return view($this->dir . 'create', compact('model'));
+        $model = new User;
+
+        return view($this->dir.'create', compact('model'));
     }
 
     public function store(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -69,17 +72,18 @@ class UserController extends Controller
         $this->validate($request, [
             'name' => ['required', 'string', 'max:50'],
             'email' => ['required', 'string', 'email', 'max:50', 'unique:users'],
-            'password' => ['required', 'string', 'min:8', 'confirmed']
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
         try {
             DB::beginTransaction();
             // Create user
-            $model = new User();
+            $model = new User;
             $model->name = request('name', null);
             $model->email = request('email', null);
             $model->password = Hash::make(request('password'));
             $model->is_active = true;
+            $model->email_verified_at = now();
             $model->save();
 
             // Assign role
@@ -89,14 +93,14 @@ class UserController extends Controller
             $model->tenants()->attach($tenant->id, [
                 'role' => 'user',
                 'is_primary' => true,
-                'joined_at' => now()
+                'joined_at' => now(),
             ]);
 
             DB::commit();
 
             return redirect()
-                ->route($this->url . 'index')
-                ->with('success', Str::singular($this->name) . ' saved successfully!');
+                ->route($this->url.'index')
+                ->with('success', Str::singular($this->name).' saved successfully!');
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -104,7 +108,7 @@ class UserController extends Controller
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', 'Error creating user: ' . $e->getMessage());
+                ->with('error', 'Error creating user: '.$e->getMessage());
         }
     }
 
@@ -112,22 +116,7 @@ class UserController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
-            return redirect()->route('dashboard')
-                ->with('error', 'No active company found!');
-        }
-
-        //Check if user belongs to current tenant
-        $model = $tenant->users()->where('users.id', $id)->firstOrFail();
-
-        return view($this->dir . 'show', compact('model'));
-    }
-
-    public function edit($id)
-    {
-        $tenant = Auth::user()->currentTenant();
-
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -135,14 +124,29 @@ class UserController extends Controller
         // Check if user belongs to current tenant
         $model = $tenant->users()->where('users.id', $id)->firstOrFail();
 
-        return view($this->dir . 'edit', compact('model'));
+        return view($this->dir.'show', compact('model'));
+    }
+
+    public function edit($id)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        // Check if user belongs to current tenant
+        $model = $tenant->users()->where('users.id', $id)->firstOrFail();
+
+        return view($this->dir.'edit', compact('model'));
     }
 
     public function update(Request $request, $id)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -152,7 +156,7 @@ class UserController extends Controller
 
         $rules = [
             'name' => ['required', 'string', 'max:50'],
-            'email' => ['required', 'string', 'email', 'unique:users,email,' . $model->id],
+            'email' => ['required', 'string', 'email', 'unique:users,email,'.$model->id],
             'is_active' => ['nullable', 'boolean'],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ];
@@ -173,8 +177,8 @@ class UserController extends Controller
         $model->save();
 
         return redirect()
-            ->route($this->url . 'index')
-            ->with('success', Str::singular($this->name) . ' updated successfully!');
+            ->route($this->url.'index')
+            ->with('success', Str::singular($this->name).' updated successfully!');
     }
 
     public function toggleStatus($id)
@@ -200,7 +204,7 @@ class UserController extends Controller
 
         return redirect()
             ->back()
-            ->with('success', Str::singular($this->name) . " {$status} successfully!");
+            ->with('success', Str::singular($this->name)." {$status} successfully!");
     }
 
     private function tenantUserOrFail($tenant, $id): User
@@ -212,7 +216,7 @@ class UserController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -234,15 +238,15 @@ class UserController extends Controller
             DB::commit();
 
             return redirect()
-                ->route($this->url . 'index')
-                ->with('success', Str::singular($this->name) . ' deleted successfully!');
+                ->route($this->url.'index')
+                ->with('success', Str::singular($this->name).' deleted successfully!');
 
         } catch (\Exception $e) {
             DB::rollBack();
 
             return redirect()
                 ->back()
-                ->with('error', 'Error deleting user: ' . $e->getMessage());
+                ->with('error', 'Error deleting user: '.$e->getMessage());
         }
     }
 }

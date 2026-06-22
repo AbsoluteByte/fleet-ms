@@ -126,7 +126,7 @@ class CarInsuranceImportController extends Controller
         $tempDir = storage_path('app/insurance-import/'.Str::uuid());
         File::ensureDirectoryExists($tempDir);
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
 
         if ($zip->open($zipPath) !== true) {
             throw new \RuntimeException('Could not open ZIP file.');

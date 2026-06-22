@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -107,17 +108,17 @@ class Invoice extends Model
     {
         return $this->due_date &&
             $this->due_date < now() &&
-            !in_array($this->status, ['paid', 'cancelled'], true);
+            ! in_array($this->status, ['paid', 'cancelled'], true);
     }
 
     public function getFormattedSubtotal()
     {
-        return '£' . number_format((float) $this->subtotal, 2);
+        return '£'.number_format((float) $this->subtotal, 2);
     }
 
     public function getFormattedTotalAmount()
     {
-        return '£' . number_format((float) $this->total_amount, 2);
+        return '£'.number_format((float) $this->total_amount, 2);
     }
 
     // Backward compatibility for existing views/controllers.
@@ -178,6 +179,6 @@ class Invoice extends Model
         preg_match('/(\d+)$/', (string) $lastInvoice, $matches);
         $nextNumber = isset($matches[1]) ? ((int) $matches[1]) + 1 : 1;
 
-        return 'Invoice #' . $nextNumber;
+        return 'Invoice #'.$nextNumber;
     }
 }

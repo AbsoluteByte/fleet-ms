@@ -315,7 +315,7 @@ class ReservationController extends Controller
         $fullName = trim((string) $driver->full_name);
 
         return [
-            'customer_name' => $fullName !== '' ? $fullName : ('Driver #' . $driver->id),
+            'customer_name' => $fullName !== '' ? $fullName : ('Driver #'.$driver->id),
             'customer_phone' => $driver->phone_number ?: null,
             'customer_email' => $driver->email ?: null,
         ];
@@ -323,7 +323,7 @@ class ReservationController extends Controller
 
     private function legacyDriverStub(CarReservation $reservation): Driver
     {
-        $driver = new Driver();
+        $driver = new Driver;
         $name = trim((string) ($reservation->attributes['customer_name'] ?? ''));
 
         if ($name !== '') {

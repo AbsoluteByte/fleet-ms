@@ -43,8 +43,7 @@ class LoginController extends Controller
     /**
      * The user has been authenticated.
      *
-     * @param \Illuminate\Http\Request $request
-     * @param mixed $user
+     * @param  mixed  $user
      * @return mixed
      */
     protected function authenticated(Request $request, $user)
@@ -55,10 +54,6 @@ class LoginController extends Controller
             return redirect()->back()->with('error', 'Your account has been deactivated. Please contact an administrator.');
         }
 
-        if (!$user->hasVerifiedEmail()) {
-            Auth::logout();
-            return redirect()->back()->with('error', 'Please verify your email first!');
-        }
         if ($user->hasAnyRole('driver')) {
             return redirect('driver/dashboard');
         }

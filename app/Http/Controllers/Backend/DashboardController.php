@@ -1105,5 +1105,4 @@ class DashboardController extends Controller
             'sort_key' => $invoice->due_date->timestamp,
         ];
     }
-
 }

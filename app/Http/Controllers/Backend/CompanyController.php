@@ -12,12 +12,14 @@ use Illuminate\Support\Str;
 class CompanyController extends Controller
 {
     protected $url = 'companies.';
+
     protected $dir = 'backend.companies.';
+
     protected $name = 'Companies';
 
     public function __construct()
     {
-        //$this->middleware('role:admin');
+        // $this->middleware('role:admin');
         view()->share('url', $this->url);
         view()->share('dir', $this->dir);
         view()->share('singular', Str::singular($this->name));
@@ -28,33 +30,35 @@ class CompanyController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
         $companies = Company::where('tenant_id', $tenant->id)->get();
-        return view($this->dir . 'index', compact('companies'));
+
+        return view($this->dir.'index', compact('companies'));
     }
 
     public function create()
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
 
-        $model = new Company();
-        return view($this->dir . 'create', compact('model'));
+        $model = new Company;
+
+        return view($this->dir.'create', compact('model'));
     }
 
     public function store(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -78,7 +82,7 @@ class CompanyController extends Controller
             $dims = getimagesize($request->logo);
             $width = $dims[0];
             $height = $dims[1];
-            $name = time() . '-' . $width . '-' . $height . '.' . $request->file('logo')->extension();
+            $name = time().'-'.$width.'-'.$height.'.'.$request->file('logo')->extension();
             $path = public_path('uploads/companies/');
             $file = $request->file('logo');
             if ($file->move($path, $name)) {
@@ -111,6 +115,7 @@ class CompanyController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
         $company->load('country');
+
         return view($this->dir.'show', compact('company'));
     }
 
@@ -118,19 +123,20 @@ class CompanyController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
         $model = Company::where('tenant_id', $tenant->id)->findOrFail($id);
-        return view($this->dir . 'edit', compact('model'));
+
+        return view($this->dir.'edit', compact('model'));
     }
 
     public function update(Request $request, Company $company)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -149,18 +155,17 @@ class CompanyController extends Controller
             'email' => 'required|email|max:255',
         ]);
 
-
         if ($request->hasFile('logo')) {
             $dims = getimagesize($request->logo);
             $width = $dims[0];
             $height = $dims[1];
-            $name = time() . '-' . $width . '-' . $height . '.' . $request->file('logo')->extension();
+            $name = time().'-'.$width.'-'.$height.'.'.$request->file('logo')->extension();
             $path = public_path('uploads/companies/');
             $file = $request->file('logo');
             $oldImage = $company->logo;
             if ($file->move($path, $name)) {
                 if ($oldImage) {
-                    $image_path = public_path('uploads/companies/' . $oldImage);
+                    $image_path = public_path('uploads/companies/'.$oldImage);
                     if (File::exists($image_path)) {
                         File::delete($image_path);
                     }
@@ -168,7 +173,6 @@ class CompanyController extends Controller
                 $validated['logo'] = $name;
             }
         }
-
 
         if (! filled($validated['address_line_2'] ?? null)) {
             $validated['address_line_2'] = null;
@@ -195,12 +199,13 @@ class CompanyController extends Controller
             abort(403, 'Unauthorized access');
         }
         if ($company) {
-            $image_path = public_path('uploads/companies/' . $company->logo);
+            $image_path = public_path('uploads/companies/'.$company->logo);
             if (File::exists($image_path)) {
                 File::delete($image_path);
             }
         }
         $company->delete();
+
         return redirect()->route($this->url.'index')
             ->with('success', 'Company deleted successfully.');
     }

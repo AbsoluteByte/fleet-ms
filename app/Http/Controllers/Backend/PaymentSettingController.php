@@ -12,7 +12,9 @@ use Illuminate\Support\Str;
 class PaymentSettingController extends Controller
 {
     protected $url = 'payment-settings.';
+
     protected $dir = 'backend.payment-settings.';
+
     protected $name = 'Payment Settings';
 
     public function __construct()
@@ -49,7 +51,7 @@ class PaymentSettingController extends Controller
                 ->with('error', 'No active company found!');
         }
 
-        $model = new PaymentSetting();
+        $model = new PaymentSetting;
         $companies = Company::where('tenant_id', $tenant->id)->orderBy('name')->pluck('name', 'id');
 
         return view($this->dir.'create', compact('model', 'companies'));

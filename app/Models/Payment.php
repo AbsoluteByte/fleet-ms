@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -57,6 +58,6 @@ class Payment extends Model
         preg_match('/(\d+)$/', (string) $lastPayment, $matches);
         $nextNumber = isset($matches[1]) ? ((int) $matches[1]) + 1 : 1;
 
-        return 'Payment #' . $nextNumber;
+        return 'Payment #'.$nextNumber;
     }
 }

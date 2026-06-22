@@ -1,19 +1,22 @@
 <?php
+
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
+use App\Models\Payment;
+use App\Services\PaymentAllocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use App\Models\Payment;
-use App\Services\PaymentAllocationService;
 
 class PaymentController extends Controller
 {
     protected $url = 'payments.';
+
     protected $dir = 'backend.payments.';
+
     protected $name = 'Payments';
 
     public function __construct()
@@ -105,7 +108,7 @@ class PaymentController extends Controller
             }
         }
 
-        $model = new Payment();
+        $model = new Payment;
 
         return view($this->dir.'create', compact('model', 'drivers', 'selectedDriver', 'openInvoices'));
     }

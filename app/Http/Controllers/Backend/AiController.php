@@ -84,7 +84,11 @@ class AiController extends Controller
 
             $rows = [];
 
-            foreach ($imagePaths as $imagePath) {
+            foreach ($imagePaths as $index => $imagePath) {
+                if ($index > 0) {
+                    sleep(1);
+                }
+
                 $filename = basename($imagePath);
                 $rowId = (string) Str::uuid();
                 $extracted = $extractionService->extractFromImage($imagePath);
@@ -290,7 +294,7 @@ class AiController extends Controller
      */
     private function extractImagePathsFromZip(string $zipPath, string $targetDir): array
     {
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
 
         if ($zip->open($zipPath) !== true) {
             throw new \RuntimeException('Could not open ZIP file.');
@@ -345,16 +349,16 @@ class AiController extends Controller
         $messages = array_filter(array_map(fn ($row) => strtolower((string) ($row['message'] ?? '')), $failed));
 
         foreach ($messages as $message) {
-            if (str_contains($message, 'quota exceeded') || str_contains($message, 'exceeded your current quota')) {
-                return 'OpenAI account quota exceeded — AI could not read the slips. Add billing or credits at platform.openai.com. You can still fill in each row manually below and save.';
+            if (str_contains($message, 'limit: 0') || str_contains($message, 'unavailable on your account')) {
+                return 'Gemini model is unavailable. Set GEMINI_MODEL=gemini-2.5-flash in .env, run php artisan config:clear, then try again.';
+            }
+
+            if (str_contains($message, 'quota') || str_contains($message, 'rate limit') || str_contains($message, 'resource exhausted')) {
+                return 'Gemini API quota or rate limit reached — AI could not read the slips. Wait and try again, or enter slip details manually below.';
             }
 
             if (str_contains($message, 'invalid') && str_contains($message, 'api key')) {
-                return 'OpenAI API key is invalid. Update OPENAI_API_KEY in .env, or enter slip details manually below.';
-            }
-
-            if (str_contains($message, 'rate limit')) {
-                return 'OpenAI rate limit reached. Wait and try again, or enter slip details manually below.';
+                return 'Gemini API key is invalid. Update GEMINI_API_KEY in .env, or enter slip details manually below.';
             }
         }
 
