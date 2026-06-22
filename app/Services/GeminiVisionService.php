@@ -56,11 +56,35 @@ class GeminiVisionService
             ],
             'generationConfig' => [
                 'responseMimeType' => 'application/json',
-                'maxOutputTokens' => 600,
+                'maxOutputTokens' => 1024,
+                'responseSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'registration' => ['type' => 'string'],
+                        'start_date' => ['type' => 'string'],
+                        'term' => ['type' => 'string'],
+                        'amount_paid' => ['type' => 'number'],
+                        'confidence' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'registration' => ['type' => 'string'],
+                                'start_date' => ['type' => 'string'],
+                                'term' => ['type' => 'string'],
+                                'amount_paid' => ['type' => 'string'],
+                            ],
+                        ],
+                        'notes' => ['type' => 'string'],
+                    ],
+                ],
             ],
         ];
 
         $response = $this->requestWithRetry($url, $apiKey, $payload);
+
+        if ($response->status() === 400 && isset($payload['generationConfig']['responseSchema'])) {
+            unset($payload['generationConfig']['responseSchema']);
+            $response = $this->requestWithRetry($url, $apiKey, $payload);
+        }
 
         if (! $response->successful()) {
             $error = $response->json('error');
@@ -78,24 +102,77 @@ class GeminiVisionService
             throw new \RuntimeException($this->formatApiError($code, $message, $response->status(), $model));
         }
 
-        $content = $response->json('candidates.0.content.parts.0.text');
+        $content = $this->extractTextFromResponse($response);
 
-        if (! is_string($content) || trim($content) === '') {
+        if ($content === null || $content === '') {
             $blockReason = $response->json('promptFeedback.blockReason');
             if (is_string($blockReason) && $blockReason !== '') {
                 throw new \RuntimeException('Gemini blocked this image: '.$blockReason);
             }
 
+            $finishReason = $response->json('candidates.0.finishReason');
+            if ($finishReason === 'MAX_TOKENS') {
+                throw new \RuntimeException('Gemini response was truncated. Try a clearer image or enter details manually.');
+            }
+
             throw new \RuntimeException('Gemini returned an empty response.');
+        }
+
+        return $this->parseJsonResponse($content);
+    }
+
+    private function extractTextFromResponse(Response $response): ?string
+    {
+        $parts = $response->json('candidates.0.content.parts');
+
+        if (! is_array($parts)) {
+            return null;
+        }
+
+        $text = '';
+
+        foreach ($parts as $part) {
+            if (is_array($part) && isset($part['text']) && is_string($part['text'])) {
+                $text .= $part['text'];
+            }
+        }
+
+        $text = trim($text);
+
+        return $text !== '' ? $text : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parseJsonResponse(string $content): array
+    {
+        $content = trim($content);
+
+        if (preg_match('/^```(?:json)?\s*(.*?)\s*```$/is', $content, $matches)) {
+            $content = trim($matches[1]);
         }
 
         $decoded = json_decode($content, true);
 
-        if (! is_array($decoded)) {
-            throw new \RuntimeException('Gemini returned invalid JSON.');
+        if (is_array($decoded)) {
+            return $decoded;
         }
 
-        return $decoded;
+        if (preg_match('/\{.*\}/s', $content, $matches)) {
+            $decoded = json_decode($matches[0], true);
+
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        Log::warning('Gemini invalid JSON response', [
+            'content_preview' => substr($content, 0, 1000),
+            'json_error' => json_last_error_msg(),
+        ]);
+
+        throw new \RuntimeException('Gemini returned invalid JSON. You can enter slip details manually on the review page.');
     }
 
     /**
