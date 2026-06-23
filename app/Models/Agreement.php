@@ -130,6 +130,33 @@ class Agreement extends Model
             ->whereDate('end_date', '>=', $today);
     }
 
+    public function scopeCurrentlyActive($query)
+    {
+        $today = now()->startOfDay();
+
+        return $query
+            ->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Active'))
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function rentedCarIdsForTenant(int $tenantId, ?int $excludeAgreementId = null): array
+    {
+        return static::query()
+            ->where('tenant_id', $tenantId)
+            ->currentlyActive()
+            ->whereNull('termination_notice_date')
+            ->when($excludeAgreementId, fn ($query) => $query->where('id', '!=', $excludeAgreementId))
+            ->pluck('car_id')
+            ->unique()
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     public function terminationRecordedBy()
     {
         return $this->belongsTo(User::class, 'termination_recorded_by');

@@ -73,6 +73,12 @@
                     @error('driver_id')
                     <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
+                    <div id="driver-active-agreement-warning" class="alert alert-warning mt-2 mb-0" style="display: none;" role="alert">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This driver already has an active agreement.
+                        <ul id="driver-active-agreement-list" class="mb-0 mt-2"></ul>
+                        <p class="mb-0 mt-2 small">You can still create this agreement if that is intended.</p>
+                    </div>
                 </div>
             </div>
 
@@ -955,6 +961,8 @@
     <script>
         const replacementVehicleStatusId = @json($replacementVehicleStatusId ?? null);
         const originalAgreements = @json($originalAgreements ?? []);
+        const driversActiveAgreements = @json($driversActiveAgreements ?? []);
+        const isAgreementCreate = @json(! isset($model) || ! $model->id);
         const selectedParentAgreementId = @json(old('parent_agreement_id') ?? (isset($model) ? $model->parent_agreement_id : null));
 
         const replacementVehicleFinancialFieldIds = ['agreed_rent', 'collection_type', 'rent_interval', 'deposit_amount'];
@@ -1000,6 +1008,43 @@
             } else {
                 field.removeAttribute('required');
             }
+        }
+
+        function updateDriverActiveAgreementWarning() {
+            const warning = document.getElementById('driver-active-agreement-warning');
+            const list = document.getElementById('driver-active-agreement-list');
+            const driverSelect = document.getElementById('driver_id');
+
+            if (!warning || !list || !driverSelect || !isAgreementCreate) {
+                return;
+            }
+
+            const driverId = driverSelect.value;
+
+            if (!driverId || isReplacementVehicleStatusSelected()) {
+                warning.style.display = 'none';
+                list.innerHTML = '';
+
+                return;
+            }
+
+            const agreements = driversActiveAgreements[driverId] || driversActiveAgreements[Number(driverId)] || [];
+
+            if (!agreements.length) {
+                warning.style.display = 'none';
+                list.innerHTML = '';
+
+                return;
+            }
+
+            list.innerHTML = agreements.map(function (agreement) {
+                if (agreement.url) {
+                    return '<li><a href="' + agreement.url + '">' + agreement.label + '</a></li>';
+                }
+
+                return '<li>' + agreement.label + '</li>';
+            }).join('');
+            warning.style.display = 'block';
         }
 
         function populateOriginalAgreementOptions() {
@@ -1101,6 +1146,8 @@
 
                 toggleAgreementPaymentFields();
             }
+
+            updateDriverActiveAgreementWarning();
         }
 
         function setSelectValue(selectOrId, value) {
@@ -1396,9 +1443,12 @@
             toggleInsuranceSections();
             toggleAgreementPaymentFields();
             updateVehicleInsuranceDisplay();
+            updateDriverActiveAgreementWarning();
 
             document.getElementById('status_id')?.addEventListener('change', toggleReplacementVehicleMode);
             document.getElementById('driver_id')?.addEventListener('change', function() {
+                updateDriverActiveAgreementWarning();
+
                 if (isReplacementVehicleStatusSelected()) {
                     populateOriginalAgreementOptions();
                 }
@@ -1406,6 +1456,8 @@
 
             if (typeof $ !== 'undefined') {
                 $('#driver_id').on('change', function() {
+                    updateDriverActiveAgreementWarning();
+
                     if (isReplacementVehicleStatusSelected()) {
                         populateOriginalAgreementOptions();
                     }

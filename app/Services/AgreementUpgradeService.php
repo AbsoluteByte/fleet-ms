@@ -19,15 +19,17 @@ class AgreementUpgradeService
 
     public function availableCars(Agreement $agreement): Collection
     {
+        $rentedCarIds = Agreement::rentedCarIdsForTenant($agreement->tenant_id, $agreement->id);
+
         return Car::where('tenant_id', $agreement->tenant_id)
-            ->with(['carModel', 'company', 'mots', 'roadTaxes', 'phvs', 'insurances.status', 'insurances.insuranceProvider', 'agreements', 'reservations'])
+            ->with(['carModel', 'company', 'mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status', 'insurances.insuranceProvider'])
             ->get()
-            ->filter(function (Car $car) use ($agreement) {
+            ->filter(function (Car $car) use ($agreement, $rentedCarIds) {
                 if ($car->id === $agreement->car_id) {
                     return false;
                 }
 
-                return $car->isEligibleForAgreementSelection() && $car->isAvailableForRent();
+                return $car->isSelectableForAgreement($rentedCarIds);
             })
             ->sortBy('registration')
             ->values();
@@ -80,7 +82,7 @@ class AgreementUpgradeService
         }
 
         $car = Car::where('tenant_id', $old->tenant_id)
-            ->with(['agreements', 'reservations', 'mots', 'roadTaxes', 'phvs', 'insurances.status'])
+            ->with(['mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status'])
             ->find($input['car_id']);
 
         if (! $car || $car->id === $old->car_id) {
@@ -89,9 +91,11 @@ class AgreementUpgradeService
             ]);
         }
 
-        if (! $car->isEligibleForAgreementSelection() || ! $car->isAvailableForRent()) {
+        $rentedCarIds = Agreement::rentedCarIdsForTenant($old->tenant_id, $old->id);
+
+        if (! $car->isSelectableForAgreement($rentedCarIds)) {
             throw ValidationException::withMessages([
-                'car_id' => ['The selected vehicle is not available for rent.'],
+                'car_id' => ['The selected vehicle is not available for this upgrade.'],
             ]);
         }
 

@@ -78,8 +78,9 @@ class AgreementController extends Controller
         $agreementPaymentAllowed = true;
         $originalAgreements = $this->originalAgreementsForForm($tenant);
         $replacementVehicleStatusId = $this->replacementVehicleStatusId();
+        $driversActiveAgreements = $this->driversActiveAgreementsForForm($tenant);
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId'));
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements'));
     }
 
     public function store(Request $request)
@@ -97,6 +98,8 @@ class AgreementController extends Controller
         if ($isReplacementVehicle) {
             $this->assertReplacementVehicleParentAgreement($validated, $tenant);
         }
+
+        $this->assertCarNotCurrentlyRented((int) $validated['car_id'], $tenant);
 
         $validated['auto_schedule_collections'] = false;
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isReplacementVehicle);
@@ -272,7 +275,7 @@ class AgreementController extends Controller
                 $drivers = $drivers->sortBy(fn (Driver $driver) => $driver->first_name.' '.$driver->last_name)->values();
             }
         }
-        $cars = $this->carsForAgreementForm($tenant, $agreement->car_id);
+        $cars = $this->carsForAgreementForm($tenant, $agreement->car_id, $agreement->id);
         $statuses = Status::where('type', 'agreement')->get();
 
         $canManageDiscount = $this->canManageDiscount();
@@ -299,6 +302,8 @@ class AgreementController extends Controller
         if ($isReplacementVehicle) {
             $this->assertReplacementVehicleParentAgreement($validated, $tenant, $agreement);
         }
+
+        $this->assertCarNotCurrentlyRented((int) $validated['car_id'], $tenant, $agreement->id);
 
         $validated['auto_schedule_collections'] = false;
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isReplacementVehicle);
@@ -548,6 +553,34 @@ class AgreementController extends Controller
     }
 
     /**
+     * @return array<int|string, list<array{id: int, label: string, url: string}>>
+     */
+    private function driversActiveAgreementsForForm(Tenant $tenant): array
+    {
+        return Agreement::query()
+            ->where('tenant_id', $tenant->id)
+            ->currentlyActive()
+            ->with(['car.carModel'])
+            ->orderByDesc('start_date')
+            ->get()
+            ->groupBy('driver_id')
+            ->map(fn ($agreements) => $agreements->map(function (Agreement $agreement) {
+                return [
+                    'id' => $agreement->id,
+                    'label' => sprintf(
+                        '#%d — %s (%s to %s)',
+                        $agreement->id,
+                        $agreement->car->registration,
+                        $agreement->start_date->format('d M Y'),
+                        $agreement->end_date->format('d M Y')
+                    ),
+                    'url' => route('agreements.show', $agreement),
+                ];
+            })->values()->all())
+            ->all();
+    }
+
+    /**
      * @param  array<string, mixed>  $validated
      */
     private function assertReplacementVehicleParentAgreement(array $validated, Tenant $tenant, ?Agreement $existing = null): void
@@ -614,17 +647,25 @@ class AgreementController extends Controller
         return $validated;
     }
 
-    private function carsForAgreementForm(Tenant $tenant, ?int $alwaysIncludeCarId = null)
+    private function carsForAgreementForm(Tenant $tenant, ?int $alwaysIncludeCarId = null, ?int $excludeAgreementId = null)
     {
+        $rentedCarIds = $this->rentedCarIdsForAgreementForm($tenant, $excludeAgreementId);
+
         $cars = Car::where('tenant_id', $tenant->id)
-            ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'insurances.status', 'insurances.insuranceProvider'])
+            ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status', 'insurances.insuranceProvider'])
             ->get()
-            ->filter(fn (Car $car) => $car->isEligibleForAgreementSelection());
+            ->filter(function (Car $car) use ($rentedCarIds, $alwaysIncludeCarId) {
+                if ($alwaysIncludeCarId && (int) $car->id === (int) $alwaysIncludeCarId) {
+                    return true;
+                }
+
+                return $car->isSelectableForAgreement($rentedCarIds);
+            });
 
         if ($alwaysIncludeCarId) {
             $currentCar = Car::where('tenant_id', $tenant->id)
                 ->where('id', $alwaysIncludeCarId)
-                ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'insurances.status', 'insurances.insuranceProvider'])
+                ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status', 'insurances.insuranceProvider'])
                 ->first();
 
             if ($currentCar && ! $cars->contains('id', $alwaysIncludeCarId)) {
@@ -633,6 +674,35 @@ class AgreementController extends Controller
         }
 
         return $cars->sortBy('registration')->values();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function rentedCarIdsForAgreementForm(Tenant $tenant, ?int $excludeAgreementId = null): array
+    {
+        return Agreement::rentedCarIdsForTenant($tenant->id, $excludeAgreementId);
+    }
+
+    private function assertCarNotCurrentlyRented(int $carId, Tenant $tenant, ?int $excludeAgreementId = null): void
+    {
+        $car = Car::where('tenant_id', $tenant->id)
+            ->with(['mots', 'roadTaxes', 'phvs', 'reservations'])
+            ->find($carId);
+
+        if (! $car) {
+            throw ValidationException::withMessages([
+                'car_id' => ['The selected vehicle could not be found.'],
+            ]);
+        }
+
+        $rentedCarIds = $this->rentedCarIdsForAgreementForm($tenant, $excludeAgreementId);
+
+        if (! $car->isSelectableForAgreement($rentedCarIds)) {
+            throw ValidationException::withMessages([
+                'car_id' => ['The selected vehicle is not available for an agreement.'],
+            ]);
+        }
     }
 
     private function mergeInsuranceData(Request $request, array $validated, ?Agreement $existing = null): array

@@ -341,11 +341,53 @@ class Car extends Model
 
     public function isEligibleForAgreementSelection(): bool
     {
-        if (($this->fleet_status ?? self::FLEET_STATUS_AVAILABLE_FOR_RENT) === self::FLEET_STATUS_NON_COMPLIANT) {
+        if ($this->sorn_applied || $this->hasActiveReservation()) {
+            return false;
+        }
+
+        if (in_array(
+            $this->fleet_status ?? self::FLEET_STATUS_AVAILABLE_FOR_RENT,
+            self::fleetStatusesBlockedForAgreementSelection(),
+            true
+        )) {
             return false;
         }
 
         return $this->isRoadLegalCompliant();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function fleetStatusesBlockedForAgreementSelection(): array
+    {
+        return [
+            self::FLEET_STATUS_PREPARATION_FOR_PHVL,
+            self::FLEET_STATUS_NON_COMPLIANT,
+            'damaged',
+            'written_off',
+            'stolen',
+            'for_sale',
+            'sold',
+            'reserved',
+            'vehicle_swap',
+            'sorn',
+        ];
+    }
+
+    public function hasActiveReservation(): bool
+    {
+        if ($this->relationLoaded('reservations')) {
+            return $this->activeReservation() !== null;
+        }
+
+        return $this->reservations()->where('status', 'active')->exists();
+    }
+
+    public function isSelectableForAgreement(array $rentedCarIds): bool
+    {
+        return ! in_array($this->id, $rentedCarIds, true)
+            && $this->isEligibleForAgreementSelection();
     }
 
     public function latestService()
@@ -390,18 +432,11 @@ class Car extends Model
             return false;
         }
 
-        if (in_array($this->fleet_status, [
-            self::FLEET_STATUS_PREPARATION_FOR_PHVL,
-            self::FLEET_STATUS_NON_COMPLIANT,
-            'damaged',
-            'written_off',
-            'stolen',
-            'for_sale',
-            'sold',
-            'reserved',
-            'vehicle_swap',
-            'sorn',
-        ], true)) {
+        if (in_array(
+            $this->fleet_status ?? self::FLEET_STATUS_AVAILABLE_FOR_RENT,
+            self::fleetStatusesBlockedForAgreementSelection(),
+            true
+        )) {
             return false;
         }
 
