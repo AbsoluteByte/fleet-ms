@@ -491,10 +491,20 @@
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/pdfmake.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
+    @php
+        $insuranceReportMeta = [
+            'fromLabel' => ($insuranceReportReady ?? false) && filled($insuranceFrom) ? \Carbon\Carbon::parse($insuranceFrom)->format('d M, Y') : null,
+            'toLabel' => ($insuranceReportReady ?? false) && filled($insuranceTo) ? \Carbon\Carbon::parse($insuranceTo)->format('d M, Y') : null,
+            'company' => ($insuranceReportReady ?? false) && $selectedInsuranceCompany ? $selectedInsuranceCompany->name : null,
+            'provider' => ($insuranceReportReady ?? false) && $selectedInsuranceProvider ? $selectedInsuranceProvider->provider_name : null,
+        ];
+    @endphp
     <script>
         $(document).ready(function () {
             let activeReportTab = @json($activeMainTab ?? 'mots');
             let activeInsuranceSubTab = 'removed';
+
+            const insuranceReportMeta = @json($insuranceReportMeta);
 
             const motFilters = { company: '', from: '', to: '', includeMissing: false };
             const phvlFilters = { company: '', from: '', to: '', includeMissing: false };
@@ -825,10 +835,42 @@
                 return rows;
             }
 
-            function exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix, options) {
+            function buildInsuranceExportMeta(subTabLabel) {
+                const lines = [
+                    'Report type: ' + subTabLabel,
+                ];
+
+                if (insuranceReportMeta.fromLabel && insuranceReportMeta.toLabel) {
+                    lines.push('Period: ' + insuranceReportMeta.fromLabel + ' to ' + insuranceReportMeta.toLabel);
+                }
+
+                lines.push('Company: ' + (insuranceReportMeta.company || 'All companies'));
+                lines.push('Insurance provider: ' + (insuranceReportMeta.provider || 'All providers'));
+
+                return {
+                    title: 'Insurance Report — ' + subTabLabel,
+                    lines: lines,
+                };
+            }
+
+            function exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle, options) {
                 options = options || {};
                 const headers = options.headers || reportExportHeaders.concat([expiryLabel, statusLabel]);
-                const lines = [headers.map(csvEscape).join(',')];
+                const lines = [];
+
+                if (reportTitle) {
+                    lines.push(csvEscape(reportTitle));
+                }
+
+                (options.subtitleLines || []).forEach(function (line) {
+                    lines.push(csvEscape(line));
+                });
+
+                if (reportTitle || (options.subtitleLines && options.subtitleLines.length)) {
+                    lines.push('');
+                }
+
+                lines.push(headers.map(csvEscape).join(','));
                 const bodyRows = collectExportRows(tableApi, options.maxCells || 9);
 
                 bodyRows.forEach(function (row) {
@@ -877,7 +919,18 @@
                         {
                             text: reportTitle + ' — ' + new Date().toISOString().slice(0, 10),
                             style: 'title',
-                            margin: [0, 0, 0, 12]
+                            margin: [0, 0, 0, 4]
+                        },
+                        ...(options.subtitleLines || []).map(function (line) {
+                            return {
+                                text: line,
+                                style: 'subtitle',
+                                margin: [0, 0, 0, 2]
+                            };
+                        }),
+                        {
+                            text: '',
+                            margin: [0, 0, 0, 8]
                         },
                         {
                             table: {
@@ -890,6 +943,7 @@
                     ],
                     styles: {
                         title: { fontSize: 14, bold: true },
+                        subtitle: { fontSize: 9, color: '#5e5873' },
                         tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
                         tableCell: { fontSize: 7 }
                     },
@@ -915,10 +969,12 @@
                     };
                     const label = subTabLabels[activeInsuranceSubTab] || 'Insurance';
                     const filePrefix = 'insurance-' + activeInsuranceSubTab + '-report';
+                    const exportMeta = buildInsuranceExportMeta(label);
 
-                    exportFn(table, null, null, filePrefix, 'Insurance Report — ' + label, {
+                    exportFn(table, null, null, filePrefix, exportMeta.title, {
                         headers: insuranceExportHeaders,
-                        maxCells: 8
+                        maxCells: 8,
+                        subtitleLines: exportMeta.lines,
                     });
                     return;
                 }
@@ -932,15 +988,15 @@
 
             $('#reportsExportCsv').on('click', function (e) {
                 e.preventDefault();
-                runActiveTabExport(function (tableApi, expiryLabel, statusLabel, filePrefix) {
-                    exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix);
+                runActiveTabExport(function (tableApi, expiryLabel, statusLabel, filePrefix, reportTitle, options) {
+                    exportTableCsv(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle, options);
                 });
             });
 
             $('#reportsExportPdf').on('click', function (e) {
                 e.preventDefault();
-                runActiveTabExport(function (tableApi, expiryLabel, statusLabel, filePrefix, reportTitle) {
-                    exportTablePdf(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle);
+                runActiveTabExport(function (tableApi, expiryLabel, statusLabel, filePrefix, reportTitle, options) {
+                    exportTablePdf(tableApi, expiryLabel, statusLabel, filePrefix, reportTitle, options);
                 });
             });
         });

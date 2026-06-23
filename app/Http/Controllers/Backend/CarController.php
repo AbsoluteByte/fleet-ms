@@ -402,6 +402,11 @@ class CarController extends Controller
             abort(403, 'Unauthorized access to this car.');
         }
 
+        if ($car->isFleetStatusLockedForEditing()) {
+            return redirect()->back()
+                ->with('error', 'This car is currently '.$car->fleetStatusLabel().'. Change the car status before editing its details.');
+        }
+
         $latestInsuranceBeforeUpdate = $car->insurances()
             ->with('status')
             ->orderByDesc('created_at')

@@ -17,6 +17,12 @@ class Car extends Model
 
     public const FLEET_STATUS_NON_COMPLIANT = 'non_compliant';
 
+    public const FLEET_STATUS_WRITTEN_OFF = 'written_off';
+
+    public const FLEET_STATUS_STOLEN = 'stolen';
+
+    public const FLEET_STATUS_SOLD = 'sold';
+
     protected $fillable = [
         'tenant_id', 'company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
@@ -196,6 +202,23 @@ class Car extends Model
 
         return self::fleetStatusLabels()[$status]
             ?? ucwords(str_replace('_', ' ', $status));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function fleetStatusesLockedForEditing(): array
+    {
+        return [
+            self::FLEET_STATUS_WRITTEN_OFF,
+            self::FLEET_STATUS_STOLEN,
+            self::FLEET_STATUS_SOLD,
+        ];
+    }
+
+    public function isFleetStatusLockedForEditing(): bool
+    {
+        return in_array($this->fleet_status, self::fleetStatusesLockedForEditing(), true);
     }
 
     // ==================== SCOPES ====================
