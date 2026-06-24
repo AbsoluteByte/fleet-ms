@@ -20,9 +20,9 @@
                 Permission Letter
             </a>
             @if($canUpgradeCar)
-                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#upgradeCarModal">
-                    <i class="fa fa-arrow-up me-2"></i>
-                    Upgrade Car
+                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#changeCarModal">
+                    <i class="fa fa-exchange me-2"></i>
+                    Change Car
                 </button>
             @endif
             <a href="{{ route('agreements.edit', $agreement) }}" class="btn btn-warning">
@@ -74,7 +74,7 @@
                                 @endif
                                 @if($agreement->isUpgradedAgreement() && $agreement->upgradedFromAgreement)
                                     <tr>
-                                        <td><strong>Upgraded from:</strong></td>
+                                        <td><strong>Changed from:</strong></td>
                                         <td>
                                             <a href="{{ route('agreements.show', $agreement->upgradedFromAgreement) }}">
                                                 #{{ $agreement->upgradedFromAgreement->id }}
@@ -85,7 +85,7 @@
                                 @endif
                                 @if($agreement->upgradedToAgreement)
                                     <tr>
-                                        <td><strong>Upgraded to:</strong></td>
+                                        <td><strong>Changed to:</strong></td>
                                         <td>
                                             <a href="{{ route('agreements.show', $agreement->upgradedToAgreement) }}">
                                                 #{{ $agreement->upgradedToAgreement->id }}
@@ -498,13 +498,13 @@
     </div>
 
     @if($canUpgradeCar)
-        <div class="modal fade" id="upgradeCarModal" tabindex="-1" role="dialog" aria-labelledby="upgradeCarModalLabel" aria-hidden="true">
+        <div class="modal fade" id="changeCarModal" tabindex="-1" role="dialog" aria-labelledby="changeCarModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg" role="document">
                 <div class="modal-content">
-                    <form method="POST" action="{{ route('agreements.upgrade-car', $agreement) }}" id="upgradeCarForm">
+                    <form method="POST" action="{{ route('agreements.upgrade-car', $agreement) }}" id="changeCarForm">
                         @csrf
                         <div class="modal-header">
-                            <h5 class="modal-title" id="upgradeCarModalLabel">Upgrade Car</h5>
+                            <h5 class="modal-title" id="changeCarModalLabel">Change Car</h5>
                             <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
                             </button>
@@ -512,70 +512,50 @@
                         <div class="modal-body">
                             <div class="alert alert-info">
                                 The current agreement will be closed and a new agreement will be created.
+                                Deposit carries over from the current agreement (no new deposit invoice).
                                 Billing stays aligned to the original cycle (next anchor:
                                 <strong>{{ \Carbon\Carbon::parse($upgradePreview['next_anchor'])->format('M d, Y') }}</strong>).
                             </div>
 
                             <div class="form-group">
-                                <label for="upgrade_car_id">Select Vehicle *</label>
-                                <select name="car_id" id="upgrade_car_id" class="form-control select-search" required>
+                                <label for="change_car_id">Select Vehicle *</label>
+                                <select name="car_id" id="change_car_id" class="form-control select-search" required>
                                     <option value="">Loading available vehicles...</option>
                                 </select>
-                                <div id="upgradeCarLoadError" class="text-danger small mt-1 d-none"></div>
+                                <div id="changeCarLoadError" class="text-danger small mt-1 d-none"></div>
                             </div>
 
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="upgrade_agreed_rent">Agreed Rent *</label>
-                                        <div class="input-group">
-                                            <div class="input-group-prepend">
-                                                <span class="input-group-text">£</span>
-                                            </div>
-                                            <input type="number" name="agreed_rent" id="upgrade_agreed_rent"
-                                                   class="form-control @error('agreed_rent') is-invalid @enderror"
-                                                   step="0.01" min="0.01" required
-                                                   value="{{ old('agreed_rent') }}">
-                                        </div>
-                                        <small class="form-text text-muted">Must be greater than current rent (£{{ number_format($agreement->agreed_rent, 2) }}).</small>
-                                        @error('agreed_rent')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
+                            <div class="form-group">
+                                <label for="change_agreed_rent">Agreed Rent *</label>
+                                <div class="input-group">
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text">£</span>
                                     </div>
+                                    <input type="number" name="agreed_rent" id="change_agreed_rent"
+                                           class="form-control @error('agreed_rent') is-invalid @enderror"
+                                           step="0.01" min="0" required
+                                           value="{{ old('agreed_rent', $agreement->agreed_rent) }}">
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="upgrade_deposit_amount">Deposit *</label>
-                                        <div class="input-group">
-                                            <div class="input-group-prepend">
-                                                <span class="input-group-text">£</span>
-                                            </div>
-                                            <input type="number" name="deposit_amount" id="upgrade_deposit_amount"
-                                                   class="form-control @error('deposit_amount') is-invalid @enderror"
-                                                   step="0.01" min="0" required
-                                                   value="{{ old('deposit_amount') }}">
-                                        </div>
-                                        @error('deposit_amount')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                </div>
+                                <small class="form-text text-muted">Current rent: £{{ number_format($agreement->agreed_rent, 2) }}. You may enter a higher or lower amount.</small>
+                                @error('agreed_rent')
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                @enderror
                             </div>
 
                             <div class="card bg-light">
                                 <div class="card-body py-2">
-                                    <h6 class="mb-1">Estimated first rent invoice (proration)</h6>
-                                    <p class="mb-0" id="upgradeProrationPreview">
-                                        Enter a new agreed rent to see the estimated proration amount.
+                                    <h6 class="mb-1">Estimated first-period adjustment</h6>
+                                    <p class="mb-0" id="changeCarAdjustmentPreview">
+                                        Enter a new agreed rent to see the estimated invoice or credit.
                                     </p>
                                 </div>
                             </div>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary" id="upgradeCarSubmitBtn">
+                            <button type="submit" class="btn btn-primary" id="changeCarSubmitBtn">
                                 <i class="fa fa-check mr-50"></i>
-                                Upgrade &amp; Create Agreement
+                                Change &amp; Create Agreement
                             </button>
                         </div>
                     </form>
@@ -667,8 +647,8 @@
             return '£' + Number(amount).toFixed(2);
         }
 
-        function calculateProration(newRent) {
-            if (!upgradePreview || newRent <= currentAgreedRent) {
+        function calculateChangeCarAdjustment(newRent) {
+            if (!upgradePreview || isNaN(newRent)) {
                 return null;
             }
 
@@ -676,42 +656,57 @@
             const amount = (rentDiff / upgradePreview.period_days) * upgradePreview.remaining_days;
 
             return {
-                amount: Math.max(amount, 0),
-                rentDiff,
+                amount: amount,
+                rentDiff: rentDiff,
+                type: amount > 0 ? 'invoice' : (amount < 0 ? 'credit' : 'none'),
             };
         }
 
-        function updateUpgradeProrationPreview() {
-            const previewEl = document.getElementById('upgradeProrationPreview');
-            const rentInput = document.getElementById('upgrade_agreed_rent');
+        function updateChangeCarAdjustmentPreview() {
+            const previewEl = document.getElementById('changeCarAdjustmentPreview');
+            const rentInput = document.getElementById('change_agreed_rent');
 
             if (!previewEl || !rentInput || !upgradePreview) {
                 return;
             }
 
             const newRent = parseFloat(rentInput.value || '0');
-            const proration = calculateProration(newRent);
+            const adjustment = calculateChangeCarAdjustment(newRent);
 
-            if (!proration) {
-                previewEl.textContent = 'Enter a new agreed rent greater than the current rent to see the estimated proration.';
+            if (!adjustment || isNaN(newRent)) {
+                previewEl.textContent = 'Enter a new agreed rent to see the estimated invoice or credit.';
                 return;
             }
 
             if (upgradePreview.remaining_days === 0) {
-                previewEl.innerHTML = 'Upgrade is on a billing anchor day, so no proration invoice will be created. The first full rent invoice will be on the next billing date.';
+                previewEl.innerHTML = 'Change is on a billing anchor day, so no immediate adjustment will be made. The first full rent invoice will be on the next billing date.';
+                return;
+            }
+
+            if (adjustment.type === 'none') {
+                previewEl.innerHTML = 'Rent is unchanged. No immediate invoice or credit. The next full rent invoice will be on the billing anchor date.';
+                return;
+            }
+
+            if (adjustment.type === 'credit') {
+                previewEl.innerHTML = `
+                    Rent difference: <strong>${formatMoney(adjustment.rentDiff)}</strong> per period<br>
+                    Remaining days until next billing anchor: <strong>${upgradePreview.remaining_days}</strong><br>
+                    Estimated driver credit: <strong>${formatMoney(Math.abs(adjustment.amount))}</strong> (visible on driver payments)
+                `;
                 return;
             }
 
             previewEl.innerHTML = `
-                Rent difference: <strong>${formatMoney(proration.rentDiff)}</strong> per period<br>
+                Rent difference: <strong>${formatMoney(adjustment.rentDiff)}</strong> per period<br>
                 Remaining days until next billing anchor: <strong>${upgradePreview.remaining_days}</strong><br>
-                Estimated proration invoice: <strong>${formatMoney(proration.amount)}</strong>
+                Estimated proration invoice: <strong>${formatMoney(adjustment.amount)}</strong>
             `;
         }
 
-        function loadUpgradeCars() {
-            const carSelect = document.getElementById('upgrade_car_id');
-            const errorEl = document.getElementById('upgradeCarLoadError');
+        function loadChangeCars() {
+            const carSelect = document.getElementById('change_car_id');
+            const errorEl = document.getElementById('changeCarLoadError');
 
             if (!carSelect) {
                 return;
@@ -767,21 +762,21 @@
         }
 
         jQuery(document).ready(function () {
-            const upgradeModal = jQuery('#upgradeCarModal');
-            const rentInput = document.getElementById('upgrade_agreed_rent');
+            const changeCarModal = jQuery('#changeCarModal');
+            const rentInput = document.getElementById('change_agreed_rent');
 
             if (rentInput) {
-                rentInput.addEventListener('input', updateUpgradeProrationPreview);
-                updateUpgradeProrationPreview();
+                rentInput.addEventListener('input', updateChangeCarAdjustmentPreview);
+                updateChangeCarAdjustmentPreview();
             }
 
-            if (upgradeModal.length) {
-                upgradeModal.on('show.bs.modal', loadUpgradeCars);
+            if (changeCarModal.length) {
+                changeCarModal.on('show.bs.modal', loadChangeCars);
             }
 
-            @if($errors->has('car_id') || $errors->has('agreed_rent') || $errors->has('deposit_amount'))
-                upgradeModal.modal('show');
-                loadUpgradeCars();
+            @if($errors->has('car_id') || $errors->has('agreed_rent'))
+                changeCarModal.modal('show');
+                loadChangeCars();
             @endif
         });
     </script>

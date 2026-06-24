@@ -47,4 +47,13 @@ class InsuranceProvider extends Model
                 ->orWhereDate('expiry_date', '>=', now()->toDateString());
         });
     }
+
+    public function isExpired(): bool
+    {
+        if (! $this->expiry_date) {
+            return false;
+        }
+
+        return $this->expiry_date->copy()->startOfDay()->lt(now()->startOfDay());
+    }
 }

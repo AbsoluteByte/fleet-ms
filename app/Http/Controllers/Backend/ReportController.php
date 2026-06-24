@@ -84,7 +84,7 @@ class ReportController extends Controller
         $reportInsuranceProviders = InsuranceProvider::query()
             ->where('tenant_id', $tenant->id)
             ->orderBy('provider_name')
-            ->get(['id', 'provider_name']);
+            ->get(['id', 'provider_name', 'expiry_date']);
 
         if ($insuranceCompanyId && ! $reportCompanies->contains('id', $insuranceCompanyId)) {
             $insuranceCompanyId = null;

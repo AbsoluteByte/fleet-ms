@@ -519,6 +519,7 @@ class CarStatusChangeService
             'payload.buyer_name' => 'required|string|max:255',
             'payload.buyer_contact' => 'required|string|max:255',
             'payload.buyer_address' => 'required|string',
+            'payload.notes' => 'nullable|string',
         ]);
 
         $this->cancelActiveReservationsAndSwapsForCar($car);

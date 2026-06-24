@@ -221,6 +221,24 @@ class Car extends Model
         return in_array($this->fleet_status, self::fleetStatusesLockedForEditing(), true);
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function fleetStatusesExcludedFromPhvlManagement(): array
+    {
+        return [
+            self::FLEET_STATUS_WRITTEN_OFF,
+            self::FLEET_STATUS_STOLEN,
+            self::FLEET_STATUS_SOLD,
+            'for_sale',
+        ];
+    }
+
+    public function isExcludedFromPhvlManagement(): bool
+    {
+        return in_array($this->fleet_status, self::fleetStatusesExcludedFromPhvlManagement(), true);
+    }
+
     // ==================== SCOPES ====================
 
     // ✅ Scope for specific tenant
@@ -235,6 +253,14 @@ class Car extends Model
         $tenant = auth()->user()->currentTenant();
 
         return $query->where('tenant_id', $tenant->id ?? 0);
+    }
+
+    public function scopeEligibleForPhvlManagement($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('fleet_status')
+                ->orWhereNotIn('fleet_status', self::fleetStatusesExcludedFromPhvlManagement());
+        });
     }
 
     /**

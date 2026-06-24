@@ -125,7 +125,9 @@
                                                 <select name="insurance_provider_id" id="insurance_provider_id" class="form-control">
                                                     <option value="">All providers</option>
                                                     @foreach($reportInsuranceProviders as $provider)
-                                                        <option value="{{ $provider->id }}" @selected((int) ($insuranceProviderId ?? 0) === (int) $provider->id)>{{ $provider->provider_name }}</option>
+                                                        <option value="{{ $provider->id }}" @selected((int) ($insuranceProviderId ?? 0) === (int) $provider->id)>
+                                                            {{ $provider->provider_name }}@if($provider->isExpired()) (Expired)@endif
+                                                        </option>
                                                     @endforeach
                                                 </select>
                                             </div>
@@ -147,7 +149,7 @@
                                                 Company: <strong>{{ $selectedInsuranceCompany->name }}</strong>.
                                             @endif
                                             @if($selectedInsuranceProvider)
-                                                Provider: <strong>{{ $selectedInsuranceProvider->provider_name }}</strong>.
+                                                Provider: <strong>{{ $selectedInsuranceProvider->provider_name }}@if($selectedInsuranceProvider->isExpired()) (Expired)@endif</strong>.
                                             @endif
                                         </p>
 

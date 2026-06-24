@@ -62,6 +62,7 @@ class PhvlController extends Controller
 
         $cars = Car::query()
             ->forCurrentTenant()
+            ->eligibleForPhvlManagement()
             ->with(['company', 'carModel', 'mots', 'phvs.counsel', 'phvlProgress'])
             ->orderBy('registration')
             ->get();
@@ -265,6 +266,7 @@ class PhvlController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
         abort_unless($tenant && (int) $car->tenant_id === (int) $tenant->id, 403);
+        abort_if($car->isExcludedFromPhvlManagement(), 403);
     }
 
     private function needApplyEligible(Car $car): bool

@@ -59,6 +59,8 @@ class CarController extends Controller
                 'company',
                 'carModel',
                 'phvs.counsel',
+                'mots',
+                'roadTaxes',
                 'insurances.status',
                 'services',
                 'reservations',

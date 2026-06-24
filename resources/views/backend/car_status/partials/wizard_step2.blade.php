@@ -718,6 +718,14 @@
                 @enderror
             </div>
             <div class="col-md-12 form-group">
+                <label for="fleet_sold_notes">Notes</label>
+                <textarea name="payload[notes]" id="fleet_sold_notes" rows="3"
+                          class="form-control @error('payload.notes') is-invalid @enderror">{{ $payloadOld('notes') }}</textarea>
+                @error('payload.notes')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-12 form-group">
                 <label for="fleet_sold_documents">Sale documents</label>
                 @if($existingSoldDocs !== [])
                     <div class="mb-2">

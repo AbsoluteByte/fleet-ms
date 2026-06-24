@@ -71,7 +71,7 @@ class AgreementInvoiceService
         $previous = $originalStart->copy()->startOfDay();
         $target = $anchor->copy()->startOfDay();
 
-        while ($this->nextInvoiceDate($previous, $rentInterval)->lte($target)) {
+        while ($this->nextInvoiceDate($previous, $rentInterval)->lt($target)) {
             $previous = $this->nextInvoiceDate($previous, $rentInterval);
         }
 
@@ -80,16 +80,23 @@ class AgreementInvoiceService
 
     public function calculateUpgradeProration(Agreement $new, Agreement $old, ?Carbon $upgradeDate = null): float
     {
-        $upgradeDate = ($upgradeDate ?? $new->start_date)->copy()->startOfDay();
+        $adjustment = $this->calculateChangeCarAdjustment($new, $old, $upgradeDate);
+
+        return max($adjustment, 0);
+    }
+
+    public function calculateChangeCarAdjustment(Agreement $new, Agreement $old, ?Carbon $changeDate = null): float
+    {
+        $changeDate = ($changeDate ?? $new->start_date)->copy()->startOfDay();
         $originalStart = $old->start_date->copy()->startOfDay();
         $rentInterval = (string) $new->rent_interval;
 
-        if ($this->isBillingAnchor($originalStart, $upgradeDate, $rentInterval)) {
+        if ($this->isBillingAnchor($originalStart, $changeDate, $rentInterval)) {
             return 0;
         }
 
-        $nextAnchor = $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval);
-        $remainingDays = $upgradeDate->diffInDays($nextAnchor);
+        $nextAnchor = $this->nextBillingAnchor($originalStart, $changeDate, $rentInterval);
+        $remainingDays = $changeDate->diffInDays($nextAnchor);
 
         if ($remainingDays <= 0) {
             return 0;
@@ -103,15 +110,28 @@ class AgreementInvoiceService
         }
 
         $rentDiff = (float) $new->agreed_rent - (float) $old->agreed_rent;
+        $subtotal = round($rentDiff / $periodDays * $remainingDays, 2);
 
-        if ($rentDiff <= 0) {
-            return 0;
+        if ($subtotal > 0) {
+            $discountAmount = $this->discountAmount($new, $subtotal);
+
+            return round(max($subtotal - $discountAmount, 0), 2);
         }
 
-        $subtotal = round($rentDiff / $periodDays * $remainingDays, 2);
-        $discountAmount = $this->discountAmount($new, $subtotal);
+        return $subtotal;
+    }
 
-        return max($subtotal - $discountAmount, 0);
+    public function changeCarAdjustmentType(float $adjustment): string
+    {
+        if ($adjustment > 0) {
+            return 'invoice';
+        }
+
+        if ($adjustment < 0) {
+            return 'credit';
+        }
+
+        return 'none';
     }
 
     public function isBillingAnchor(Carbon $originalStart, Carbon $date, string $rentInterval): bool
@@ -150,15 +170,15 @@ class AgreementInvoiceService
 
         $throughDate = $throughDate?->copy()->startOfDay() ?? now()->startOfDay();
         $endDate = $agreement->end_date->copy()->startOfDay()->min($throughDate);
-        $generated = $this->syncDepositInvoice($agreement) ? 1 : 0;
+        $generated = 0;
         $upgradeDate = $agreement->start_date->copy()->startOfDay();
         $originalStart = $old->start_date->copy()->startOfDay();
         $rentInterval = (string) $agreement->rent_interval;
         $nextAnchor = $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval);
-        $proration = $this->calculateUpgradeProration($agreement, $old, $upgradeDate);
+        $adjustment = $this->calculateChangeCarAdjustment($agreement, $old, $upgradeDate);
 
-        if ($proration > 0) {
-            if ($this->createUpgradeProrationInvoice($agreement, $upgradeDate, $proration, $nextAnchor)) {
+        if ($adjustment > 0) {
+            if ($this->createChangeCarProrationInvoice($agreement, $upgradeDate, $adjustment, $nextAnchor)) {
                 $generated++;
             }
         }
@@ -247,7 +267,7 @@ class AgreementInvoiceService
         return true;
     }
 
-    private function createUpgradeProrationInvoice(Agreement $agreement, Carbon $invoiceDate, float $totalAmount, Carbon $nextAnchor): bool
+    private function createChangeCarProrationInvoice(Agreement $agreement, Carbon $invoiceDate, float $totalAmount, Carbon $nextAnchor): bool
     {
         $exists = Invoice::query()
             ->where('invoice_type', 'agreement')
@@ -275,7 +295,7 @@ class AgreementInvoiceService
             'paid_amount' => 0,
             'balance_amount' => $totalAmount,
             'status' => $totalAmount <= 0 ? 'paid' : ($dueDate->lt(now()->startOfDay()) ? 'overdue' : 'pending'),
-            'notes' => 'Upgrade proration until '.$nextAnchor->toDateString(),
+            'notes' => 'Car change proration until '.$nextAnchor->toDateString(),
         ]);
 
         app(PaymentAllocationService::class)->allocateAvailableCreditToInvoice($invoice);

@@ -208,7 +208,7 @@ class AgreementController extends Controller
         $upgradeService = app(AgreementUpgradeService::class);
 
         if (! $upgradeService->canUpgrade($agreement)) {
-            return response()->json(['message' => 'This agreement is not eligible for a car upgrade.'], 422);
+            return response()->json(['message' => 'This agreement is not eligible for a car change.'], 422);
         }
 
         $cars = $upgradeService->availableCars($agreement)->map(function (Car $car) {
@@ -241,19 +241,18 @@ class AgreementController extends Controller
         $validated = $request->validate([
             'car_id' => 'required|exists:cars,id',
             'agreed_rent' => 'required|numeric|min:0',
-            'deposit_amount' => 'required|numeric|min:0',
         ]);
 
         try {
             $newAgreement = app(AgreementUpgradeService::class)->upgrade($agreement, $validated);
 
             return redirect()->route('agreements.show', $newAgreement)
-                ->with('success', 'Car upgraded successfully. A new agreement has been created.');
+                ->with('success', 'Car changed successfully. A new agreement has been created.');
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error upgrading car: '.$e->getMessage());
+                ->with('error', 'Error changing car: '.$e->getMessage());
         }
     }
 

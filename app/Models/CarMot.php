@@ -14,7 +14,7 @@ class CarMot extends Model
     protected $casts = [
         'test_date' => 'date',
         'expiry_date' => 'date',
-        'amount' => 'decimal:2'
+        'amount' => 'decimal:2',
     ];
 
     public function car()

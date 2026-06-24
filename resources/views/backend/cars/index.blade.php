@@ -8,7 +8,6 @@
                         <h4 class="card-title">{{ $plural }}</h4>
                         <div class="float-right">
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="available_by_phv">Available by PHV</button>
-                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="awaiting_phv">Awaiting PHV</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="preparation_for_phvl">PHVL Preparation</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="damaged">Damaged</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="non_compliant">Non-Compliant</button>
@@ -40,6 +39,17 @@
                             @else
                                 @include('alerts')
                             @endif
+                            <div class="cars-table-toolbar" id="carsTableToolbar">
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" id="carsExportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        <i class="fa fa-download mr-50"></i> Export
+                                    </button>
+                                    <div class="dropdown-menu dropdown-menu-right" aria-labelledby="carsExportDropdown">
+                                        <button type="button" class="dropdown-item" id="carsExportCsv">Export CSV</button>
+                                        <button type="button" class="dropdown-item" id="carsExportPdf">Export PDF</button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="table-responsive">
                                 <table id="dataTable" class="table datatable table-bordered table-striped">
                                     <thead>
@@ -70,6 +80,15 @@
                                                 : (strcasecmp($latestInsuranceStatusName, 'Active') === 0 ? 'Active' : 'Inactive');
                                             $phvCounselLabel = $car->latestPhvCounselName() ?? '—';
                                             $carNotificationCount = $carNotificationCounts[$car->registration] ?? 0;
+                                            $motExpiry = $car->latestMot()?->expiry_date;
+                                            $motExpiryIso = $motExpiry ? $motExpiry->format('Y-m-d') : '';
+                                            $roadTaxExpiry = $car->latestRoadTax()?->expiryDate();
+                                            $roadTaxExpiryIso = $roadTaxExpiry ? $roadTaxExpiry->format('Y-m-d') : '';
+                                            $latestPhv = $car->phvs
+                                                ->sortByDesc(fn (\App\Models\CarPhv $p) => [optional($p->expiry_date)->timestamp ?? 0, $p->id])
+                                                ->first();
+                                            $phvExpiry = $latestPhv?->expiry_date;
+                                            $phvExpiryIso = $phvExpiry ? $phvExpiry->format('Y-m-d') : '';
                                         @endphp
                                         <tr
                                             data-company="{{ $car->company->name }}"
@@ -82,6 +101,12 @@
                                             data-awaiting-log-book="{{ $isAwaitingLogBook ? '1' : '0' }}"
                                             data-council="{{ $phvCounselLabel }}"
                                             data-insurance-status="{{ $insuranceStatusLabel }}"
+                                            data-mot-expiry="{{ $motExpiryIso }}"
+                                            data-mot-missing="{{ $motExpiryIso === '' ? '1' : '0' }}"
+                                            data-road-tax-expiry="{{ $roadTaxExpiryIso }}"
+                                            data-road-tax-missing="{{ $roadTaxExpiryIso === '' ? '1' : '0' }}"
+                                            data-phv-expiry="{{ $phvExpiryIso }}"
+                                            data-phv-missing="{{ $phvExpiryIso === '' ? '1' : '0' }}"
                                         >
                                             <td>
                                                 <strong>{{ $car->registration ?: '—' }}</strong>
@@ -247,6 +272,90 @@
                 </select>
             </div>
 
+            <div class="form-group reports-expiring-month-group">
+                <div class="reports-expiring-label-row d-flex justify-content-between align-items-center mb-1">
+                    <label class="mb-0">MOT expiring in</label>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary reports-month-picker-btn" id="carsMotMonthPickerBtn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Pick month">
+                            <i class="fa fa-calendar" aria-hidden="true"></i>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right" id="carsMotMonthMenu" aria-labelledby="carsMotMonthPickerBtn"></div>
+                    </div>
+                </div>
+                <div class="form-row cars-expiry-date-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsMotExpiringFrom">From</label>
+                        <input type="date" id="carsMotExpiringFrom" class="form-control cars-expiry-filter">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsMotExpiringTo">To</label>
+                        <input type="date" id="carsMotExpiringTo" class="form-control cars-expiry-filter">
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input cars-expiry-filter" id="carsIncludeMissingMot">
+                    <label class="custom-control-label" for="carsIncludeMissingMot">Include cars with no MOT added yet</label>
+                </div>
+            </div>
+
+            <div class="form-group reports-expiring-month-group">
+                <div class="reports-expiring-label-row d-flex justify-content-between align-items-center mb-1">
+                    <label class="mb-0">Road tax expiring in</label>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary reports-month-picker-btn" id="carsRoadTaxMonthPickerBtn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Pick month">
+                            <i class="fa fa-calendar" aria-hidden="true"></i>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right" id="carsRoadTaxMonthMenu" aria-labelledby="carsRoadTaxMonthPickerBtn"></div>
+                    </div>
+                </div>
+                <div class="form-row cars-expiry-date-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsRoadTaxExpiringFrom">From</label>
+                        <input type="date" id="carsRoadTaxExpiringFrom" class="form-control cars-expiry-filter">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsRoadTaxExpiringTo">To</label>
+                        <input type="date" id="carsRoadTaxExpiringTo" class="form-control cars-expiry-filter">
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input cars-expiry-filter" id="carsIncludeMissingRoadTax">
+                    <label class="custom-control-label" for="carsIncludeMissingRoadTax">Include cars with no road tax added yet</label>
+                </div>
+            </div>
+
+            <div class="form-group reports-expiring-month-group">
+                <div class="reports-expiring-label-row d-flex justify-content-between align-items-center mb-1">
+                    <label class="mb-0">PHV expiring in</label>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary reports-month-picker-btn" id="carsPhvMonthPickerBtn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Pick month">
+                            <i class="fa fa-calendar" aria-hidden="true"></i>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right" id="carsPhvMonthMenu" aria-labelledby="carsPhvMonthPickerBtn"></div>
+                    </div>
+                </div>
+                <div class="form-row cars-expiry-date-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsPhvExpiringFrom">From</label>
+                        <input type="date" id="carsPhvExpiringFrom" class="form-control cars-expiry-filter">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsPhvExpiringTo">To</label>
+                        <input type="date" id="carsPhvExpiringTo" class="form-control cars-expiry-filter">
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input cars-expiry-filter" id="carsIncludeMissingPhv">
+                    <label class="custom-control-label" for="carsIncludeMissingPhv">Include cars with no PHV added yet</label>
+                </div>
+            </div>
+
             <button type="button" class="btn btn-outline-secondary btn-block" id="carsFilterReset">Reset Filters</button>
         </div>
     </aside>
@@ -277,6 +386,25 @@
             display: flex;
             justify-content: flex-end;
             align-items: center;
+        }
+
+        .cars-table-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .cars-table-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+
+        .card-dashboard .dataTables_wrapper .dataTables_filter {
+            margin-top: 0;
+            float: none;
         }
 
         #dataTable_filter label {
@@ -443,11 +571,37 @@
             padding: 0 5px !important;
             border-radius: 999px !important;
         }
+
+        .reports-expiring-month-group {
+            margin-bottom: 1rem;
+        }
+
+        .cars-filter-panel__body .reports-expiring-month-group .dropdown-menu {
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .cars-expiry-date-row {
+            margin-left: 0;
+            margin-right: 0;
+        }
+
+        .cars-expiry-date-row > [class*="col-"] {
+            padding-left: 0;
+            padding-right: 0.5rem;
+        }
+
+        .cars-expiry-date-row > [class*="col-"]:last-child {
+            padding-right: 0;
+            padding-left: 0.5rem;
+        }
     </style>
 @endsection
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/pdfmake.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
     <script>
         $(document).ready(function () {
             (function applyDeletedCarRegistrationAlert() {
@@ -486,6 +640,25 @@
                 color: '',
                 logBook: ''
             };
+            const expiryFilters = {
+                mot: { from: '', to: '', includeMissing: false },
+                roadTax: { from: '', to: '', includeMissing: false },
+                phv: { from: '', to: '', includeMissing: false },
+            };
+            const quickFilterLabels = {
+                available_by_phv: 'Available by PHV',
+                preparation_for_phvl: 'PHVL Preparation',
+                damaged: 'Damaged',
+                non_compliant: 'Non-Compliant',
+                written_off: 'Written off',
+                stolen: 'Stolen',
+                for_sale: 'For sale',
+                sold: 'Sold',
+            };
+            const carsExportHeaders = [
+                'Registration', 'Company', 'Model', 'Color', 'Status',
+                'PHV Council', 'Insurance Status', 'MOT Expiry', 'Road Tax Expiry', 'PHV Expiry'
+            ];
             let quickFilter = '';
 
             const dataTable = $('#dataTable').DataTable({
@@ -493,9 +666,84 @@
                 responsive: true,
             });
 
+            const $filter = $('#dataTable_filter');
+            const $toolbar = $('#carsTableToolbar');
+            if ($filter.length && $toolbar.length && !$filter.parent().hasClass('cars-table-controls')) {
+                const $controls = $('<div class="cars-table-controls"></div>');
+                $filter.before($controls);
+                $controls.append($toolbar);
+                $controls.append($filter);
+            }
+
             $('#dataTable_filter').append(
                 '<button type="button" class="cars-filter-button" id="carsFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
             );
+
+            function parseDateYmd(value) {
+                if (!value) return null;
+                const parts = value.split('-');
+                if (parts.length !== 3) return null;
+                const date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                return isNaN(date.getTime()) ? null : date;
+            }
+
+            function formatDisplayDate(iso) {
+                if (!iso) return '';
+                const date = parseDateYmd(iso);
+                if (!date) return iso;
+                return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+
+            function expiryInRange(expiryIso, fromStr, toStr) {
+                if (!expiryIso) return false;
+                const expiry = parseDateYmd(expiryIso);
+                if (!expiry) return false;
+                const from = parseDateYmd(fromStr);
+                const to = parseDateYmd(toStr);
+                if (from && expiry < from) return false;
+                if (to && expiry > to) return false;
+                return true;
+            }
+
+            function isExpiryFilterActive(filters) {
+                return !!(filters.from || filters.to || filters.includeMissing);
+            }
+
+            function passesExpiryFilter(row, filters, expiryKey, missingKey) {
+                if (!isExpiryFilterActive(filters)) {
+                    return true;
+                }
+
+                const isMissing = row.dataset[missingKey] === '1';
+                const expiryIso = row.dataset[expiryKey] || '';
+                const hasDateRange = !!(filters.from || filters.to);
+
+                if (filters.includeMissing && isMissing) {
+                    return true;
+                }
+
+                if (hasDateRange && expiryInRange(expiryIso, filters.from, filters.to)) {
+                    return true;
+                }
+
+                if (!hasDateRange && filters.includeMissing) {
+                    return isMissing;
+                }
+
+                return false;
+            }
+
+            function syncExpiryFiltersFromForm() {
+                expiryFilters.mot.from = document.getElementById('carsMotExpiringFrom').value;
+                expiryFilters.mot.to = document.getElementById('carsMotExpiringTo').value;
+                expiryFilters.mot.includeMissing = document.getElementById('carsIncludeMissingMot').checked;
+                expiryFilters.roadTax.from = document.getElementById('carsRoadTaxExpiringFrom').value;
+                expiryFilters.roadTax.to = document.getElementById('carsRoadTaxExpiringTo').value;
+                expiryFilters.roadTax.includeMissing = document.getElementById('carsIncludeMissingRoadTax').checked;
+                expiryFilters.phv.from = document.getElementById('carsPhvExpiringFrom').value;
+                expiryFilters.phv.to = document.getElementById('carsPhvExpiringTo').value;
+                expiryFilters.phv.includeMissing = document.getElementById('carsIncludeMissingPhv').checked;
+            }
 
             $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
                 if (settings.nTable.id !== 'dataTable') {
@@ -514,7 +762,10 @@
                     && (!advancedFilters.model || row.dataset.model === advancedFilters.model)
                     && (!advancedFilters.color || row.dataset.color === advancedFilters.color)
                     && passesLogBookFilter(row)
-                    && passesQuickFilter(row);
+                    && passesQuickFilter(row)
+                    && passesExpiryFilter(row, expiryFilters.mot, 'motExpiry', 'motMissing')
+                    && passesExpiryFilter(row, expiryFilters.roadTax, 'roadTaxExpiry', 'roadTaxMissing')
+                    && passesExpiryFilter(row, expiryFilters.phv, 'phvExpiry', 'phvMissing');
             });
 
             function passesLogBookFilter(row) {
@@ -532,10 +783,6 @@
 
                 if (quickFilter === 'available_by_phv') {
                     return row.dataset.availableByPhv === '1';
-                }
-
-                if (quickFilter === 'awaiting_phv') {
-                    return row.dataset.awaitingPhv === '1';
                 }
 
                 return row.dataset.fleetStatus === quickFilter;
@@ -573,6 +820,11 @@
                 dataTable.draw();
             });
 
+            $('.cars-expiry-filter').on('change input', function () {
+                syncExpiryFiltersFromForm();
+                dataTable.draw();
+            });
+
             $('.cars-quick-filter').on('click', function () {
                 const selectedFilter = $(this).data('quick-filter');
                 quickFilter = quickFilter === selectedFilter ? '' : selectedFilter;
@@ -584,10 +836,308 @@
                 $('.cars-advanced-filter').val('').trigger('change');
                 $('#carsFilterAwaitingLogBook').prop('checked', false);
                 advancedFilters.logBook = '';
+                $('#carsMotExpiringFrom, #carsMotExpiringTo, #carsRoadTaxExpiringFrom, #carsRoadTaxExpiringTo, #carsPhvExpiringFrom, #carsPhvExpiringTo').val('');
+                $('#carsIncludeMissingMot, #carsIncludeMissingRoadTax, #carsIncludeMissingPhv').prop('checked', false);
+                expiryFilters.mot = { from: '', to: '', includeMissing: false };
+                expiryFilters.roadTax = { from: '', to: '', includeMissing: false };
+                expiryFilters.phv = { from: '', to: '', includeMissing: false };
                 quickFilter = '';
                 updateQuickFilterButtons();
                 dataTable.draw();
             });
+
+            function formatYmd(date) {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return y + '-' + m + '-' + d;
+            }
+
+            function getUpcomingFourMonths() {
+                const months = [];
+                const now = new Date();
+                for (let i = 0; i < 4; i++) {
+                    const start = new Date(now.getFullYear(), now.getMonth() + i, 1);
+                    const end = new Date(now.getFullYear(), now.getMonth() + i + 1, 0);
+                    months.push({
+                        label: start.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
+                        from: formatYmd(start),
+                        to: formatYmd(end)
+                    });
+                }
+                return months;
+            }
+
+            function closeDropdownMenu(menuEl) {
+                const $dropdown = $(menuEl).closest('.dropdown');
+                $dropdown.removeClass('show');
+                $(menuEl).removeClass('show');
+                $dropdown.find('[data-toggle="dropdown"]').attr('aria-expanded', 'false');
+            }
+
+            function buildMonthPickerMenu(menuEl, fromInputId, toInputId, filtersObj) {
+                menuEl.innerHTML = '';
+                getUpcomingFourMonths().forEach(function (month) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'dropdown-item';
+                    btn.textContent = month.label;
+                    btn.addEventListener('click', function () {
+                        document.getElementById(fromInputId).value = month.from;
+                        document.getElementById(toInputId).value = month.to;
+                        filtersObj.from = month.from;
+                        filtersObj.to = month.to;
+                        syncExpiryFiltersFromForm();
+                        dataTable.draw();
+                        closeDropdownMenu(menuEl);
+                    });
+                    menuEl.appendChild(btn);
+                });
+            }
+
+            buildMonthPickerMenu(
+                document.getElementById('carsMotMonthMenu'),
+                'carsMotExpiringFrom',
+                'carsMotExpiringTo',
+                expiryFilters.mot
+            );
+            buildMonthPickerMenu(
+                document.getElementById('carsRoadTaxMonthMenu'),
+                'carsRoadTaxExpiringFrom',
+                'carsRoadTaxExpiringTo',
+                expiryFilters.roadTax
+            );
+            buildMonthPickerMenu(
+                document.getElementById('carsPhvMonthMenu'),
+                'carsPhvExpiringFrom',
+                'carsPhvExpiringTo',
+                expiryFilters.phv
+            );
+
+            function selectedOptionText(selectId) {
+                const select = document.getElementById(selectId);
+                if (!select || !select.value) {
+                    return '';
+                }
+                return select.options[select.selectedIndex].text;
+            }
+
+            function formatExpiryRangeLine(label, filters) {
+                if (!isExpiryFilterActive(filters)) {
+                    return null;
+                }
+
+                const parts = [];
+                if (filters.from || filters.to) {
+                    const fromLabel = filters.from ? formatDisplayDate(filters.from) : 'any';
+                    const toLabel = filters.to ? formatDisplayDate(filters.to) : 'any';
+                    parts.push(fromLabel + ' to ' + toLabel);
+                }
+                if (filters.includeMissing) {
+                    parts.push('include missing');
+                }
+
+                return label + ': ' + parts.join('; ');
+            }
+
+            function buildCarsExportMeta() {
+                const lines = [];
+                const searchTerm = (dataTable.search() || '').trim();
+
+                if (searchTerm) {
+                    lines.push('Search: ' + searchTerm);
+                }
+
+                if (quickFilter) {
+                    lines.push('Quick filter: ' + (quickFilterLabels[quickFilter] || quickFilter));
+                }
+
+                if (advancedFilters.logBook === 'awaiting') {
+                    lines.push('Log book: Awaiting log book');
+                }
+
+                if (advancedFilters.company) {
+                    lines.push('Company: ' + advancedFilters.company);
+                }
+
+                if (advancedFilters.council) {
+                    lines.push('Council: ' + advancedFilters.council);
+                }
+
+                if (advancedFilters.insuranceStatus) {
+                    lines.push('Insurance status: ' + advancedFilters.insuranceStatus);
+                }
+
+                if (advancedFilters.carStatus) {
+                    lines.push('Car status: ' + selectedOptionText('carsFilterStatus'));
+                }
+
+                if (advancedFilters.model) {
+                    lines.push('Make/Model: ' + advancedFilters.model);
+                }
+
+                if (advancedFilters.color) {
+                    lines.push('Color: ' + advancedFilters.color);
+                }
+
+                [
+                    formatExpiryRangeLine('MOT expiring', expiryFilters.mot),
+                    formatExpiryRangeLine('Road tax expiring', expiryFilters.roadTax),
+                    formatExpiryRangeLine('PHV expiring', expiryFilters.phv),
+                ].forEach(function (line) {
+                    if (line) {
+                        lines.push(line);
+                    }
+                });
+
+                if (lines.length === 0) {
+                    lines.push('Filters: None');
+                }
+
+                return {
+                    title: 'Cars Export',
+                    lines: lines,
+                };
+            }
+
+            function csvEscape(value) {
+                const str = String(value ?? '').replace(/"/g, '""').trim();
+                return /[",\n\r]/.test(str) ? '"' + str + '"' : str;
+            }
+
+            function downloadCsv(filename, lines) {
+                const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            function collectCarsExportRows() {
+                const rows = [];
+                dataTable.rows({ search: 'applied', order: 'applied' }).every(function () {
+                    const node = this.node();
+                    if (!node) {
+                        return;
+                    }
+
+                    const cells = node.querySelectorAll('td');
+                    if (cells.length < 7) {
+                        return;
+                    }
+
+                    const row = [];
+                    for (let i = 0; i < 7; i++) {
+                        row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
+                    }
+
+                    row.push(formatDisplayDate(node.dataset.motExpiry || ''));
+                    row.push(formatDisplayDate(node.dataset.roadTaxExpiry || ''));
+                    row.push(formatDisplayDate(node.dataset.phvExpiry || ''));
+
+                    rows.push(row);
+                });
+
+                return rows;
+            }
+
+            function exportCarsCsv() {
+                const exportMeta = buildCarsExportMeta();
+                const bodyRows = collectCarsExportRows();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                const lines = [csvEscape(exportMeta.title)];
+                exportMeta.lines.forEach(function (line) {
+                    lines.push(csvEscape(line));
+                });
+                lines.push('');
+                lines.push(carsExportHeaders.map(csvEscape).join(','));
+                bodyRows.forEach(function (row) {
+                    lines.push(row.map(csvEscape).join(','));
+                });
+
+                downloadCsv('cars-export-' + new Date().toISOString().slice(0, 10) + '.csv', lines);
+            }
+
+            function exportCarsPdf() {
+                const exportMeta = buildCarsExportMeta();
+                const bodyRows = collectCarsExportRows();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                if (typeof pdfMake === 'undefined') {
+                    alert('PDF export is not available. Please refresh the page and try again.');
+                    return;
+                }
+
+                const tableBody = [
+                    carsExportHeaders.map(function (header) {
+                        return { text: header, style: 'tableHeader' };
+                    })
+                ];
+
+                bodyRows.forEach(function (row) {
+                    tableBody.push(row.map(function (cell) {
+                        return { text: cell, style: 'tableCell' };
+                    }));
+                });
+
+                const doc = {
+                    pageSize: 'A4',
+                    pageOrientation: 'landscape',
+                    pageMargins: [24, 48, 24, 32],
+                    content: [
+                        {
+                            text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                            style: 'title',
+                            margin: [0, 0, 0, 4]
+                        },
+                        ...exportMeta.lines.map(function (line) {
+                            return {
+                                text: line,
+                                style: 'subtitle',
+                                margin: [0, 0, 0, 2]
+                            };
+                        }),
+                        {
+                            text: '',
+                            margin: [0, 0, 0, 8]
+                        },
+                        {
+                            table: {
+                                headerRows: 1,
+                                widths: carsExportHeaders.map(function () { return '*'; }),
+                                body: tableBody
+                            },
+                            layout: 'lightHorizontalLines'
+                        }
+                    ],
+                    styles: {
+                        title: { fontSize: 14, bold: true },
+                        subtitle: { fontSize: 9, color: '#5e5873' },
+                        tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
+                        tableCell: { fontSize: 7 }
+                    },
+                    defaultStyle: { fontSize: 8 }
+                };
+
+                pdfMake.createPdf(doc).download('cars-export-' + new Date().toISOString().slice(0, 10) + '.pdf');
+            }
+
+            $('#carsExportCsv').on('click', exportCarsCsv);
+            $('#carsExportPdf').on('click', exportCarsPdf);
 
             function escapeHtml(value) {
                 return String(value ?? '')
