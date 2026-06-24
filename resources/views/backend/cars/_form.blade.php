@@ -384,6 +384,7 @@
         <h5 class="mb-1 d-flex flex-wrap align-items-center justify-content-between">
             <span>
                 <i class="fa fa-tools"></i> MOT Information
+                <small class="text-muted font-weight-normal">(optional)</small>
             </span>
             <span>
                 @if($showMotViewAll)
@@ -406,7 +407,19 @@
                                 <input type="hidden" name="mots[{{ $index }}][id]" value="{{ $mot->id }}">
                             @endif
 
-                            <div class="col-md-3">
+                            <div class="col-md-2">
+                                <div class="form-group">
+                                    <label>Test Date</label>
+                                    <input type="date" name="mots[{{ $index }}][test_date]"
+                                           class="form-control @error('mots.'.$index.'.test_date') is-invalid @enderror"
+                                           value="{{ old('mots.'.$index.'.test_date') ?? (isset($mot['test_date']) ? \Carbon\Carbon::parse($mot['test_date'])->format('Y-m-d') : (is_object($mot) && $mot->test_date ? $mot->test_date->format('Y-m-d') : '')) }}">
+                                    @error('mots.'.$index.'.test_date')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+
+                            <div class="col-md-2">
                                 <div class="form-group">
                                     <label>Expiry Date</label>
                                     <input type="date" name="mots[{{ $index }}][expiry_date]"
@@ -418,7 +431,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="form-group">
                                     <label>Amount</label>
                                     <div class="input-group">
@@ -500,6 +513,7 @@
                         @foreach($motsOlder as $motP)
                             <div class="mot-preserved" data-record-id="{{ $motP->id }}">
                                 <input type="hidden" name="mots[{{ $hMot }}][id]" value="{{ $motP->id }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][test_date]" value="{{ $motP->test_date ? $motP->test_date->format('Y-m-d') : '' }}">
                                 <input type="hidden" name="mots[{{ $hMot }}][expiry_date]" value="{{ $motP->expiry_date->format('Y-m-d') }}">
                                 <input type="hidden" name="mots[{{ $hMot }}][amount]" value="{{ $motP->amount }}">
                                 <input type="hidden" name="mots[{{ $hMot }}][term]" value="{{ e($motP->term) }}">
@@ -528,6 +542,7 @@
                     <table class="table table-bordered mb-0">
                         <thead class="thead-light">
                             <tr>
+                                <th>Test Date</th>
                                 <th>Expiry Date</th>
                                 <th>Amount</th>
                                 <th>Term</th>
@@ -538,6 +553,7 @@
                         <tbody>
                             @foreach($motsOlder as $motH)
                             <tr data-hist-mot-id="{{ $motH->id }}">
+                                <td>{{ $motH->test_date ? $motH->test_date->format('d M, Y') : '—' }}</td>
                                 <td>{{ $motH->expiry_date->format('d M, Y') }}</td>
                                 <td>£{{ number_format($motH->amount, 2) }}</td>
                                 <td>{{ $motH->term }}</td>
@@ -2272,13 +2288,19 @@
             const container = document.getElementById('mots-container');
             const newMOT = `
         <div class="mot-item row border-bottom pb-3 mb-1" data-index="${motIndex}">
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <div class="form-group">
+                    <label>Test Date</label>
+                    <input type="date" name="mots[${motIndex}][test_date]" class="form-control">
+                </div>
+            </div>
+            <div class="col-md-2">
                 <div class="form-group">
                     <label>Expiry Date</label>
                     <input type="date" name="mots[${motIndex}][expiry_date]" class="form-control">
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="form-group">
                     <label>Amount</label>
                     <div class="input-group">

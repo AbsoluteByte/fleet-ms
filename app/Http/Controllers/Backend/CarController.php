@@ -140,6 +140,7 @@ class CarController extends Controller
             'reservation_available_from_date' => 'nullable|date',
             'reservation_terms_conditions' => 'nullable|string',
 
+            'mots.*.test_date' => 'nullable|date',
             'mots.*.expiry_date' => 'nullable|date',
             'mots.*.amount' => 'nullable|numeric|min:0',
             'mots.*.term' => 'nullable|string',
@@ -217,7 +218,7 @@ class CarController extends Controller
                 // Store MOTs
                 if ($request->has('mots')) {
                     foreach ($request->input('mots') as $index => $motData) {
-                        if (! $this->historyRowHasValues($motData, ['expiry_date', 'amount', 'term'])) {
+                        if (! $this->motRowHasProvidedDetails($request, $index, $motData)) {
                             continue;
                         }
 
@@ -448,6 +449,7 @@ class CarController extends Controller
             'reservation_terms_conditions' => 'nullable|string',
 
             'mots.*.id' => 'nullable|exists:car_mots,id',
+            'mots.*.test_date' => 'nullable|date',
             'mots.*.expiry_date' => 'nullable|date',
             'mots.*.amount' => 'nullable|numeric|min:0',
             'mots.*.term' => 'nullable|string',
@@ -566,7 +568,7 @@ class CarController extends Controller
                         $motId = $motData['id'] ?? null;
                         $existingMot = $motId ? $existingMots->get($motId) : null;
 
-                        if (! $existingMot && ! $this->historyRowHasValues($motData, ['expiry_date', 'amount', 'term'])) {
+                        if (! $existingMot && ! $this->motRowHasProvidedDetails($request, $index, $motData)) {
                             continue;
                         }
 
@@ -1213,16 +1215,21 @@ class CarController extends Controller
 
         if ($request->has('mots')) {
             foreach ($request->input('mots') as $index => $motData) {
-                if (! $this->historyRowHasValues($motData, ['expiry_date', 'amount', 'term'])) {
+                if (! $this->motRowHasProvidedDetails($request, $index, $motData)) {
                     continue;
                 }
 
                 $existingMot = ! empty($motData['id']) ? $existingMots->get($motData['id']) : null;
+
                 $hasDocument = $request->hasFile("mots.{$index}.document")
                     || ($existingMot && $existingMot->document);
 
                 if (! $hasDocument) {
                     $errors["mots.{$index}.document"] = 'MOT document is required when MOT details are provided.';
+                }
+
+                if ($this->motRowRequiresCompleteDetails($existingMot, $car) && empty($motData['test_date'])) {
+                    $errors["mots.{$index}.test_date"] = 'Test date is required when MOT details are provided.';
                 }
             }
         }
@@ -1246,6 +1253,23 @@ class CarController extends Controller
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
+    }
+
+    private function motRowHasProvidedDetails(Request $request, int|string $index, array $motData): bool
+    {
+        return $this->historyRowHasValues($motData, ['test_date', 'expiry_date', 'amount', 'term'])
+            || $request->hasFile("mots.{$index}.document");
+    }
+
+    private function motRowRequiresCompleteDetails(?CarMot $existingMot, ?Car $car): bool
+    {
+        if (! $existingMot) {
+            return true;
+        }
+
+        $latestMotId = $car?->latestMot()?->id;
+
+        return $latestMotId && (int) $existingMot->id === (int) $latestMotId;
     }
 
     private function historyRowHasValues(array $row, array $keys): bool

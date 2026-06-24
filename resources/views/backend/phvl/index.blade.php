@@ -654,6 +654,7 @@
                     motSection.innerHTML =
                         '<button type="button" class="btn btn-sm btn-outline-primary" id="phvl-mot-toggle"><i class="fa fa-plus mr-50"></i>Add MOT details</button>' +
                         '<div id="phvl-mot-fields" class="d-none mt-2">' +
+                        '  <div class="form-group"><label>Test Date <span class="text-danger">*</span></label><input type="date" class="form-control" id="phvl-mot-test-date" required></div>' +
                         '  <div class="form-group"><label>Expiry Date</label><input type="date" class="form-control" id="phvl-mot-expiry"></div>' +
                         '  <div class="form-group"><label>Amount</label><input type="number" step="0.01" min="0" class="form-control" id="phvl-mot-amount"></div>' +
                         '  <div class="form-group"><label>Term</label><input type="text" class="form-control" id="phvl-mot-term" placeholder="e.g. 12 months"></div>' +
@@ -691,6 +692,11 @@
                 var hasMotData = motExpiry && motExpiry.value;
 
                 if (hasMotData) {
+                    var motTestDate = document.getElementById('phvl-mot-test-date');
+                    if (!motTestDate || !motTestDate.value) {
+                        alert('MOT test date is required when MOT details are provided.');
+                        return;
+                    }
                     var motDoc = document.getElementById('phvl-mot-document');
                     if (!motDoc || !motDoc.files || !motDoc.files.length) {
                         alert('MOT document is required when MOT details are provided.');
@@ -707,6 +713,7 @@
                     var fd = new FormData();
                     fd.append('_token', csrfToken);
                     fd.append('expiry_date', document.getElementById('phvl-mot-expiry').value);
+                    fd.append('test_date', document.getElementById('phvl-mot-test-date').value);
                     var amt = document.getElementById('phvl-mot-amount');
                     if (amt && amt.value) fd.append('amount', amt.value);
                     var term = document.getElementById('phvl-mot-term');

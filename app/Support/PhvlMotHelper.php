@@ -40,6 +40,10 @@ class PhvlMotHelper
 
     public static function estimatedMotDate(?CarMot $mot): ?Carbon
     {
+        if ($mot?->test_date) {
+            return $mot->test_date->copy()->startOfDay();
+        }
+
         if (! $mot?->expiry_date) {
             return null;
         }

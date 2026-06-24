@@ -82,6 +82,7 @@
                             @include('alerts')
                             <form action="{{ route($url . 'update', $model->id) }}" method="POST"
                                   enctype="multipart/form-data"
+                                  id="formEditCar" novalidate
                                   @if($carEditLocked) class="car-edit-locked-form" @endif
                                   @if($carEditLocked) onsubmit="return false;" @endif>
                                 @csrf
@@ -102,6 +103,18 @@
     @push('js')
         <script>
             document.documentElement.classList.add('car-edit-locked-page');
+        </script>
+    @endpush
+@else
+    @push('js')
+        <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-car.js') }}?v=20260624"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var form = document.getElementById('formEditCar');
+                if (form && window.FleetiqFormValidation && window.validateCarForm) {
+                    FleetiqFormValidation.attach(form, validateCarForm);
+                }
+            });
         </script>
     @endpush
 @endif

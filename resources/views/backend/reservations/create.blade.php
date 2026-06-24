@@ -22,7 +22,7 @@
                         <div class="card-body">
                             @include('alerts')
                             <form method="POST" action="{{ route('reservations.store') }}" id="formCreateReservation"
-                                  enctype="multipart/form-data">
+                                  enctype="multipart/form-data" novalidate>
                                 @csrf
 
                                 @include('backend.reservations._driver_section', [
@@ -134,6 +134,16 @@
     </section>
 @endsection
 @section('js')
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260624"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260624"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.getElementById('formCreateReservation');
+            if (form && window.FleetiqFormValidation && window.validateReservationForm) {
+                FleetiqFormValidation.attach(form, validateReservationForm);
+            }
+        });
+    </script>
     <script>
         $(document).ready(function () {
             function parseMoney(id) {

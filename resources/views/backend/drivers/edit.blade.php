@@ -12,7 +12,8 @@
                     <hr>
                     <div class="card-content">
                         <div class="card-body">
-                            <form action="{{ route($url . 'update', $model->id) }}" method="POST" enctype="multipart/form-data">
+                            <form action="{{ route($url . 'update', $model->id) }}" method="POST" enctype="multipart/form-data"
+                                  id="formEditDriver" novalidate>
                                 @csrf
                                 @method('PUT')
                                 @include($dir . '_form')
@@ -23,4 +24,16 @@
             </div>
         </div>
     </section>
+@endsection
+
+@section('js')
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260624"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.getElementById('formEditDriver');
+            if (form && window.FleetiqFormValidation && window.validateDriverForm) {
+                FleetiqFormValidation.attach(form, validateDriverForm);
+            }
+        });
+    </script>
 @endsection

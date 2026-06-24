@@ -179,6 +179,7 @@ class PhvlController extends Controller
         $tenant = Auth::user()->currentTenant();
 
         $validated = $request->validate([
+            'test_date' => 'required|date',
             'expiry_date' => 'required|date',
             'amount' => 'nullable|numeric|min:0',
             'term' => 'nullable|string',
@@ -187,6 +188,7 @@ class PhvlController extends Controller
 
         $motData = [
             'tenant_id' => $tenant->id,
+            'test_date' => $validated['test_date'],
             'expiry_date' => $validated['expiry_date'],
             'amount' => $validated['amount'] ?? null,
             'term' => $validated['term'] ?? null,

@@ -13,7 +13,8 @@
                     <div class="card-content">
                         <div class="card-body">
                             @include('alerts')
-                            <form action="{{ route($url . 'store') }}" method="POST" enctype="multipart/form-data">
+                            <form action="{{ route($url . 'store') }}" method="POST" enctype="multipart/form-data"
+                                  id="formCreateCar" novalidate>
                                 @csrf
                                 @method('POST')
                                 @include($dir . '_form')
@@ -25,3 +26,15 @@
         </div>
     </section>
 @endsection
+
+@push('js')
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-car.js') }}?v=20260624"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.getElementById('formCreateCar');
+            if (form && window.FleetiqFormValidation && window.validateCarForm) {
+                FleetiqFormValidation.attach(form, validateCarForm);
+            }
+        });
+    </script>
+@endpush

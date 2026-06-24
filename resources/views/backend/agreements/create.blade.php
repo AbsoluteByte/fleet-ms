@@ -13,7 +13,8 @@
                     <div class="card-content">
                         <div class="card-body">
                             @include('alerts')
-                            <form action="{{ route($url . 'store') }}" method="POST" enctype="multipart/form-data">
+                            <form action="{{ route($url . 'store') }}" method="POST" enctype="multipart/form-data"
+                                  id="formCreateAgreement" novalidate>
                                 @csrf
                                 @method('POST')
                                 @include($dir . '_form')

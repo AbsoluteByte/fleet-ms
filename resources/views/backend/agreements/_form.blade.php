@@ -958,6 +958,7 @@
 @endpush
 
 @push('js')
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-agreement.js') }}?v=20260624"></script>
     <script>
         const replacementVehicleStatusId = @json($replacementVehicleStatusId ?? null);
         const originalAgreements = @json($originalAgreements ?? []);
@@ -1523,35 +1524,27 @@
                 document.getElementById('car_id')?.addEventListener('change', syncFromVehicle);
             }
 
-            const agreementForm = document.getElementById('parent-agreement-section')?.closest('form');
+            const agreementFormEl = document.getElementById('formCreateAgreement') || document.getElementById('formEditAgreement');
 
-            if (agreementForm) {
-                agreementForm.addEventListener('submit', function () {
-                    toggleReplacementVehicleMode();
+            if (agreementFormEl && window.FleetiqFormValidation && window.validateAgreementForm) {
+                FleetiqFormValidation.attach(agreementFormEl, function (form, errors) {
+                    if (typeof toggleReplacementVehicleMode === 'function') {
+                        toggleReplacementVehicleMode();
+                    }
+                    validateAgreementForm(form, errors);
                 });
             }
-        });
 
-        // Enhanced form validation
-        document.addEventListener('DOMContentLoaded', function() {
+            window.fleetiqAgreementValidation = {
+                replacementVehicleStatusId: replacementVehicleStatusId
+            };
+
             const startDateInput = document.getElementById('start_date');
             const endDateInput = document.getElementById('end_date');
             const mileageOutInput = document.getElementById('mileage_out');
             const mileageInInput = document.getElementById('mileage_in');
             const ownInsuranceStartDate = document.getElementById('own_insurance_start_date');
             const ownInsuranceEndDate = document.getElementById('own_insurance_end_date');
-
-            /*function validateDates() {
-                const startDate = startDateInput.value;
-                const endDate = endDateInput.value;
-
-                if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
-                    alert('End date must be after start date');
-                    endDateInput.value = '';
-                    return false;
-                }
-                return true;
-            }*/
 
             function validateInsuranceDates() {
                 const clientRadio = document.getElementById('using_own_insurance_client');
@@ -1582,13 +1575,13 @@
                 return true;
             }
 
-            ownInsuranceStartDate.addEventListener('blur', validateInsuranceDates);
-            ownInsuranceEndDate.addEventListener('blur', validateInsuranceDates);
-            mileageInInput.addEventListener('change', validateMileage);
-
-            document.getElementById('agreed_rent')?.addEventListener('change', function() {
-                updateAgreementPaymentLimits();
-            });
+            if (ownInsuranceStartDate && ownInsuranceEndDate) {
+                ownInsuranceStartDate.addEventListener('blur', validateInsuranceDates);
+                ownInsuranceEndDate.addEventListener('blur', validateInsuranceDates);
+            }
+            if (mileageInInput && mileageOutInput) {
+                mileageInInput.addEventListener('change', validateMileage);
+            }
         });
 
     </script>

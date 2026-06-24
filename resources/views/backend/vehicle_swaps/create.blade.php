@@ -21,7 +21,7 @@
                     <div class="card-content">
                         <div class="card-body">
                             @include('alerts')
-                            <form method="POST" action="{{ route('vehicle-swaps.store') }}" id="formCreateVehicleSwap">
+                            <form method="POST" action="{{ route('vehicle-swaps.store') }}" id="formCreateVehicleSwap" novalidate>
                                 @csrf
                                 @include('backend.vehicle_swaps._form', ['cars' => $cars, 'vehicleSwap' => null])
                                 <div class="form-group mb-0">
@@ -40,7 +40,22 @@
 @endsection
 @section('js')
     @php use App\Models\VehicleSwap; @endphp
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-vehicle-swap.js') }}?v=20260624"></script>
     <script>
+        window.fleetiqVehicleSwapValidation = {
+            reasonPhvl: @json(VehicleSwap::REASON_PHVL_ISSUES),
+            reasonOthers: @json(VehicleSwap::REASON_OTHERS),
+            phvlFailed: @json(VehicleSwap::PHVL_FAILED),
+            phvlDocumentation: @json(VehicleSwap::PHVL_DOCUMENTATION),
+        };
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.getElementById('formCreateVehicleSwap');
+            if (form && window.FleetiqFormValidation && window.validateVehicleSwapForm) {
+                FleetiqFormValidation.attach(form, validateVehicleSwapForm);
+            }
+        });
+
         $(document).ready(function () {
             const SWAP_REASON_PHVL = @json(VehicleSwap::REASON_PHVL_ISSUES);
             const SWAP_REASON_OTHERS = @json(VehicleSwap::REASON_OTHERS);
