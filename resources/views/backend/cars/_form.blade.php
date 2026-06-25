@@ -1347,7 +1347,7 @@
 <div class="row mt-1">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
                 <div class="d-flex flex-wrap justify-content-between align-items-center">
                     <div class="d-flex flex-wrap align-items-center mb-1 mb-md-0">
                         <h5 class="card-title mb-0 mr-3">
