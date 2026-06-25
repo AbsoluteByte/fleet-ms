@@ -91,7 +91,6 @@
                             </a>
                         </div>
                     </div>
-                    <hr>
                     <div class="card-content">
                         <div class="card-body card-dashboard">
                             @include('alerts')

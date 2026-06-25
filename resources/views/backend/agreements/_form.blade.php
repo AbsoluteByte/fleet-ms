@@ -1,6 +1,6 @@
 <!-- Basic Information -->
 <div class="card mb-2">
-    <div class="card-header">
+    <div class="">
         <h5 class="card-title mb-0">
             <i class="fa fa-info-circle me-2"></i>
             Agreement Details

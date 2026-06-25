@@ -1,7 +1,7 @@
 <div class="row">
     <!-- Personal Information -->
     <div class="card mb-1">
-        <div class="card-header">
+        <div class="">
             <h5 class="card-title mb-0">
                 <i class="fa fa-user me-2"></i>
                 Personal Information
@@ -107,7 +107,7 @@
 
     <!-- Address Information -->
     <div class="card mb-1">
-        <div class="card-header">
+        <div class="">
             <h5 class="card-title mb-0">
                 <i class="fas fa-map-marker-alt me-2"></i>
                 Address Information

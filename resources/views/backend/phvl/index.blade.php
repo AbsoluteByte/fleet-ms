@@ -255,7 +255,6 @@
                             </select>
                         </div>
                     </div>
-                    <hr class="my-0">
                     <div class="card-body px-1 pt-1 pb-0 phvl-card-body">
                         @include('alerts')
                         <table id="phvlTable" class="table table-bordered table-striped w-100">

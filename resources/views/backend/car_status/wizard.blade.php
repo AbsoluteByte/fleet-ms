@@ -26,7 +26,6 @@
                             <i class="fa fa-arrow-left"></i> Back to cars
                         </a>
                     </div>
-                    <hr class="my-0">
                     <div class="card-body">
                         @include('alerts')
                         @if(!empty($editCurrentStatus) && !empty($prefillCarId))

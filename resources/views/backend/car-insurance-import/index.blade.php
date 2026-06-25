@@ -10,7 +10,6 @@
                             <i class="fa fa-arrow-left"></i> Back to cars
                         </a>
                     </div>
-                    <hr>
                     <div class="card-body">
                         @include('alerts')
                         <p class="text-muted">

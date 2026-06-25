@@ -11,7 +11,6 @@
                             <i class="fa fa-arrow-circle-left"></i> Back
                         </a>
                     </div>
-                    <hr>
                     <div class="card-content">
                         <div class="card-body">
                             <form action="{{ route($url . 'store') }}" method="POST">

@@ -21,7 +21,6 @@
                         <h4 class="card-title mb-0">PHVL Archive</h4>
                         <p class="text-muted small mb-0 mt-50">Completed PHVL cycles. View timeline for step-by-step history.</p>
                     </div>
-                    <hr class="my-0">
                     <div class="card-body px-1 pt-1 pb-0">
                         @include('alerts')
                         <div class="table-responsive">

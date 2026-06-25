@@ -17,7 +17,6 @@
                             <i class="fa fa-arrow-left"></i> Back to vehicle swaps
                         </a>
                     </div>
-                    <hr class="my-0">
                     <div class="card-content">
                         <div class="card-body">
                             @include('alerts')

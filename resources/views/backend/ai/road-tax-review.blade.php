@@ -11,7 +11,6 @@
                             <i class="fa fa-arrow-left"></i> Upload again
                         </a>
                     </div>
-                    <hr>
                     <div class="card-body">
                         @include('alerts')
 

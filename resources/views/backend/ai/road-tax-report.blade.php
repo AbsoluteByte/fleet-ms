@@ -25,7 +25,6 @@
                             </a>
                         </div>
                     </div>
-                    <hr>
                     <div class="card-body">
                         <p class="mb-2">
                             <strong>Imported at:</strong> {{ $report['imported_at'] ?? '—' }}

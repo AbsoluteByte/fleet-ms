@@ -12,7 +12,6 @@
                         <h4 class="card-title">{{ $statusLabel }} Cars</h4>
                         <a class="btn btn-secondary float-right" href="{{ route('cars.index') }}">Back to Fleet</a>
                     </div>
-                    <hr>
                     <div class="card-content">
                         <div class="card-body card-dashboard">
                             @include('alerts')

@@ -18,7 +18,6 @@
                             <a class="btn btn-primary btn-sm" href="{{ route($url . 'create') }}"><i class="fa fa-plus"></i> Add {{ $singular }}</a>
                         </div>
                     </div>
-                    <hr>
                     <div class="card-content">
                         <div class="card-body card-dashboard">
                             @php

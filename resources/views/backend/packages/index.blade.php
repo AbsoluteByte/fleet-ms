@@ -12,7 +12,6 @@
                             <i class="fa fa-plus"></i> Add {{ $singular }}
                         </a>
                     </div>
-                    <hr>
                     <div class="card-content">
                         <div class="card-body card-dashboard">
                             @include('alerts')
