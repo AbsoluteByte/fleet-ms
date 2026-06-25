@@ -1,5 +1,13 @@
 @extends('layouts.admin', ['title' => 'Agreement Details'])
 
+@push('css')
+    <style>
+        .header-navbar-shadow {
+            height: 80px !important;
+        }
+    </style>
+@endpush
+
 @section('content')
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h2">
@@ -41,7 +49,7 @@
     <div class="row mb-4">
         <div class="col-xl-8">
             <div class="card">
-                <div class="card-header">
+                <div class="card-header" style="position: static; width: 100%; z-index: unset;">
                     <h5 class="card-title mb-0">Agreement Information</h5>
                 </div>
                 <div class="card-body">
@@ -294,7 +302,7 @@
         </div>
         <div class="col-xl-4">
             <div class="card">
-                <div class="card-header">
+                <div class="card-header" style="position: static; width: 100%; z-index: unset;">
                     <h5 class="card-title mb-0">Financial Summary</h5>
                 </div>
                 <div class="card-body">

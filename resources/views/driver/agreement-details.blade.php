@@ -26,7 +26,7 @@
     <div class="row g-4 mb-4">
         <div class="col-lg-8">
             <div class="card agreement-overview">
-                <div class="card-header">
+                <div class="card-header" style="position: static;">
                     <h5 class="card-title mb-0">
                         <i class="feather icon-info me-2"></i>
                         Agreement Information
