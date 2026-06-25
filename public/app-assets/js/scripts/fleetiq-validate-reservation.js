@@ -6,8 +6,9 @@
 
     var FV = global.FleetiqFormValidation;
 
-    function validateReservationForm(form, errors) {
+    function validateReservationForm(form, errors, options) {
         errors = errors || [];
+        options = options || {};
 
         FV.requiredField(errors, form, 'reservation_date', 'Reservation date');
         FV.requiredField(errors, form, 'pick_up_date', 'Pick up date');
@@ -32,7 +33,11 @@
         if (driverMode === 'existing') {
             FV.requiredField(errors, form, 'driver_id', 'Driver');
         } else if (typeof global.validateDriverForm === 'function') {
-            global.validateDriverForm(form, errors, { embedded: true });
+            var driverOptions = { embedded: true };
+            if (options.minimalNewDriver) {
+                driverOptions.minimal = true;
+            }
+            global.validateDriverForm(form, errors, driverOptions);
         }
 
         return errors.length === 0;

@@ -15,25 +15,29 @@
         { name: 'proof_of_address_document', label: 'Proof of Address' }
     ];
 
+    var FULL_REQUIRED_FIELDS = [
+        ['first_name', 'First Name'],
+        ['last_name', 'Last Name'],
+        ['dob', 'Date of Birth'],
+        ['email', 'Email'],
+        ['phone_number', 'Phone Number'],
+        ['address1', 'Address Line 1'],
+        ['post_code', 'Post Code'],
+        ['town', 'Town'],
+        ['country_id', 'Country'],
+        ['driver_license_number', 'Driver License Number'],
+        ['driver_license_expiry_date', 'Driver License Expiry Date'],
+        ['next_of_kin', 'Next of Kin'],
+        ['next_of_kin_phone', 'Next of Kin Phone']
+    ];
+
     function validateDriverForm(form, errors, options) {
         errors = errors || [];
         options = options || {};
 
-        var requiredFields = [
-            ['first_name', 'First Name'],
-            ['last_name', 'Last Name'],
-            ['dob', 'Date of Birth'],
-            ['email', 'Email'],
-            ['phone_number', 'Phone Number'],
-            ['address1', 'Address Line 1'],
-            ['post_code', 'Post Code'],
-            ['town', 'Town'],
-            ['country_id', 'Country'],
-            ['driver_license_number', 'Driver License Number'],
-            ['driver_license_expiry_date', 'Driver License Expiry Date'],
-            ['next_of_kin', 'Next of Kin'],
-            ['next_of_kin_phone', 'Next of Kin Phone']
-        ];
+        var requiredFields = options.minimal
+            ? [['first_name', 'First Name']]
+            : FULL_REQUIRED_FIELDS;
 
         requiredFields.forEach(function (pair) {
             FV.requiredField(errors, form, pair[0], pair[1]);
