@@ -571,7 +571,7 @@
     $agreementPaymentLimit = $agreementPaymentLimit ?? null;
 @endphp
 <div class="card mb-2" id="agreement-payment-section">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
         <h5 class="card-title mb-0">
             <i class="fa fa-credit-card me-2"></i>
             Add Payment
