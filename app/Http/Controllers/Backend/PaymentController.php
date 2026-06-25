@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\BankAccount;
 use App\Models\Driver;
 use App\Models\Payment;
 use App\Services\PaymentAllocationService;
@@ -68,7 +69,7 @@ class PaymentController extends Controller
             ->get();
 
         $payments = $driver->payments()
-            ->with('allocations.invoice')
+            ->with(['allocations.invoice', 'bankAccount'])
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->get();
@@ -109,8 +110,9 @@ class PaymentController extends Controller
         }
 
         $model = new Payment;
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view($this->dir.'create', compact('model', 'drivers', 'selectedDriver', 'openInvoices'));
+        return view($this->dir.'create', compact('model', 'drivers', 'selectedDriver', 'openInvoices', 'bankAccounts'));
     }
 
     public function store(Request $request, PaymentAllocationService $paymentAllocationService)
@@ -128,6 +130,11 @@ class PaymentController extends Controller
                 Rule::exists('drivers', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
             ],
             'payment_method' => 'required|string|max:255',
+            'bank_account_id' => [
+                'nullable',
+                'required_if:payment_method,Bank Transfer',
+                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
             'payment_date' => 'required|date',
             'amount' => 'required|numeric|min:0.01',
             'notes' => 'nullable|string',
@@ -143,6 +150,9 @@ class PaymentController extends Controller
             $driver,
             [
                 'payment_method' => $validated['payment_method'],
+                'bank_account_id' => ($validated['payment_method'] ?? '') === 'Bank Transfer'
+                    ? ($validated['bank_account_id'] ?? null)
+                    : null,
                 'payment_date' => $validated['payment_date'],
                 'amount' => $validated['amount'],
                 'notes' => $validated['notes'] ?? null,
@@ -158,7 +168,7 @@ class PaymentController extends Controller
     public function show(Payment $payment)
     {
         $tenant = Auth::user()->currentTenant();
-        $payment->load(['driver', 'allocations.invoice']);
+        $payment->load(['driver', 'bankAccount', 'allocations.invoice']);
         $this->authorizeDriver($payment->driver, $tenant);
 
         return view($this->dir.'payment', compact('payment'));
@@ -212,5 +222,13 @@ class PaymentController extends Controller
             'total_due' => (float) $driver->activeInvoices()->sum('balance_amount'),
             'overdue_due' => (float) $driver->overdueInvoices()->sum('balance_amount'),
         ];
+    }
+
+    private function bankAccountsForTenant(int $tenantId)
+    {
+        return BankAccount::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('bank_name')
+            ->get();
     }
 }

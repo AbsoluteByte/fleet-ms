@@ -127,7 +127,12 @@ class ReservationController extends Controller
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        $validated = $this->validatedReservationPayload($request, $driverPersistence);
+        $validated = $this->validatedReservationPayload(
+            $request,
+            $driverPersistence,
+            null,
+            true
+        );
 
         $carId = $validated['car_id'] ?? null;
         if ($carId !== null) {
@@ -142,7 +147,7 @@ class ReservationController extends Controller
         );
 
         DB::transaction(function () use ($request, $validated, $balance, $carId, $tenant, $driverPersistence) {
-            $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence);
+            $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence, true);
             $driverSnapshot = $this->driverSnapshot($driverId);
 
             $reservation = CarReservation::create([
@@ -257,7 +262,8 @@ class ReservationController extends Controller
     private function validatedReservationPayload(
         Request $request,
         DriverPersistenceService $driverPersistence,
-        ?Driver $existingDriver = null
+        ?Driver $existingDriver = null,
+        bool $allowMinimalNewDriver = false
     ): array {
         $tenant = Auth::user()->currentTenant();
 
@@ -284,7 +290,10 @@ class ReservationController extends Controller
                 Rule::exists('drivers', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
             ];
         } else {
-            $rules = array_merge($rules, $driverPersistence->validationRules($existingDriver));
+            $driverRules = $allowMinimalNewDriver
+                ? $driverPersistence->reservationMinimalValidationRules($existingDriver)
+                : $driverPersistence->validationRules($existingDriver);
+            $rules = array_merge($rules, $driverRules);
         }
 
         return $request->validate($rules);
@@ -294,13 +303,19 @@ class ReservationController extends Controller
         Request $request,
         array $validated,
         $tenant,
-        DriverPersistenceService $driverPersistence
+        DriverPersistenceService $driverPersistence,
+        bool $minimalNewDriver = false
     ): int {
         if (($validated['driver_mode'] ?? 'new') === 'existing') {
             return (int) $validated['driver_id'];
         }
 
-        $driverAttributes = $driverPersistence->attributesFromValidated($request, $validated);
+        $driverAttributes = $driverPersistence->attributesFromValidated(
+            $request,
+            $validated,
+            null,
+            $minimalNewDriver
+        );
         $driver = $driverPersistence->createFromValidatedAttributes($driverAttributes, $tenant);
 
         return $driver->id;

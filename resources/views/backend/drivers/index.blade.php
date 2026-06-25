@@ -32,26 +32,29 @@
                                             <td style="width: 500px !important;">
                                                 <strong>{{ $driver->full_name }}</strong>
                                                 <br>
-                                                <span>Post Code: {{ $driver->post_code }}</span>
+                                                <span>Post Code: {{ $driver->post_code ?: '—' }}</span>
                                                 <br>
-                                                <small
-                                                    class="text-muted">DOB: {{ $driver->dob->format('M d, Y') }}</small>
+                                                <small class="text-muted">DOB: {{ $driver->dob?->format('M d, Y') ?? '—' }}</small>
                                             </td>
                                             <td>{{ $driver->email }}</td>
                                             <td>{{ $driver->phone_number }}</td>
                                             <td>
-                                                @if($driver->driver_license_expiry_date->isPast())
-                                                    <span class="badge bg-danger">
-                                                    Expired {{ $driver->driver_license_expiry_date->format('M d, Y') }}
-                                                    </span>
-                                                @elseif($driver->driver_license_expiry_date->diffInDays(now()) <= 30)
-                                                    <span class="badge bg-warning">
-                                                     Expires {{ $driver->driver_license_expiry_date->format('M d, Y') }}
-                                                     </span>
+                                                @if($driver->driver_license_expiry_date)
+                                                    @if($driver->driver_license_expiry_date->isPast())
+                                                        <span class="badge bg-danger">
+                                                        Expired {{ $driver->driver_license_expiry_date->format('M d, Y') }}
+                                                        </span>
+                                                    @elseif($driver->driver_license_expiry_date->diffInDays(now()) <= 30)
+                                                        <span class="badge bg-warning">
+                                                         Expires {{ $driver->driver_license_expiry_date->format('M d, Y') }}
+                                                         </span>
+                                                    @else
+                                                        <span class="badge bg-success">
+                                                            {{ $driver->driver_license_expiry_date->format('M d, Y') }}
+                                                        </span>
+                                                    @endif
                                                 @else
-                                                    <span class="badge bg-success">
-                                                        {{ $driver->driver_license_expiry_date->format('M d, Y') }}
-                                                    </span>
+                                                    <span class="text-muted">—</span>
                                                 @endif
                                             </td>
                                             <td>

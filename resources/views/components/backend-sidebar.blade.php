@@ -329,6 +329,23 @@
                         <span class="menu-title">Companies</span>
                     </a>
                 </li>
+                <li class="nav-item {{ Request::is('admin/bank-accounts*') ? 'active' : '' }}">
+                    <a href="{{ route('bank-accounts.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-building-bank">
+                            <path d="M3 21l18 0"></path>
+                            <path d="M3 10h18"></path>
+                            <path d="M5 6l7 -3l7 3"></path>
+                            <path d="M4 10v11"></path>
+                            <path d="M20 10v11"></path>
+                            <path d="M8 14v3"></path>
+                            <path d="M12 14v3"></path>
+                            <path d="M16 14v3"></path>
+                        </svg>
+                        <span class="menu-title">Bank Accounts</span>
+                    </a>
+                </li>
             @endif
             @if (auth()->user()->isAdmin() || auth()->user()->isUser())
                 <li class="nav-item {{ Request::is('admin/car-models/*') ? 'active' : '' }} {{ Request::is('admin/car-models') ? 'active' : '' }}">

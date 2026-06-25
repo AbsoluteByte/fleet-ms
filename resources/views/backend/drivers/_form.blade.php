@@ -1,3 +1,4 @@
+@php $driverFieldRequired = empty($minimalDriverForm); @endphp
 <div class="row">
     <!-- Personal Information -->
     <div class="card mb-1">
@@ -37,11 +38,11 @@
 
                 <div class="col-md-4">
                     <div class="mb-2">
-                        <label for="last_name" class="form-label">Last Name *</label>
+                        <label for="last_name" class="form-label">Last Name{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="last_name" id="last_name"
                                class="form-control @error('last_name') is-invalid @enderror"
                                value="{{ old('last_name') ?? ($model->last_name ?? '') }}"
-                               placeholder="Enter Last Name" required>
+                               placeholder="Enter Last Name" @required($driverFieldRequired)>
                         @error('last_name')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -50,11 +51,11 @@
 
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="dob" class="form-label">Date of Birth *</label>
+                        <label for="dob" class="form-label">Date of Birth{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="date" name="dob" id="dob"
                                class="form-control @error('dob') is-invalid @enderror"
                                value="{{ old('dob') ?? (isset($model) && $model->dob ? $model->dob->format('Y-m-d') : '') }}"
-                               required>
+                               @required($driverFieldRequired)>
                         @error('dob')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -63,11 +64,11 @@
 
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="email" class="form-label">Email *</label>
+                        <label for="email" class="form-label">Email{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="email" name="email" id="email"
                                class="form-control @error('email') is-invalid @enderror"
                                value="{{ old('email') ?? ($model->email ?? '') }}"
-                               placeholder="e.g. driver@example.com" required>
+                               placeholder="e.g. driver@example.com" @required($driverFieldRequired)>
                         @error('email')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -76,11 +77,11 @@
 
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="phone_number" class="form-label">Phone Number *</label>
+                        <label for="phone_number" class="form-label">Phone Number{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="phone_number" id="phone_number"
                                class="form-control @error('phone_number') is-invalid @enderror"
                                value="{{ old('phone_number') ?? ($model->phone_number ?? '') }}"
-                               placeholder="e.g. +44 123 456 7890" required>
+                               placeholder="e.g. +44 123 456 7890" @required($driverFieldRequired)>
                         @error('phone_number')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -117,11 +118,11 @@
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="address1" class="form-label">Address Line 1 *</label>
+                        <label for="address1" class="form-label">Address Line 1{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="address1" id="address1"
                                class="form-control @error('address1') is-invalid @enderror"
                                value="{{ old('address1') ?? ($model->address1 ?? '') }}"
-                               placeholder="Enter Address Line 1" required>
+                               placeholder="Enter Address Line 1" @required($driverFieldRequired)>
                         @error('address1')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -143,11 +144,11 @@
 
                 <div class="col-md-3">
                     <div class="mb-2">
-                        <label for="post_code" class="form-label">Post Code *</label>
+                        <label for="post_code" class="form-label">Post Code{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="post_code" id="post_code"
                                class="form-control @error('post_code') is-invalid @enderror"
                                value="{{ old('post_code') ?? ($model->post_code ?? '') }}"
-                               placeholder="e.g. SW1A 1AA" required>
+                               placeholder="e.g. SW1A 1AA" @required($driverFieldRequired)>
                         @error('post_code')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -156,11 +157,11 @@
 
                 <div class="col-md-3">
                     <div class="mb-2">
-                        <label for="town" class="form-label">Town *</label>
+                        <label for="town" class="form-label">Town{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="town" id="town"
                                class="form-control @error('town') is-invalid @enderror"
                                value="{{ old('town') ?? ($model->town ?? '') }}"
-                               placeholder="Enter Town" required>
+                               placeholder="Enter Town" @required($driverFieldRequired)>
                         @error('town')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -184,14 +185,14 @@
 
                 <div class="col-md-3">
                     <div class="mb-2">
-                        <label for="country" class="form-label">Country *</label>
+                        <label for="country" class="form-label">Country{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <select name="country_id" id="country"
-                                class="form-control select-search @error('country') is-invalid @enderror" required>
+                                class="form-control select-search @error('country') is-invalid @enderror" @required($driverFieldRequired)>
                             <option value="">Select Country</option>
                             @php
                                 try {
                                     $countries = \App\Models\Country::select('name', 'id')->get()->pluck('name', 'id');
-                                    $defaultCountryId = $countries->search('United Kingdom');
+                                    $defaultCountryId = $driverFieldRequired ? $countries->search('United Kingdom') : false;
                                     $selectedCountry = old('country_id') ?? ($model->country_id ?? ($defaultCountryId ?: ''));
                                 } catch (\Exception $e) {
                                      $countries = collect();
@@ -225,11 +226,11 @@
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="driver_license_number" class="form-label">Driver License Number *</label>
+                        <label for="driver_license_number" class="form-label">Driver License Number{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="driver_license_number" id="driver_license_number"
                                class="form-control @error('driver_license_number') is-invalid @enderror"
                                value="{{ old('driver_license_number') ?? ($model->driver_license_number ?? '') }}"
-                               placeholder="Enter Driver License Number" required>
+                               placeholder="Enter Driver License Number" @required($driverFieldRequired)>
                         @error('driver_license_number')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -238,11 +239,11 @@
 
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="driver_license_expiry_date" class="form-label">Driver License Expiry Date *</label>
+                        <label for="driver_license_expiry_date" class="form-label">Driver License Expiry Date{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="date" name="driver_license_expiry_date" id="driver_license_expiry_date"
                                class="form-control @error('driver_license_expiry_date') is-invalid @enderror"
                                value="{{ old('driver_license_expiry_date') ?? (isset($model) && $model->driver_license_expiry_date ? $model->driver_license_expiry_date->format('Y-m-d') : '') }}"
-                               required>
+                               @required($driverFieldRequired)>
                         @error('driver_license_expiry_date')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -289,11 +290,11 @@
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="next_of_kin" class="form-label">Next of Kin *</label>
+                        <label for="next_of_kin" class="form-label">Next of Kin{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="next_of_kin" id="next_of_kin"
                                class="form-control @error('next_of_kin') is-invalid @enderror"
                                value="{{ old('next_of_kin') ?? ($model->next_of_kin ?? '') }}"
-                               placeholder="Enter Next of Kin Name" required>
+                               placeholder="Enter Next of Kin Name" @required($driverFieldRequired)>
                         @error('next_of_kin')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -302,11 +303,11 @@
 
                 <div class="col-md-6">
                     <div class="mb-2">
-                        <label for="next_of_kin_phone" class="form-label">Next of Kin Phone *</label>
+                        <label for="next_of_kin_phone" class="form-label">Next of Kin Phone{{ $driverFieldRequired ? ' *' : '' }}</label>
                         <input type="text" name="next_of_kin_phone" id="next_of_kin_phone"
                                class="form-control @error('next_of_kin_phone') is-invalid @enderror"
                                value="{{ old('next_of_kin_phone') ?? ($model->next_of_kin_phone ?? '') }}"
-                               placeholder="Enter Next of Kin Phone" required>
+                               placeholder="Enter Next of Kin Phone" @required($driverFieldRequired)>
                         @error('next_of_kin_phone')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror

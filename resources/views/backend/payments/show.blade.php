@@ -121,7 +121,12 @@
                                         <tr>
                                             <td><strong>{{ $payment->payment_no }}</strong></td>
                                             <td>{{ optional($payment->payment_date)->format('d M Y') }}</td>
-                                            <td>{{ $payment->payment_method }}</td>
+                                            <td>
+                                                {{ $payment->payment_method }}
+                                                @if($payment->payment_method === 'Bank Transfer' && $payment->bankAccount)
+                                                    <div class="text-muted small">{{ $payment->bankAccount->bank_name }}</div>
+                                                @endif
+                                            </td>
                                             <td>£{{ number_format($payment->amount, 2) }}</td>
                                             <td>£{{ number_format($payment->allocated_amount, 2) }}</td>
                                             <td>£{{ number_format($payment->unallocated_amount, 2) }}</td>

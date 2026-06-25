@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agreement;
+use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use PDF;
 
@@ -79,8 +81,9 @@ class AgreementController extends Controller
         $originalAgreements = $this->originalAgreementsForForm($tenant);
         $replacementVehicleStatusId = $this->replacementVehicleStatusId();
         $driversActiveAgreements = $this->driversActiveAgreementsForForm($tenant);
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements'));
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements', 'bankAccounts'));
     }
 
     public function store(Request $request)
@@ -282,8 +285,9 @@ class AgreementController extends Controller
         $agreementPaymentAllowed = $agreementPaymentLimit > 0 && ! $agreement->isReplacementVehicle();
         $originalAgreements = $this->originalAgreementsForForm($tenant, $agreement->id, $agreement->parent_agreement_id);
         $replacementVehicleStatusId = $this->replacementVehicleStatusId();
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId'));
+        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'bankAccounts'));
     }
 
     public function update(Request $request, Agreement $agreement)
@@ -429,6 +433,7 @@ class AgreementController extends Controller
 
     private function validateAgreementRequest(Request $request): array
     {
+        $tenant = Auth::user()->currentTenant();
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $request->input('status_id'));
 
         $rules = [
@@ -475,6 +480,10 @@ class AgreementController extends Controller
                 'add_payment' => 'boolean',
                 'agreement_payments' => 'required_if:add_payment,1|array',
                 'agreement_payments.*.payment_method' => 'required_if:add_payment,1|nullable|string|max:255',
+                'agreement_payments.*.bank_account_id' => [
+                    'nullable',
+                    Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant?->id)),
+                ],
                 'agreement_payments.*.payment_date' => 'required_if:add_payment,1|nullable|date',
                 'agreement_payments.*.amount' => 'required_if:add_payment,1|nullable|numeric|min:0.01',
                 'agreement_payments.*.notes' => 'nullable|string',
@@ -776,8 +785,17 @@ class AgreementController extends Controller
                     continue;
                 }
 
+                if (($paymentRow['payment_method'] ?? '') === 'Bank Transfer' && empty($paymentRow['bank_account_id'])) {
+                    throw ValidationException::withMessages([
+                        "agreement_payments.{$index}.bank_account_id" => 'Bank account is required for bank transfer payments.',
+                    ]);
+                }
+
                 $paymentData[] = [
                     'payment_method' => $paymentRow['payment_method'] ?? null,
+                    'bank_account_id' => ($paymentRow['payment_method'] ?? '') === 'Bank Transfer'
+                        ? ($paymentRow['bank_account_id'] ?? null)
+                        : null,
                     'payment_date' => $paymentRow['payment_date'] ?? null,
                     'amount' => round((float) $paymentRow['amount'], 2),
                     'notes' => $paymentRow['notes'] ?? null,
@@ -1491,5 +1509,13 @@ class AgreementController extends Controller
 
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    private function bankAccountsForTenant(int $tenantId)
+    {
+        return BankAccount::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('bank_name')
+            ->get();
     }
 }

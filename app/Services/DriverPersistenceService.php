@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\Rule;
 
 class DriverPersistenceService
 {
@@ -82,6 +83,57 @@ class DriverPersistenceService
             'phd_license_expiry_date' => 'nullable|date',
             'next_of_kin' => 'required|string|max:255',
             'next_of_kin_phone' => 'required|string|max:20',
+            ...$this->documentValidationRules(),
+        ];
+    }
+
+    /**
+     * Relaxed driver rules for new-driver flow on add reservation only.
+     *
+     * @return array<string, mixed>
+     */
+    public function reservationMinimalValidationRules(?Driver $existing = null): array
+    {
+        $driverId = $existing?->id;
+
+        return [
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name' => 'nullable|string|max:255',
+            'dob' => 'nullable|date',
+            'email' => [
+                'nullable',
+                'email',
+                Rule::unique('drivers', 'email')->ignore($driverId),
+            ],
+            'phone_number' => 'nullable|string|max:20',
+            'ni_number' => 'nullable|string|max:20',
+            'address1' => 'nullable|string|max:255',
+            'address2' => 'nullable|string|max:255',
+            'post_code' => 'nullable|string|max:20',
+            'town' => 'nullable|string|max:100',
+            'county' => 'nullable|string|max:100',
+            'country_id' => 'nullable|numeric|exists:countries,id',
+            'driver_license_number' => [
+                'nullable',
+                'string',
+                Rule::unique('drivers', 'driver_license_number')->ignore($driverId),
+            ],
+            'driver_license_expiry_date' => 'nullable|date',
+            'phd_license_number' => 'nullable|string',
+            'phd_license_expiry_date' => 'nullable|date',
+            'next_of_kin' => 'nullable|string|max:255',
+            'next_of_kin_phone' => 'nullable|string|max:20',
+            ...$this->documentValidationRules(),
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function documentValidationRules(): array
+    {
+        return [
             'driver_license_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'driver_phd_license_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'phd_card_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
@@ -116,21 +168,38 @@ class DriverPersistenceService
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    public function attributesFromValidated(Request $request, array $validated, ?Driver $existing = null): array
-    {
+    public function attributesFromValidated(
+        Request $request,
+        array $validated,
+        ?Driver $existing = null,
+        bool $minimal = false
+    ): array {
+        $rules = $minimal
+            ? $this->reservationMinimalValidationRules($existing)
+            : $this->validationRules($existing);
+
         $attributeKeys = array_diff(
-            array_keys($this->validationRules($existing)),
+            array_keys($rules),
             self::DOCUMENT_FIELDS
         );
 
         $driverAttributes = Arr::only($validated, $attributeKeys);
 
-        if (! filled($driverAttributes['county'] ?? null)) {
-            $driverAttributes['county'] = null;
+        foreach (['county', 'address2', 'email', 'driver_license_number', 'country_id'] as $nullableField) {
+            if (! filled($driverAttributes[$nullableField] ?? null)) {
+                $driverAttributes[$nullableField] = null;
+            }
         }
 
-        if (! filled($driverAttributes['address2'] ?? null)) {
-            $driverAttributes['address2'] = null;
+        if ($minimal) {
+            foreach (array_keys($driverAttributes) as $field) {
+                if ($field === 'first_name') {
+                    continue;
+                }
+                if (! filled($driverAttributes[$field] ?? null)) {
+                    $driverAttributes[$field] = null;
+                }
+            }
         }
 
         return $this->mergeUploadedDocuments($request, $driverAttributes, $existing);

@@ -104,11 +104,11 @@
                             </div>
                             <div class="col-md-4 mb-3">
                                 <strong>Date of Birth:</strong>
-                                <p class="mb-0">{{ \Carbon\Carbon::parse($driver->dob)->format('d M, Y') }}</p>
+                                <p class="mb-0">{{ $driver->dob?->format('d M, Y') ?? '—' }}</p>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <strong>Age:</strong>
-                                <p class="mb-0">{{ \Carbon\Carbon::parse($driver->dob)->age }} years</p>
+                                <p class="mb-0">{{ $driver->dob ? $driver->dob->age.' years' : '—' }}</p>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <strong>Email:</strong>
@@ -173,13 +173,17 @@
                             <div class="col-md-6 mb-3">
                                 <strong>Driver License Expiry Date:</strong>
                                 <p class="mb-0">
-                                    {{ \Carbon\Carbon::parse($driver->driver_license_expiry_date)->format('d M, Y') }}
-                                    @if(\Carbon\Carbon::parse($driver->driver_license_expiry_date)->isPast())
-                                        <span class="badge badge-danger ml-2">Expired</span>
-                                    @elseif(\Carbon\Carbon::parse($driver->driver_license_expiry_date)->diffInDays(now()) <= 30)
-                                        <span class="badge badge-warning ml-2">Expiring Soon</span>
+                                    @if($driver->driver_license_expiry_date)
+                                        {{ $driver->driver_license_expiry_date->format('d M, Y') }}
+                                        @if($driver->driver_license_expiry_date->isPast())
+                                            <span class="badge badge-danger ml-2">Expired</span>
+                                        @elseif($driver->driver_license_expiry_date->diffInDays(now()) <= 30)
+                                            <span class="badge badge-warning ml-2">Expiring Soon</span>
+                                        @else
+                                            <span class="badge badge-success ml-2">Valid</span>
+                                        @endif
                                     @else
-                                        <span class="badge badge-success ml-2">Valid</span>
+                                        —
                                     @endif
                                 </p>
                             </div>

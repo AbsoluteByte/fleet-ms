@@ -26,6 +26,12 @@
                             <strong>Payment Method</strong>
                             <p>{{ $payment->payment_method }}</p>
                         </div>
+                        @if($payment->payment_method === 'Bank Transfer' && $payment->bankAccount)
+                        <div class="col-md-4 mb-2">
+                            <strong>Bank Account</strong>
+                            <p>{{ $payment->bankAccount->bank_name }}</p>
+                        </div>
+                        @endif
                         <div class="col-md-4 mb-2">
                             <strong>Amount</strong>
                             <p>£{{ number_format($payment->amount, 2) }}</p>

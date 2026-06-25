@@ -137,8 +137,8 @@
     </section>
 @endsection
 @section('js')
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260624"></script>
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260624"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260625"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260625"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('formEditReservation');

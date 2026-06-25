@@ -1,5 +1,5 @@
 <div class="card mb-1">
-    <div class="card-header">
+    <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
         <h5 class="card-title mb-0">
             <i class="fa fa-credit-card"></i> Payment Details
         </h5>
@@ -16,6 +16,16 @@
                     ])
                 </select>
                 @error('driver_id')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <label for="payment_date" class="form-label">Payment Date <span class="text-danger">*</span></label>
+                <input type="date" name="payment_date" id="payment_date"
+                       class="form-control @error('payment_date') is-invalid @enderror"
+                       value="{{ old('payment_date', now()->toDateString()) }}" required>
+                @error('payment_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
@@ -41,13 +51,14 @@
             </div>
 
             <div class="col-md-6 mb-2">
-                <label for="payment_date" class="form-label">Payment Date <span class="text-danger">*</span></label>
-                <input type="date" name="payment_date" id="payment_date"
-                       class="form-control @error('payment_date') is-invalid @enderror"
-                       value="{{ old('payment_date', now()->toDateString()) }}" required>
-                @error('payment_date')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
+                @include('backend.payments.partials.bank-account-select', [
+                    'bankAccounts' => $bankAccounts ?? collect(),
+                    'selected' => old('bank_account_id', $model->bank_account_id ?? null),
+                    'name' => 'bank_account_id',
+                    'id' => 'bank_account_id',
+                    'errorKey' => 'bank_account_id',
+                    'wrapperClass' => 'bank-account-field d-none',
+                ])
             </div>
 
             <div class="col-md-6 mb-2">
@@ -75,7 +86,7 @@
 </div>
 
 <div class="card mb-1">
-    <div class="card-header">
+    <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
         <h5 class="card-title mb-0">
             <i class="fa fa-random"></i> Invoice Allocation
         </h5>
@@ -170,6 +181,9 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const driverSelect = document.getElementById('driver_id');
+            const paymentMethodSelect = document.getElementById('payment_method');
+            const bankAccountField = document.querySelector('[data-bank-account-field]');
+            const bankAccountSelect = document.querySelector('[data-bank-account-select]');
             const autoManage = document.getElementById('auto_manage_invoices');
             const amountInput = document.getElementById('amount');
             const manualColumns = document.querySelectorAll('.manual-allocation-column');
@@ -253,6 +267,28 @@
                 if (manualAllocationWarning) {
                     manualAllocationWarning.style.display = showWarning ? 'block' : 'none';
                 }
+            }
+
+            function toggleBankAccountField() {
+                if (!paymentMethodSelect || !bankAccountField) {
+                    return;
+                }
+
+                const isBankTransfer = paymentMethodSelect.value === 'Bank Transfer';
+                bankAccountField.classList.toggle('d-none', !isBankTransfer);
+
+                if (bankAccountSelect) {
+                    bankAccountSelect.required = isBankTransfer && {{ ($bankAccounts ?? collect())->isNotEmpty() ? 'true' : 'false' }};
+
+                    if (!isBankTransfer) {
+                        bankAccountSelect.value = '';
+                    }
+                }
+            }
+
+            if (paymentMethodSelect) {
+                paymentMethodSelect.addEventListener('change', toggleBankAccountField);
+                toggleBankAccountField();
             }
 
             if (driverSelect) {

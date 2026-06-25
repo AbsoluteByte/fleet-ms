@@ -562,10 +562,10 @@
 @php
     $agreementPaymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
     $agreementPaymentRows = old('agreement_payments', [
-        ['payment_method' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
+        ['payment_method' => '', 'bank_account_id' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
     ]);
     $agreementPaymentRows = is_array($agreementPaymentRows) && $agreementPaymentRows !== [] ? array_values($agreementPaymentRows) : [
-        ['payment_method' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
+        ['payment_method' => '', 'bank_account_id' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
     ];
     $agreementPaymentAllowed = $agreementPaymentAllowed ?? true;
     $agreementPaymentLimit = $agreementPaymentLimit ?? null;
@@ -616,6 +616,16 @@
                                 @error('agreement_payments.'.$paymentIndex.'.payment_method')
                                 <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
+                            </div>
+                            <div class="col-12 mb-2">
+                                @include('backend.payments.partials.bank-account-select', [
+                                    'bankAccounts' => $bankAccounts ?? collect(),
+                                    'selected' => old('agreement_payments.'.$paymentIndex.'.bank_account_id', $paymentRow['bank_account_id'] ?? null),
+                                    'name' => 'agreement_payments['.$paymentIndex.'][bank_account_id]',
+                                    'id' => 'agreement_payment_bank_account_'.$paymentIndex,
+                                    'errorKey' => 'agreement_payments.'.$paymentIndex.'.bank_account_id',
+                                    'wrapperClass' => 'bank-account-field d-none',
+                                ])
                             </div>
                             <div class="col-md-3 mb-2">
                                 <label class="form-label">Payment Date <span class="text-danger">*</span></label>
@@ -1281,6 +1291,7 @@
         }
 
         const agreementPaymentMethods = @json($agreementPaymentMethods);
+        const agreementBankAccounts = @json(($bankAccounts ?? collect())->map(fn ($account) => ['id' => $account->id, 'bank_name' => $account->bank_name])->values());
         const defaultAgreementPaymentDate = @json(now()->toDateString());
 
         function money(value) {
@@ -1320,6 +1331,69 @@
                 + Number(document.getElementById('deposit_amount')?.value || 0);
         }
 
+        function bankAccountFieldHtml(index, selectedId) {
+            if (!agreementBankAccounts.length) {
+                return '<div class="col-12 mb-2 bank-account-field d-none" data-bank-account-field>' +
+                    '<label class="form-label">Bank Account <span class="text-danger">*</span></label>' +
+                    '<div class="alert alert-warning mb-0 py-2">No bank accounts configured. <a href="{{ route('bank-accounts.index') }}">Add bank accounts</a></div>' +
+                '</div>';
+            }
+
+            const options = agreementBankAccounts.map(function(account) {
+                const selected = String(selectedId || '') === String(account.id) ? ' selected' : '';
+
+                return '<option value="' + account.id + '"' + selected + '>' + account.bank_name + '</option>';
+            }).join('');
+
+            return '<div class="col-12 mb-2 bank-account-field d-none" data-bank-account-field>' +
+                '<label class="form-label">Bank Account <span class="text-danger">*</span></label>' +
+                '<select name="agreement_payments[' + index + '][bank_account_id]" class="form-control" data-bank-account-select>' +
+                    '<option value="">Select Bank Account</option>' + options +
+                '</select>' +
+            '</div>';
+        }
+
+        function toggleBankAccountFieldForRow(row) {
+            if (!row) {
+                return;
+            }
+
+            const methodSelect = row.querySelector('[data-payment-method]');
+            const bankField = row.querySelector('[data-bank-account-field]');
+            const bankSelect = row.querySelector('[data-bank-account-select]');
+            const isBankTransfer = methodSelect && methodSelect.value === 'Bank Transfer';
+
+            if (bankField) {
+                bankField.classList.toggle('d-none', !isBankTransfer);
+            }
+
+            if (bankSelect) {
+                bankSelect.required = isBankTransfer && agreementBankAccounts.length > 0;
+
+                if (!isBankTransfer) {
+                    bankSelect.value = '';
+                }
+            }
+        }
+
+        function bindAgreementPaymentRow(row) {
+            const methodSelect = row.querySelector('[data-payment-method]');
+
+            if (methodSelect) {
+                methodSelect.addEventListener('change', function() {
+                    toggleBankAccountFieldForRow(row);
+                });
+            }
+
+            toggleBankAccountFieldForRow(row);
+        }
+
+        function bindAllAgreementPaymentRows() {
+            agreementPaymentRows().forEach(function(row) {
+                bindAgreementPaymentRow(row);
+            });
+        }
+
         function paymentRowTemplate(index) {
             const methodOptions = agreementPaymentMethods.map(function(method) {
                 return '<option value="' + method + '">' + method + '</option>';
@@ -1333,6 +1407,7 @@
                             '<option value="">Select Method</option>' + methodOptions +
                         '</select>' +
                     '</div>' +
+                    bankAccountFieldHtml(index, '') +
                     '<div class="col-md-3 mb-2">' +
                         '<label class="form-label">Payment Date <span class="text-danger">*</span></label>' +
                         '<input type="date" name="agreement_payments[' + index + '][payment_date]" class="form-control" value="' + defaultAgreementPaymentDate + '" data-payment-date>' +
@@ -1481,7 +1556,16 @@
                 }
 
                 rowsContainer.insertAdjacentHTML('beforeend', paymentRowTemplate(agreementPaymentRows().length));
+                const newRow = rowsContainer.lastElementChild;
+                if (newRow) {
+                    bindAgreementPaymentRow(newRow);
+                }
                 updateAgreementPaymentLimits();
+            });
+            document.getElementById('agreement-payment-rows')?.addEventListener('change', function(event) {
+                if (event.target.matches('[data-payment-method]')) {
+                    toggleBankAccountFieldForRow(event.target.closest('[data-payment-row]'));
+                }
             });
             document.getElementById('agreement-payment-rows')?.addEventListener('input', function(event) {
                 if (event.target.matches('[data-payment-amount]')) {
@@ -1502,6 +1586,7 @@
                 }
             });
             updateAgreementPaymentLimits();
+            bindAllAgreementPaymentRows();
             document.getElementById('using_own_insurance_client').addEventListener('change', toggleInsuranceSections);
             document.getElementById('using_own_insurance_company').addEventListener('change', toggleInsuranceSections);
             const discountPercentage = document.getElementById('discount_type_percentage');

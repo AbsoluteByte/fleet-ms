@@ -4,10 +4,10 @@
 @endphp
 
 <div class="card mb-2" id="reservation-driver-section">
-    <div class="card-header">
+    <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
         <h5 class="card-title mb-0">Driver</h5>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="margin-top: 0 !important;">
         <div class="form-group">
             <label class="d-block mb-1">Client / driver <span class="text-danger">*</span></label>
             <div class="btn-group mb-2" role="group" aria-label="Driver mode">
@@ -49,6 +49,7 @@
             @include('backend.drivers._form', [
                 'model' => $driver,
                 'hideFormActions' => true,
+                'minimalDriverForm' => $minimalDriverForm ?? false,
             ])
         </div>
     </div>

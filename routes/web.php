@@ -166,6 +166,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('car-models', App\Http\Controllers\Backend\CarModelController::class);
     Route::resource('counsels', App\Http\Controllers\Backend\CounselController::class);
     Route::resource('insurance-providers', App\Http\Controllers\Backend\InsuranceProviderController::class);
+    Route::resource('bank-accounts', App\Http\Controllers\Backend\BankAccountController::class);
 
     Route::get('settings', [App\Http\Controllers\Backend\SettingsController::class, 'index'])->name('settings.index');
     Route::get('settings/{setting}/edit', [App\Http\Controllers\Backend\SettingsController::class, 'edit'])->name('settings.edit');

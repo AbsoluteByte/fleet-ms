@@ -29,13 +29,14 @@
                                     'driver' => $driver,
                                     'selectedDriverId' => $selectedDriverId,
                                     'driverMode' => $driverMode,
+                                    'minimalDriverForm' => true,
                                 ])
 
                                 <div class="card mb-2">
-                                    <div class="card-header">
+                                    <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
                                         <h5 class="card-title mb-0">Reservation details</h5>
                                     </div>
-                                    <div class="card-body">
+                                    <div class="card-body" style="margin-top: 0 !important;">
                                         <div class="row">
                                             <div class="col-md-6 form-group">
                                                 <label for="reservation_car_id">Car</label>
@@ -133,13 +134,15 @@
     </section>
 @endsection
 @section('js')
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260624"></script>
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260624"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260625"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260625"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('formCreateReservation');
             if (form && window.FleetiqFormValidation && window.validateReservationForm) {
-                FleetiqFormValidation.attach(form, validateReservationForm);
+                FleetiqFormValidation.attach(form, function (f, errors) {
+                    return validateReservationForm(f, errors, { minimalNewDriver: true });
+                });
             }
         });
     </script>

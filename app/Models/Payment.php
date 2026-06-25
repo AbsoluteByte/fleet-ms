@@ -13,6 +13,7 @@ class Payment extends Model
         'payment_no',
         'driver_id',
         'payment_method',
+        'bank_account_id',
         'payment_date',
         'amount',
         'notes',
@@ -35,6 +36,11 @@ class Payment extends Model
     public function driver()
     {
         return $this->belongsTo(Driver::class);
+    }
+
+    public function bankAccount()
+    {
+        return $this->belongsTo(BankAccount::class);
     }
 
     public function allocations()
