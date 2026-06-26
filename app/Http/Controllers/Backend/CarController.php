@@ -1760,7 +1760,6 @@ class CarController extends Controller
     {
         $providers = InsuranceProvider::query()
             ->where('tenant_id', $tenantId)
-            ->notExpired()
             ->orderBy('provider_name')
             ->get();
 

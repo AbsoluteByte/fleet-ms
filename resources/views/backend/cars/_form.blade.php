@@ -2120,39 +2120,65 @@
             return provider.expiry_date < todayYmd;
         }
 
-        function filterInsuranceProviders() {
-            const companyId = document.getElementById('company_id').value;
+        function refreshInsuranceProviderSelect2() {
             const insuranceProviderSelect = document.getElementById('insurance_provider_id');
+            if (!insuranceProviderSelect || !window.jQuery || !jQuery.fn.select2) {
+                return;
+            }
+
+            const $select = jQuery(insuranceProviderSelect);
+            if ($select.hasClass('select2-hidden-accessible')) {
+                $select.select2('destroy');
+            }
+
+            $select.select2({
+                width: '100%',
+                placeholder: $select.find('option[value=""]').first().text() || 'Select Provider',
+                allowClear: !$select.prop('required'),
+                dropdownParent: $select.closest('.form-group')
+            });
+        }
+
+        function filterInsuranceProviders() {
+            const companySelect = document.getElementById('company_id');
+            const insuranceProviderSelect = document.getElementById('insurance_provider_id');
+            if (!companySelect || !insuranceProviderSelect) {
+                return;
+            }
+
+            const companyId = companySelect.value;
             const selectedProviderId = insuranceProviderSelect.value;
 
             insuranceProviderSelect.innerHTML = '<option value="">Select Provider</option>';
 
             if (companyId) {
                 const filteredProviders = allInsuranceProviders.filter(function (provider) {
-                    if (provider.company_id != companyId) {
+                    if (String(provider.company_id) !== String(companyId)) {
                         return false;
                     }
 
-                    if (provider.id == selectedProviderId) {
+                    if (String(provider.id) === String(selectedProviderId)) {
                         return true;
                     }
 
                     return !isInsuranceProviderExpired(provider);
                 });
 
-                filteredProviders.forEach(provider => {
+                filteredProviders.forEach(function (provider) {
                     const option = document.createElement('option');
                     option.value = provider.id;
-                    option.textContent = provider.provider_name;
+                    option.textContent = provider.provider_name + (isInsuranceProviderExpired(provider) ? ' (Expired)' : '');
                     option.setAttribute('data-company-id', provider.company_id);
 
-                    if (provider.id == selectedProviderId) {
+                    if (String(provider.id) === String(selectedProviderId)) {
                         option.selected = true;
                     }
 
                     insuranceProviderSelect.appendChild(option);
                 });
             }
+
+            refreshInsuranceProviderSelect2();
         }
 
         // ✅ Insurance Section Toggle
@@ -2168,6 +2194,7 @@
 
             if (hasInsuranceCheckbox.checked) {
                 insuranceSection.style.display = 'block';
+                filterInsuranceProviders();
                 insuranceProvider.setAttribute('required', 'required');
                 insuranceStatus.setAttribute('required', 'required');
             } else {
@@ -2272,7 +2299,12 @@
                 }
             })();
 
-            document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
+            const companySelect = document.getElementById('company_id');
+            if (companySelect && window.jQuery) {
+                jQuery(companySelect).on('change', filterInsuranceProviders);
+            } else if (companySelect) {
+                companySelect.addEventListener('change', filterInsuranceProviders);
+            }
             document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
             document.getElementById('insurance_status_id').addEventListener('change', toggleInsuranceStatusFields);
             const v5DocInput = document.getElementById('v5_document');
