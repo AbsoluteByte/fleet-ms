@@ -36,10 +36,10 @@
                                 ])
 
                                 <div class="card mb-2">
-                                    <div class="card-header">
+                                    <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
                                         <h5 class="card-title mb-0">Reservation details</h5>
                                     </div>
-                                    <div class="card-body">
+                                    <div class="card-body" style="margin-top: 0 !important;">
                                         <div class="row">
                                             <div class="col-md-6 form-group">
                                                 <label for="reservation_car_id">Car</label>
