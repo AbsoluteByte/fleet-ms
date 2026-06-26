@@ -1,7 +1,7 @@
 <div class="row">
     <!-- Provider Information -->
     <div class="card mb-2">
-        <div class="card-header">
+        <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
             <h5 class="card-title mb-0">
                 <i class="fa fa-shield-alt me-2"></i>
                 Insurance Provider Information
