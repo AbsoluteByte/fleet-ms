@@ -410,10 +410,32 @@ class Car extends Model
         return $this->reservations()->where('status', 'active')->exists();
     }
 
-    public function isSelectableForAgreement(array $rentedCarIds): bool
+    public function isSelectableForAgreement(array $rentedCarIds, ?CarReservation $convertingReservation = null): bool
     {
-        return ! in_array($this->id, $rentedCarIds, true)
-            && $this->isEligibleForAgreementSelection();
+        if ($convertingReservation !== null && $this->matchesReservationForAgreementConversion($convertingReservation)) {
+            return ! in_array($this->id, $rentedCarIds, true);
+        }
+
+        if (in_array($this->id, $rentedCarIds, true)) {
+            return false;
+        }
+
+        return $this->isEligibleForAgreementSelection();
+    }
+
+    public function matchesReservationForAgreementConversion(CarReservation $reservation): bool
+    {
+        if ($reservation->trashed()) {
+            return false;
+        }
+
+        $reservationCarId = (int) $reservation->car_id;
+
+        if ($reservationCarId > 0 && $reservationCarId !== (int) $this->id) {
+            return false;
+        }
+
+        return strtolower((string) ($reservation->status ?? 'active')) === 'active';
     }
 
     public function latestService()

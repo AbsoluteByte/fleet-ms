@@ -6,6 +6,8 @@ use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\Driver;
 use App\Models\Status;
+use App\Models\VehicleSwap;
+use App\Services\CarFleetComplianceService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -37,6 +39,32 @@ class AgreementUpgradeService
             ->values();
     }
 
+    /**
+     * Cars that currently have an active agreement eligible for a car change / vehicle swap.
+     */
+    public function carsWithActiveUpgradeableAgreements(int $tenantId): Collection
+    {
+        return Agreement::query()
+            ->where('tenant_id', $tenantId)
+            ->withActiveAssignment()
+            ->with(['car.company', 'car.carModel', 'driver', 'status'])
+            ->get()
+            ->filter(fn (Agreement $agreement) => $this->canUpgrade($agreement))
+            ->map(function (Agreement $agreement) {
+                $car = $agreement->car;
+
+                if ($car) {
+                    $car->setRelation('activeAgreement', $agreement);
+                }
+
+                return $car;
+            })
+            ->filter()
+            ->unique('id')
+            ->sortBy('registration')
+            ->values();
+    }
+
     public function canUpgrade(Agreement $agreement): bool
     {
         if ($agreement->isReplacementVehicle() || $agreement->isUpgradedAgreement() || $agreement->hasBeenUpgraded()) {
@@ -49,8 +77,7 @@ class AgreementUpgradeService
 
         $today = now()->startOfDay();
 
-        return $agreement->start_date?->copy()->startOfDay()->lte($today)
-            && $agreement->end_date?->copy()->startOfDay()->gte($today);
+        return $agreement->end_date?->copy()->startOfDay()->gte($today) ?? false;
     }
 
     /**
@@ -129,8 +156,15 @@ class AgreementUpgradeService
         $activeStatus = Status::where('type', 'agreement')->where('name', 'Active')->firstOrFail();
         $changeDate = now();
         $changeDay = $changeDate->copy()->startOfDay();
+        $swapReason = $input['swap_reason'] ?? null;
+        $swapReasonLabel = $swapReason
+            ? (VehicleSwap::reasonLabels()[$swapReason] ?? $swapReason)
+            : null;
+        $terminationNote = $swapReasonLabel
+            ? 'Vehicle swap: '.$swapReasonLabel
+            : 'Closed due to car change.';
 
-        return DB::transaction(function () use ($old, $car, $newRent, $terminatedStatus, $activeStatus, $changeDate, $changeDay) {
+        return DB::transaction(function () use ($old, $car, $newRent, $terminatedStatus, $activeStatus, $changeDate, $changeDay, $input, $terminationNote, $swapReason) {
             $originalEndDate = $old->end_date;
 
             $old->update([
@@ -138,7 +172,7 @@ class AgreementUpgradeService
                 'end_date' => $changeDay->toDateString(),
                 'termination_notice_date' => $changeDay->toDateString(),
                 'termination_available_from_date' => $changeDay->toDateString(),
-                'termination_notes' => 'Closed due to car change.',
+                'termination_notes' => $terminationNote,
                 'termination_recorded_by' => Auth::id(),
                 'updatedBy' => Auth::id(),
             ]);
@@ -169,6 +203,10 @@ class AgreementUpgradeService
                 'own_insurance_policy_number' => $old->own_insurance_policy_number,
                 'own_insurance_proof_document' => $old->own_insurance_proof_document,
                 'notes' => $old->notes,
+                'swap_reason' => $swapReason,
+                'swap_phvl_issue_type' => $input['swap_phvl_issue_type'] ?? null,
+                'swap_phvl_issue_notes' => $input['swap_phvl_issue_notes'] ?? null,
+                'swap_reason_notes' => $input['swap_reason_notes'] ?? null,
                 'status_id' => $activeStatus->id,
                 'upgraded_from_agreement_id' => $old->id,
                 'createdBy' => Auth::id(),
@@ -212,10 +250,31 @@ class AgreementUpgradeService
             return;
         }
 
-        $agreement->car->update([
-            'fleet_status' => 'available_for_rent',
+        $car = $agreement->car;
+        $car->update([
             'available_from_date' => $agreement->termination_available_from_date,
             'updatedBy' => Auth::id(),
         ]);
+
+        $stillRented = in_array(
+            $car->id,
+            Agreement::rentedCarIdsForTenant($agreement->tenant_id),
+            true
+        );
+
+        if ($stillRented) {
+            return;
+        }
+
+        $car = $car->fresh();
+        $car->load(['mots', 'roadTaxes', 'phvs']);
+
+        if (in_array($car->fleet_status, [
+            Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
+            Car::FLEET_STATUS_NON_COMPLIANT,
+            Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
+        ], true)) {
+            app(CarFleetComplianceService::class)->syncFleetStatusForCar($car, Auth::id());
+        }
     }
 }

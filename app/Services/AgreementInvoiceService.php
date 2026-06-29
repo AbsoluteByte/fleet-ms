@@ -39,9 +39,24 @@ class AgreementInvoiceService
         }
 
         $throughDate = $throughDate?->copy()->startOfDay() ?? now()->startOfDay();
-        $currentDate = $agreement->start_date->copy()->startOfDay();
         $endDate = $agreement->end_date->copy()->startOfDay()->min($throughDate);
         $generated = $this->syncDepositInvoice($agreement) ? 1 : 0;
+
+        if ($agreement->hasDeferredBillingAnchor()) {
+            $periodStart = $agreement->start_date->copy()->startOfDay();
+            $anchor = $agreement->billing_anchor_date->copy()->startOfDay();
+            $proration = $this->calculateInitialProrationAmount($agreement, $periodStart, $anchor);
+
+            if ($proration > 0 && $periodStart <= $endDate) {
+                if ($this->createInitialProrationInvoice($agreement, $periodStart, $proration, $anchor)) {
+                    $generated++;
+                }
+            }
+
+            $currentDate = $anchor->copy();
+        } else {
+            $currentDate = $agreement->start_date->copy()->startOfDay();
+        }
 
         while ($currentDate <= $endDate) {
             if ($this->createInvoiceForDate($agreement, $currentDate)) {
@@ -78,6 +93,50 @@ class AgreementInvoiceService
         return $previous;
     }
 
+    public function calculateInitialProrationAmount(Agreement $agreement, Carbon $periodStart, Carbon $billingAnchor): float
+    {
+        return $this->calculateProrationForPeriod(
+            $agreement,
+            $periodStart,
+            $billingAnchor,
+            (float) $agreement->agreed_rent
+        );
+    }
+
+    public function calculateProrationForPeriod(Agreement $agreement, Carbon $from, Carbon $to, float $rentAmount): float
+    {
+        $from = $from->copy()->startOfDay();
+        $to = $to->copy()->startOfDay();
+
+        if ($to->lte($from) || $rentAmount == 0.0) {
+            return 0;
+        }
+
+        $partialDays = $from->diffInDays($to);
+
+        if ($partialDays <= 0) {
+            return 0;
+        }
+
+        $rentInterval = (string) $agreement->rent_interval;
+        $previousAnchor = $this->previousAnchorBefore($to, $rentInterval);
+        $periodDays = $previousAnchor->diffInDays($to);
+
+        if ($periodDays <= 0) {
+            return 0;
+        }
+
+        $subtotal = round($rentAmount / $periodDays * $partialDays, 2);
+
+        if ($subtotal > 0) {
+            $discountAmount = $this->discountAmount($agreement, $subtotal);
+
+            return round(max($subtotal - $discountAmount, 0), 2);
+        }
+
+        return $subtotal;
+    }
+
     public function calculateUpgradeProration(Agreement $new, Agreement $old, ?Carbon $upgradeDate = null): float
     {
         $adjustment = $this->calculateChangeCarAdjustment($new, $old, $upgradeDate);
@@ -96,6 +155,12 @@ class AgreementInvoiceService
         }
 
         $nextAnchor = $this->nextBillingAnchor($originalStart, $changeDate, $rentInterval);
+        $rentDiff = (float) $new->agreed_rent - (float) $old->agreed_rent;
+
+        if ($rentDiff > 0) {
+            return $this->calculateProrationForPeriod($new, $changeDate, $nextAnchor, $rentDiff);
+        }
+
         $remainingDays = $changeDate->diffInDays($nextAnchor);
 
         if ($remainingDays <= 0) {
@@ -109,16 +174,7 @@ class AgreementInvoiceService
             return 0;
         }
 
-        $rentDiff = (float) $new->agreed_rent - (float) $old->agreed_rent;
-        $subtotal = round($rentDiff / $periodDays * $remainingDays, 2);
-
-        if ($subtotal > 0) {
-            $discountAmount = $this->discountAmount($new, $subtotal);
-
-            return round(max($subtotal - $discountAmount, 0), 2);
-        }
-
-        return $subtotal;
+        return round($rentDiff / $periodDays * $remainingDays, 2);
     }
 
     public function changeCarAdjustmentType(float $adjustment): string
@@ -267,6 +323,42 @@ class AgreementInvoiceService
         return true;
     }
 
+    private function createInitialProrationInvoice(Agreement $agreement, Carbon $invoiceDate, float $totalAmount, Carbon $billingAnchor): bool
+    {
+        $exists = Invoice::query()
+            ->where('invoice_type', 'agreement')
+            ->where('source_id', $agreement->id)
+            ->whereDate('invoice_date', $invoiceDate)
+            ->exists();
+
+        if ($exists) {
+            return false;
+        }
+
+        $dueDate = $invoiceDate->copy()->addDays(5);
+
+        $invoice = Invoice::create([
+            'driver_id' => $agreement->driver_id,
+            'source_id' => $agreement->id,
+            'invoice_type' => 'agreement',
+            'invoice_date' => $invoiceDate->toDateString(),
+            'due_date' => $dueDate->toDateString(),
+            'subtotal' => $totalAmount,
+            'discount_amount' => 0,
+            'discount_description' => null,
+            'tax_amount' => 0,
+            'total_amount' => $totalAmount,
+            'paid_amount' => 0,
+            'balance_amount' => $totalAmount,
+            'status' => $totalAmount <= 0 ? 'paid' : ($dueDate->lt(now()->startOfDay()) ? 'overdue' : 'pending'),
+            'notes' => 'Initial proration until '.$billingAnchor->toDateString(),
+        ]);
+
+        app(PaymentAllocationService::class)->allocateAvailableCreditToInvoice($invoice);
+
+        return true;
+    }
+
     private function createChangeCarProrationInvoice(Agreement $agreement, Carbon $invoiceDate, float $totalAmount, Carbon $nextAnchor): bool
     {
         $exists = Invoice::query()
@@ -355,6 +447,16 @@ class AgreementInvoiceService
         }
 
         return round(min($discountValue, $subtotal), 2);
+    }
+
+    private function previousAnchorBefore(Carbon $anchor, string $rentInterval): Carbon
+    {
+        return match (strtolower($rentInterval)) {
+            'weekly' => $anchor->copy()->subWeek(),
+            'quarterly' => $anchor->copy()->subMonthsNoOverflow(3),
+            'yearly' => $anchor->copy()->subYearNoOverflow(),
+            default => $anchor->copy()->subMonthNoOverflow(),
+        };
     }
 
     private function nextInvoiceDate(Carbon $date, string $rentInterval): Carbon

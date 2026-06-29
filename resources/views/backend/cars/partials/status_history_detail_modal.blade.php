@@ -43,12 +43,20 @@
                         </div>
                     @endif
 
-                    @if($entry->vehicle_swap_id)
+                    @if(!empty($sd['agreement_id']))
                         <div class="mb-3">
-                            <a href="{{ route('vehicle-swaps.edit', $entry->vehicle_swap_id) }}"
+                            <a href="{{ route('agreements.show', $sd['agreement_id']) }}"
                                class="btn btn-sm btn-primary">
-                                <i class="fa fa-edit"></i> Edit vehicle swap #{{ $entry->vehicle_swap_id }}
+                                <i class="fa fa-eye"></i> View agreement #{{ $sd['agreement_id'] }}
                             </a>
+                            <a href="{{ route('agreements.permission-letter', $sd['agreement_id']) }}"
+                               class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">
+                                <i class="fa fa-file-text-o"></i> Permission letter
+                            </a>
+                        </div>
+                    @elseif($entry->vehicle_swap_id)
+                        <div class="mb-3">
+                            <span class="text-muted small">Legacy vehicle swap #{{ $entry->vehicle_swap_id }}</span>
                         </div>
                     @endif
 
@@ -63,7 +71,7 @@
                         <ul class="mb-3">
                             @foreach($docs as $docPath)
                                 @if(is_string($docPath) && $docPath !== '')
-                                    <li><a href="{{ document_view_url(asset($docPath)) }}" target="_blank" rel="noopener" class="document-view-link">View file</a></li>
+                                    <li><x-document-actions :view-url="asset($docPath)" style="list-item" view-text="View file" /></li>
                                 @endif
                             @endforeach
                         </ul>

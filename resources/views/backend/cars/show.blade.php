@@ -174,9 +174,12 @@
                                     <strong>Log book applied:</strong>
                                     <p class="mb-0">
                                         @foreach($oldLogBookFiles as $lbName)
-                                            <a href="{{ document_view_url(asset('uploads/cars/log_book/' . $lbName)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1">
-                                                <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
-                                            </a>
+                                            <x-document-actions
+                                                :view-url="asset('uploads/cars/log_book/' . $lbName)"
+                                                style="buttons"
+                                                show-icons
+                                                :view-text="'View file' . (count($oldLogBookFiles) > 1 ? ' #' . $loop->iteration : '')"
+                                            />
                                         @endforeach
                                     </p>
                                 </div>
@@ -200,9 +203,12 @@
                                         <strong class="d-block mt-3">Old log book:</strong>
                                         <p class="mb-0">
                                             @foreach($oldLogBookFiles as $lbName)
-                                                <a href="{{ document_view_url(asset('uploads/cars/log_book/' . $lbName)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1">
-                                                    <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
-                                                </a>
+                                                <x-document-actions
+                                                    :view-url="asset('uploads/cars/log_book/' . $lbName)"
+                                                    style="buttons"
+                                                    show-icons
+                                                    :view-text="'View file' . (count($oldLogBookFiles) > 1 ? ' #' . $loop->iteration : '')"
+                                                />
                                             @endforeach
                                         </p>
                                     @endif
@@ -242,9 +248,12 @@
                                         <strong>Old log book:</strong>
                                         <p class="mb-0">
                                             @foreach($oldLogBookFiles as $lbName)
-                                                <a href="{{ document_view_url(asset('uploads/cars/log_book/' . $lbName)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1">
-                                                    <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
-                                                </a>
+                                                <x-document-actions
+                                                    :view-url="asset('uploads/cars/log_book/' . $lbName)"
+                                                    style="buttons"
+                                                    show-icons
+                                                    :view-text="'View file' . (count($oldLogBookFiles) > 1 ? ' #' . $loop->iteration : '')"
+                                                />
                                             @endforeach
                                         </p>
                                     </div>
@@ -255,9 +264,13 @@
                                     <strong>V5 Document:</strong>
                                     <p class="mb-0">
                                         @foreach($v5DocumentFiles as $v5Name)
-                                            <a href="{{ document_view_url(route('cars.view.v5', [$car, $loop->index])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary mr-1 mb-1" rel="noopener">
-                                                <i class="fa fa-file"></i> View @if(count($v5DocumentFiles) > 1)#{{ $loop->iteration }}@endif
-                                            </a>
+                                            <x-document-actions
+                                                :view-url="route('cars.view.v5', [$car, $loop->index])"
+                                                :download-url="route('cars.download.v5', [$car, $loop->index])"
+                                                style="buttons"
+                                                show-icons
+                                                :view-text="'View' . (count($v5DocumentFiles) > 1 ? ' #' . $loop->iteration : '')"
+                                            />
                                         @endforeach
                                     </p>
                                 </div>
@@ -266,9 +279,23 @@
 
                         <!-- MOT Information -->
                         @php
+                            use App\Support\PhvlMotHelper;
+
                             $motsSorted = $car->mots;
                             $latestMot = $motsSorted->count() > 0 ? $motsSorted->first() : null;
                             $olderMots = $motsSorted->count() > 1 ? $motsSorted->slice(1) : collect();
+
+                            $formatMotTestDate = function ($mot) {
+                                if ($mot->test_date) {
+                                    return ['text' => $mot->test_date->format('d M, Y'), 'estimated' => false];
+                                }
+                                $estimated = PhvlMotHelper::estimatedMotDate($mot);
+                                if ($estimated) {
+                                    return ['text' => $estimated->format('d M, Y'), 'estimated' => true];
+                                }
+
+                                return ['text' => '—', 'estimated' => false];
+                            };
                         @endphp
                         <div class="row mb-4">
                             <div class="col-12 d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">
@@ -283,6 +310,7 @@
                                         <table class="table table-bordered table-hover">
                                             <thead class="thead-light">
                                             <tr>
+                                                <th>Test Date</th>
                                                 <th>Expiry Date</th>
                                                 <th>Amount</th>
                                                 <th>Term</th>
@@ -290,15 +318,24 @@
                                             </tr>
                                             </thead>
                                             <tbody>
+                                                @php $latestMotTest = $formatMotTestDate($latestMot); @endphp
                                                 <tr>
+                                                    <td>
+                                                        {{ $latestMotTest['text'] }}
+                                                        @if($latestMotTest['estimated'])
+                                                            <small class="text-muted">(estimated)</small>
+                                                        @endif
+                                                    </td>
                                                     <td>{{ $latestMot->expiry_date->format('d M, Y') }}</td>
                                                     <td>£{{ number_format($latestMot->amount, 2) }}</td>
                                                     <td>{{ $latestMot->term }}</td>
                                                     <td>
                                                         @if($latestMot->document)
-                                                            <a href="{{ document_view_url(route('cars.mots.download', [$car, $latestMot->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-file"></i> View
-                                                            </a>
+                                                            <x-document-actions
+                                                                :view-url="route('cars.mots.download', [$car, $latestMot->id])"
+                                                                style="buttons"
+                                                                show-icons
+                                                            />
                                                         @else
                                                             <span class="text-muted">No Document</span>
                                                         @endif
@@ -327,6 +364,7 @@
                                             <table class="table table-bordered mb-0">
                                                 <thead class="thead-light">
                                                     <tr>
+                                                        <th>Test Date</th>
                                                         <th>Expiry Date</th>
                                                         <th>Amount</th>
                                                         <th>Term</th>
@@ -335,13 +373,23 @@
                                                 </thead>
                                                 <tbody>
                                                     @foreach($olderMots as $mot)
+                                                    @php $motTest = $formatMotTestDate($mot); @endphp
                                                     <tr>
+                                                        <td>
+                                                            {{ $motTest['text'] }}
+                                                            @if($motTest['estimated'])
+                                                                <small class="text-muted">(estimated)</small>
+                                                            @endif
+                                                        </td>
                                                         <td>{{ $mot->expiry_date->format('d M, Y') }}</td>
                                                         <td>£{{ number_format($mot->amount, 2) }}</td>
                                                         <td>{{ $mot->term }}</td>
                                                         <td>
                                                             @if($mot->document)
-                                                                <a href="{{ document_view_url(route('cars.mots.download', [$car, $mot->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
+                                                                <x-document-actions
+                                                                    :view-url="route('cars.mots.download', [$car, $mot->id])"
+                                                                    style="buttons"
+                                                                />
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -495,9 +543,11 @@
                                                     </td>
                                                     <td>
                                                         @if($latestPhv->document)
-                                                            <a href="{{ document_view_url(route('cars.phvs.download', [$car, $latestPhv->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-file"></i> View
-                                                            </a>
+                                                            <x-document-actions
+                                                                :view-url="route('cars.phvs.download', [$car, $latestPhv->id])"
+                                                                style="buttons"
+                                                                show-icons
+                                                            />
                                                         @else
                                                             <span class="text-muted">No Document</span>
                                                         @endif
@@ -551,7 +601,10 @@
                                                         </td>
                                                         <td>
                                                             @if($phv->document)
-                                                                <a href="{{ document_view_url(route('cars.phvs.download', [$car, $phv->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
+                                                                <x-document-actions
+                                                                    :view-url="route('cars.phvs.download', [$car, $phv->id])"
+                                                                    style="buttons"
+                                                                />
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -615,9 +668,11 @@
                                                     </td>
                                                     <td>
                                                         @if($latestInsurance->insurance_document)
-                                                            <a href="{{ document_view_url(asset('uploads/cars/insurance_documents/' . $latestInsurance->insurance_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-file"></i> View
-                                                            </a>
+                                                            <x-document-actions
+                                                                :view-url="asset('uploads/cars/insurance_documents/' . $latestInsurance->insurance_document)"
+                                                                style="buttons"
+                                                                show-icons
+                                                            />
                                                         @else
                                                             <span class="text-muted">No Document</span>
                                                         @endif
@@ -666,7 +721,10 @@
                                                         <td>{{ $insurance->canceled_date ? $insurance->canceled_date->format('d M, Y') : '—' }}</td>
                                                         <td>
                                                             @if($insurance->insurance_document)
-                                                                <a href="{{ document_view_url(asset('uploads/cars/insurance_documents/' . $insurance->insurance_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
+                                                                <x-document-actions
+                                                                    :view-url="asset('uploads/cars/insurance_documents/' . $insurance->insurance_document)"
+                                                                    style="buttons"
+                                                                />
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif

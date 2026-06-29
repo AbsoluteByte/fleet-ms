@@ -127,7 +127,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('mot-test-date-import/report', [App\Http\Controllers\Backend\MotTestDateImportController::class, 'report'])->name('mot-test-date-import.report');
 
     Route::resource('reservations', App\Http\Controllers\Backend\ReservationController::class)->except(['show']);
-    Route::resource('vehicle-swaps', App\Http\Controllers\Backend\VehicleSwapController::class)->except(['show']);
+    Route::resource('vehicle-swaps', App\Http\Controllers\Backend\VehicleSwapController::class)->only(['index', 'create', 'store']);
     Route::delete('drivers/{driver}/documents/{document}', [App\Http\Controllers\Backend\DriverController::class, 'destroyDocument'])->name('drivers.documents.destroy');
     Route::get('drivers/{driver}/document-archives', [App\Http\Controllers\Backend\DriverController::class, 'documentArchives'])->name('drivers.document-archives');
     Route::resource('drivers', App\Http\Controllers\Backend\DriverController::class);

@@ -17,6 +17,17 @@
                 </ul>
             </div>
         @endif
+        @php
+            $reservationPrefill = $reservationPrefill ?? null;
+            $linkedReservationId = old('reservation_id', $reservationPrefill['reservation_id'] ?? null);
+        @endphp
+        @if($linkedReservationId)
+            <input type="hidden" name="reservation_id" value="{{ $linkedReservationId }}">
+            <div class="alert alert-info mb-3">
+                <i class="fa fa-info-circle me-1"></i>
+                Creating agreement from reservation #{{ $linkedReservationId }}. Review the pre-filled details below, then save.
+            </div>
+        @endif
         <div class="row">
             <div class="col-md-6">
                 <div class="mb-3">
@@ -188,8 +199,8 @@
     <div class="card-body">
         <input type="hidden" name="auto_schedule_collections" value="0">
         <div class="row">
-            <div class="col-md-3">
-                <div class="mb-3">
+            <div class="col-md-2">
+                <div class="mb-1">
                     <label for="agreed_rent" class="form-label">Agreed Rent *</label>
                     <div class="input-group">
                         <span class="input-group-text">£</span>
@@ -202,8 +213,22 @@
                     @enderror
                 </div>
             </div>
+            <div class="col-md-2">
+                <div class="mb-1">
+                    <label for="deposit_amount" class="form-label">Deposit Amount *</label>
+                    <div class="input-group">
+                        <span class="input-group-text">£</span>
+                        <input type="number" name="deposit_amount" id="deposit_amount"
+                               class="form-control @error('deposit_amount') is-invalid @enderror"
+                               value="{{ old('deposit_amount') ?? (isset($model) ? $model->deposit_amount : '') }}" step="0.01" min="0" required>
+                    </div>
+                    @error('deposit_amount')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
             <div class="col-md-3">
-                <div class="mb-3">
+                <div class="mb-1">
                     <label for="collection_type" class="form-label">Collection Type *</label>
                     <select name="collection_type" id="collection_type" class="form-control @error('collection_type') is-invalid @enderror" required>
                         <option value="">Select Collection Type</option>
@@ -217,7 +242,7 @@
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="mb-3">
+                <div class="mb-1">
                     <label for="rent_interval" class="form-label">Rent Interval *</label>
                     <select name="rent_interval" id="rent_interval" class="form-control @error('rent_interval') is-invalid @enderror" required>
                         <option value="">Select Interval</option>
@@ -231,19 +256,23 @@
                     @enderror
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="mb-3">
-                    <label for="deposit_amount" class="form-label">Deposit Amount *</label>
-                    <div class="input-group">
-                        <span class="input-group-text">£</span>
-                        <input type="number" name="deposit_amount" id="deposit_amount"
-                               class="form-control @error('deposit_amount') is-invalid @enderror"
-                               value="{{ old('deposit_amount') ?? (isset($model) ? $model->deposit_amount : '') }}" step="0.01" min="0" required>
-                    </div>
-                    @error('deposit_amount')
+            <div class="col-md-2">
+                <div class="mb-1">
+                    <label for="billing_anchor_date" class="form-label">Regular rent due from</label>
+                    <input type="date" name="billing_anchor_date" id="billing_anchor_date"
+                           class="form-control @error('billing_anchor_date') is-invalid @enderror"
+                           value="{{ old('billing_anchor_date') ?? (isset($model) && $model->billing_anchor_date ? $model->billing_anchor_date->format('Y-m-d') : '') }}">
+                    @error('billing_anchor_date')
                     <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
+            </div>
+            <div class="col-12">
+                <small class="form-text text-muted mb-1">
+                    Optional. e.g. pickup Friday, regular rent from Monday; or pickup on the 25th, regular rent from the 5th each month.
+                    Recurring rent uses the rent interval above; collections also start from this date when auto-scheduled.
+                </small>
+                <div id="billing_anchor_preview" class="form-text text-primary" style="display: none;"></div>
             </div>
         </div>
     </div>
@@ -498,7 +527,12 @@
                                multiple>
                         @if(isset($model) && $model->id && $model->ownInsuranceProofFileNames() !== [])
                             @foreach($model->ownInsuranceProofFileNames() as $proofName)
-                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}: <a href="{{ document_view_url(asset('uploads/insurance_documents/' . $proofName)) }}" target="_blank" class="document-view-link">View</a></small>
+                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}:
+                                    <x-document-actions
+                                        :view-url="asset('uploads/insurance_documents/' . $proofName)"
+                                        style="list-item"
+                                    />
+                                </small>
                             @endforeach
                         @endif
                         <div class="form-text">Accepted formats: PDF, JPG, JPEG, PNG (Max: 2MB per file)</div>
@@ -561,9 +595,20 @@
 <!-- Optional Payment -->
 @php
     $agreementPaymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
-    $agreementPaymentRows = old('agreement_payments', [
+    $reservationPrefill = $reservationPrefill ?? null;
+    $defaultPaymentRows = [
         ['payment_method' => '', 'bank_account_id' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
-    ]);
+    ];
+    if ($reservationPrefill && ($reservationPrefill['add_payment'] ?? false) && ! old('agreement_payments')) {
+        $defaultPaymentRows = [[
+            'payment_method' => '',
+            'bank_account_id' => '',
+            'payment_date' => $reservationPrefill['payment_date'] ?? now()->toDateString(),
+            'amount' => $reservationPrefill['amount_paid'],
+            'notes' => 'Payment from reservation #'.$reservationPrefill['reservation_id'],
+        ]];
+    }
+    $agreementPaymentRows = old('agreement_payments', $defaultPaymentRows);
     $agreementPaymentRows = is_array($agreementPaymentRows) && $agreementPaymentRows !== [] ? array_values($agreementPaymentRows) : [
         ['payment_method' => '', 'bank_account_id' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
     ];
@@ -579,7 +624,7 @@
         <div class="form-check mb-0">
             <input type="hidden" name="add_payment" value="0">
             <input class="form-check-input" type="checkbox" name="add_payment" id="add_payment" value="1"
-                {{ old('add_payment') ? 'checked' : '' }}
+                {{ old('add_payment', $reservationPrefill['add_payment'] ?? false) ? 'checked' : '' }}
                 {{ $agreementPaymentAllowed ? '' : 'disabled' }}>
             <label class="form-check-label" for="add_payment">
                 Add payment with this agreement
@@ -976,7 +1021,7 @@
         const isAgreementCreate = @json(! isset($model) || ! $model->id);
         const selectedParentAgreementId = @json(old('parent_agreement_id') ?? (isset($model) ? $model->parent_agreement_id : null));
 
-        const replacementVehicleFinancialFieldIds = ['agreed_rent', 'collection_type', 'rent_interval', 'deposit_amount'];
+        const replacementVehicleFinancialFieldIds = ['agreed_rent', 'collection_type', 'rent_interval', 'deposit_amount', 'billing_anchor_date'];
         const replacementVehicleSectionIds = ['agreement-financial-section', 'agreement-discount-section', 'agreement-payment-section'];
 
         function setReplacementVehicleSectionFieldsEnabled(enabled) {
@@ -1667,6 +1712,96 @@
             if (mileageInInput && mileageOutInput) {
                 mileageInInput.addEventListener('change', validateMileage);
             }
+
+            function previousAnchorBeforeJs(anchorDate, rentInterval) {
+                const date = new Date(anchorDate.getTime());
+
+                switch ((rentInterval || '').toLowerCase()) {
+                    case 'weekly':
+                        date.setDate(date.getDate() - 7);
+                        break;
+                    case 'quarterly':
+                        date.setMonth(date.getMonth() - 3);
+                        break;
+                    case 'yearly':
+                        date.setFullYear(date.getFullYear() - 1);
+                        break;
+                    default:
+                        date.setMonth(date.getMonth() - 1);
+                        break;
+                }
+
+                return date;
+            }
+
+            function daysBetween(fromDate, toDate) {
+                const from = Date.UTC(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+                const to = Date.UTC(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+
+                return Math.round((to - from) / (1000 * 60 * 60 * 24));
+            }
+
+            function updateBillingAnchorPreview() {
+                const preview = document.getElementById('billing_anchor_preview');
+                const startInput = document.getElementById('start_date');
+                const anchorInput = document.getElementById('billing_anchor_date');
+                const rentInput = document.getElementById('agreed_rent');
+                const intervalSelect = document.getElementById('rent_interval');
+
+                if (!preview || !startInput || !anchorInput || !rentInput || !intervalSelect) {
+                    return;
+                }
+
+                const anchorValue = anchorInput.value;
+                const startValue = startInput.value;
+                const agreedRent = Number(rentInput.value);
+                const rentInterval = intervalSelect.value;
+
+                if (!anchorValue || !startValue || !agreedRent || !rentInterval) {
+                    preview.style.display = 'none';
+                    preview.textContent = '';
+
+                    return;
+                }
+
+                const startDate = new Date(startValue.slice(0, 10) + 'T00:00:00');
+                const anchorDate = new Date(anchorValue + 'T00:00:00');
+
+                if (anchorDate <= startDate) {
+                    preview.style.display = 'none';
+                    preview.textContent = '';
+
+                    return;
+                }
+
+                const partialDays = daysBetween(startDate, anchorDate);
+                const previousAnchor = previousAnchorBeforeJs(anchorDate, rentInterval);
+                const periodDays = daysBetween(previousAnchor, anchorDate);
+
+                if (partialDays <= 0 || periodDays <= 0) {
+                    preview.style.display = 'none';
+                    preview.textContent = '';
+
+                    return;
+                }
+
+                const amount = Math.round((agreedRent / periodDays * partialDays) * 100) / 100;
+                preview.textContent = 'Estimated first prorated amount: £' + amount.toFixed(2) + ' (until ' + anchorValue + ')';
+                preview.style.display = 'block';
+            }
+
+            ['start_date', 'billing_anchor_date', 'agreed_rent', 'rent_interval'].forEach(function(fieldId) {
+                const field = document.getElementById(fieldId);
+
+                if (!field) {
+                    return;
+                }
+
+                field.addEventListener('change', updateBillingAnchorPreview);
+                field.addEventListener('input', updateBillingAnchorPreview);
+            });
+
+            updateBillingAnchorPreview();
         });
 
     </script>

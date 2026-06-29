@@ -135,7 +135,10 @@
                                                 <td style="white-space: pre-wrap; max-width: 280px;">{{ $service->notes ?: '—' }}</td>
                                                 <td>
                                                     @if($service->document)
-                                                        <a href="{{ document_view_url(asset('uploads/cars/service_documents/'.$service->document)) }}" target="_blank" rel="noopener" class="document-view-link mr-50">View</a>
+                                                        <x-document-actions
+                                                            :view-url="asset('uploads/cars/service_documents/'.$service->document)"
+                                                            style="list-item"
+                                                        />
                                                         <button type="button"
                                                                 class="btn btn-link btn-sm text-danger p-0 car-doc-remove-btn"
                                                                 data-remove-url="{{ route('car-services.document.destroy', $service) }}"

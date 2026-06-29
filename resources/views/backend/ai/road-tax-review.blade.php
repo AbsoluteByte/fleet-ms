@@ -59,10 +59,10 @@
                                             </td>
                                             <td class="align-middle text-nowrap">{{ $row['filename'] }}</td>
                                             <td class="align-middle">
-                                                <a href="{{ document_view_url(route('ai.road-tax.preview', ['batchId' => $review['batch_id'], 'filename' => $previewName])) }}"
-                                                   target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary document-view-link">
-                                                    View
-                                                </a>
+                                                <x-document-actions
+                                                    :view-url="route('ai.road-tax.preview', ['batchId' => $review['batch_id'], 'filename' => $previewName])"
+                                                    style="buttons"
+                                                />
                                             </td>
                                             <td class="align-middle">
                                                 <input type="text" name="rows[{{ $index }}][registration]"

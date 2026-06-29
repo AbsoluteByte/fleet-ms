@@ -134,8 +134,13 @@ trait SetupAgreementChangeCarDatabase
             $table->foreignId('car_id')->nullable();
             $table->foreignId('status_id')->nullable();
             $table->unsignedBigInteger('upgraded_from_agreement_id')->nullable();
+            $table->string('swap_reason')->nullable();
+            $table->string('swap_phvl_issue_type')->nullable();
+            $table->text('swap_phvl_issue_notes')->nullable();
+            $table->text('swap_reason_notes')->nullable();
             $table->dateTime('start_date');
             $table->date('end_date');
+            $table->date('billing_anchor_date')->nullable();
             $table->decimal('agreed_rent', 10, 2);
             $table->string('rent_interval');
             $table->decimal('deposit_amount', 10, 2)->default(0);

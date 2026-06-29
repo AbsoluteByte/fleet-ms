@@ -22,10 +22,13 @@
                             @include('alerts')
                             <form method="POST" action="{{ route('vehicle-swaps.store') }}" id="formCreateVehicleSwap" novalidate>
                                 @csrf
-                                @include('backend.vehicle_swaps._form', ['cars' => $cars, 'vehicleSwap' => null])
+                                @include('backend.vehicle_swaps._form', [
+                                    'oldCars' => $oldCars,
+                                    'replacementCars' => $replacementCars,
+                                ])
                                 <div class="form-group mb-0">
                                     <button type="submit" class="btn btn-primary">
-                                        <i class="fa fa-check"></i> Save vehicle swap
+                                        <i class="fa fa-check"></i> Complete vehicle swap
                                     </button>
                                     <a href="{{ route('vehicle-swaps.index') }}" class="btn btn-outline-secondary ml-1">Cancel</a>
                                 </div>
@@ -39,7 +42,7 @@
 @endsection
 @section('js')
     @php use App\Models\VehicleSwap; @endphp
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-vehicle-swap.js') }}?v=20260624"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-vehicle-swap.js') }}?v=20260626"></script>
     <script>
         window.fleetiqVehicleSwapValidation = {
             reasonPhvl: @json(VehicleSwap::REASON_PHVL_ISSUES),
@@ -53,66 +56,38 @@
             if (form && window.FleetiqFormValidation && window.validateVehicleSwapForm) {
                 FleetiqFormValidation.attach(form, validateVehicleSwapForm);
             }
-        });
 
-        $(document).ready(function () {
-            const SWAP_REASON_PHVL = @json(VehicleSwap::REASON_PHVL_ISSUES);
-            const SWAP_REASON_OTHERS = @json(VehicleSwap::REASON_OTHERS);
+            var reasonSelect = document.getElementById('reason_for_swap');
+            var phvlTypeWrap = document.getElementById('swap_phvl_issue_type_wrap');
+            var phvlNotesWrap = document.getElementById('swap_phvl_issue_notes_wrap');
+            var reasonNotesWrap = document.getElementById('swap_reason_notes_wrap');
+            var phvlTypeSelect = document.getElementById('phvl_issue_type');
 
-            function parseMoney(id) {
-                const v = parseFloat(String($(id).val()).replace(',', '.'));
-                return isNaN(v) ? 0 : v;
+            if (!reasonSelect) {
+                return;
             }
 
-            function refreshBalanceDisplay() {
-                const rent = parseMoney('#agreed_rent');
-                const advance = parseMoney('#agreed_advance');
-                const paid = parseMoney('#amount_paid');
-                const hasAny = ['#agreed_rent', '#agreed_advance', '#amount_paid'].some(function (sel) {
-                    return String($(sel).val()).trim() !== '';
-                });
-                if (!hasAny) {
-                    $('#balance_payable_on_pickup_display').val('');
-                    return;
-                }
-                const bal = Math.max(0, Math.round((rent + advance - paid) * 100) / 100);
-                $('#balance_payable_on_pickup_display').val(bal.toFixed(2));
+            function refreshReasonFields() {
+                var reason = reasonSelect.value;
+                var showPhvl = reason === window.fleetiqVehicleSwapValidation.reasonPhvl;
+                var showOtherNotes = reason === window.fleetiqVehicleSwapValidation.reasonOthers;
+
+                phvlTypeWrap.classList.toggle('d-none', !showPhvl);
+                reasonNotesWrap.classList.toggle('d-none', !showOtherNotes);
+
+                var phvlType = phvlTypeSelect ? phvlTypeSelect.value : '';
+                var needsPhvlNotes = showPhvl && (
+                    phvlType === window.fleetiqVehicleSwapValidation.phvlFailed
+                    || phvlType === window.fleetiqVehicleSwapValidation.phvlDocumentation
+                );
+                phvlNotesWrap.classList.toggle('d-none', !needsPhvlNotes);
             }
 
-            function toggleReasonSections() {
-                const reason = String($('#reason_for_swap').val() || '');
-                const phvlWrap = $('#swap_phvl_issue_type_wrap');
-                const phvlNotesWrap = $('#swap_phvl_issue_notes_wrap');
-                const othersWrap = $('#swap_reason_notes_wrap');
-
-                phvlWrap.toggleClass('d-none', reason !== SWAP_REASON_PHVL);
-                othersWrap.toggleClass('d-none', reason !== SWAP_REASON_OTHERS);
-
-                if (reason !== SWAP_REASON_PHVL) {
-                    phvlNotesWrap.addClass('d-none');
-                    return;
-                }
-                togglePhvlNotes();
+            reasonSelect.addEventListener('change', refreshReasonFields);
+            if (phvlTypeSelect) {
+                phvlTypeSelect.addEventListener('change', refreshReasonFields);
             }
-
-            function togglePhvlNotes() {
-                const reason = String($('#reason_for_swap').val() || '');
-                const phvlNotesWrap = $('#swap_phvl_issue_notes_wrap');
-                if (reason !== SWAP_REASON_PHVL) {
-                    phvlNotesWrap.addClass('d-none');
-                    return;
-                }
-                const t = String($('#phvl_issue_type').val() || '');
-                phvlNotesWrap.toggleClass('d-none', t === '');
-            }
-
-            $('#reason_for_swap').on('change', toggleReasonSections);
-            $('#phvl_issue_type').on('change', togglePhvlNotes);
-
-            $('#agreed_rent, #agreed_advance, #amount_paid').on('input change', refreshBalanceDisplay);
-            toggleReasonSections();
-            togglePhvlNotes();
-            refreshBalanceDisplay();
+            refreshReasonFields();
         });
     </script>
 @endsection

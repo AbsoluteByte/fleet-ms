@@ -43,5 +43,31 @@
         return errors.length === 0;
     }
 
+    function validateReservationForAgreement(form, errors) {
+        errors = errors || [];
+
+        if (!validateReservationForm(form, errors)) {
+            return false;
+        }
+
+        var driverModeEl = form.querySelector('input[name="driver_mode"]:checked');
+        var driverMode = driverModeEl ? driverModeEl.value : 'existing';
+
+        if (driverMode === 'new') {
+            errors.push({
+                field: null,
+                label: 'Driver',
+                message: 'Please save the reservation first when adding a new driver, then create the agreement.'
+            });
+            return false;
+        }
+
+        FV.requiredField(errors, form, 'driver_id', 'Driver');
+        FV.requiredField(errors, form, 'car_id', 'Car');
+
+        return errors.length === 0;
+    }
+
     global.validateReservationForm = validateReservationForm;
+    global.validateReservationForAgreement = validateReservationForAgreement;
 })(window);

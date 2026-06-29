@@ -200,6 +200,7 @@
         <div class="field"><span class="lbl">PHD Licence No:</span> {{ $driver->phd_license_number ?? '' }}</div>
         <div class="field"><span class="lbl">DOB:</span> {{ $driver->dob ? \Carbon\Carbon::parse($driver->dob)->format('d.m.Y') : '' }}</div>
         <div class="field"><span class="lbl">Phone N.O:</span> {{ $driver->phone_number ?? '' }}</div>
+        <div class="field"><span class="lbl">Next of Kin Phone:</span> {{ $driver->next_of_kin_phone ?? '' }}</div>
         <div class="field"><span class="lbl">ADDRESS:</span> @include('backend.agreements._driver_address_pdf', ['driver' => $driver])</div>
     </div>
 

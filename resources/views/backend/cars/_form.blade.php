@@ -103,6 +103,7 @@
                 @foreach($model->v5DocumentFileNames() as $v5Name)
                     <x-car-document-actions
                         :view-url="route('cars.view.v5', [$model, $loop->index])"
+                        :download-url="route('cars.download.v5', [$model, $loop->index])"
                         :remove-url="route('cars.v5-document.destroy', [$model, $loop->index])"
                         :label="'V5 document' . (count($model->v5DocumentFileNames()) > 1 ? ' #' . $loop->iteration : '')"
                     />
@@ -317,7 +318,14 @@
                             @if($carHasV5Document) disabled @endif>
                         @if(isset($model) && $model->id && $model->oldLogBookFileNames() !== [])
                             @foreach($model->oldLogBookFileNames() as $lbName)
-                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}: <a href="{{ document_view_url(asset('uploads/cars/log_book/' . $lbName)) }}" target="_blank" class="document-view-link">View</a></small>
+                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}:
+                                    <x-document-actions
+                                        :view-url="asset('uploads/cars/log_book/' . $lbName)"
+                                        style="list-item"
+                                        view-text="View"
+                                        download-text="Download"
+                                    />
+                                </small>
                             @endforeach
                         @endif
                         @error('old_log_book')
@@ -477,7 +485,10 @@
                                             />
                                         @else
                                             <small class="text-muted">Current:
-                                                <a href="{{ document_view_url(asset('uploads/cars/mot_documents/' . (is_object($mot) ? $mot->document : $mot['document']))) }}" target="_blank" class="document-view-link">View</a>
+                                                <x-document-actions
+                                                    :view-url="asset('uploads/cars/mot_documents/' . (is_object($mot) ? $mot->document : $mot['document']))"
+                                                    style="list-item"
+                                                />
                                             </small>
                                         @endif
                                     @endif
@@ -559,7 +570,11 @@
                                 <td>{{ $motH->term }}</td>
                                 <td>
                                     @if($motH->document)
-                                        <a href="{{ document_view_url(route('cars.mots.download', [$model, $motH->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
+                                        <x-document-actions
+                                            :view-url="route('cars.mots.download', [$model, $motH->id])"
+                                            style="buttons"
+                                            view-text="View"
+                                        />
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-danger ml-50 car-doc-remove-btn"
                                                 data-remove-url="{{ route('cars.mots.document.destroy', [$model, $motH->id]) }}"
@@ -809,7 +824,10 @@
                 </div>
                 <div class="modal-body">
                     <p class="mb-0 text-body" id="sornDetailsModalBodyLine" style="line-height: 1.65;"></p>
-                    <p class="mb-0 mt-2 d-none" id="sornDetailsModalProofLine"><a href="#" id="sornDetailsModalProofLink" target="_blank" rel="noopener noreferrer" class="document-view-link">View SORN proof</a></p>
+                    <p class="mb-0 mt-2 d-none" id="sornDetailsModalProofLine">
+                        <a href="#" id="sornDetailsModalProofLink" target="_blank" rel="noopener noreferrer" class="document-view-link">View SORN proof</a>
+                        <a href="#" id="sornDetailsModalProofDownloadLink" class="document-download-link ml-1">Download</a>
+                    </p>
                 </div>
                 <div class="modal-footer flex-wrap">
                     <button type="button" class="btn btn-outline-danger mr-auto mb-1 mb-sm-0" id="sornDetailsEndSornBtn">End SORN</button>
@@ -879,7 +897,13 @@
                 </p>
                 @if($model->sorn_document)
                     <p class="mb-0 mt-2 d-flex align-items-center flex-wrap">
-                        <a href="{{ document_view_url(asset('uploads/cars/sorn_documents/'.$model->sorn_document)) }}" target="_blank" rel="noopener noreferrer" class="document-view-link mr-75">View SORN proof</a>
+                        <x-document-actions
+                            :view-url="asset('uploads/cars/sorn_documents/'.$model->sorn_document)"
+                            style="list-item"
+                            view-text="View SORN proof"
+                            download-text="Download"
+                            class="mr-75"
+                        />
                         <button type="button"
                                 class="btn btn-link btn-sm text-danger p-0 car-doc-remove-btn"
                                 data-remove-url="{{ route('cars.sorn-document.destroy', $model) }}"
@@ -971,7 +995,11 @@
                                 </td>
                                 <td>
                                     @if($sornH->sorn_document)
-                                        <a href="{{ document_view_url(asset('uploads/cars/sorn_documents/'.$sornH->sorn_document)) }}" target="_blank" rel="noopener noreferrer" class="document-view-link" title="View proof"><i class="fa fa-file"></i></a>
+                                        <x-document-actions
+                                            :view-url="asset('uploads/cars/sorn_documents/'.$sornH->sorn_document)"
+                                            style="buttons"
+                                            show-icons
+                                        />
                                     @else
                                         —
                                     @endif
@@ -1194,7 +1222,10 @@
                                             />
                                         @else
                                             <small class="text-muted">Current:
-                                                <a href="{{ document_view_url(asset('uploads/cars/phv_documents/' . (is_object($phv) ? $phv->document : $phv['document']))) }}" target="_blank" class="document-view-link">View</a>
+                                                <x-document-actions
+                                                    :view-url="asset('uploads/cars/phv_documents/' . (is_object($phv) ? $phv->document : $phv['document']))"
+                                                    style="list-item"
+                                                />
                                             </small>
                                         @endif
                                     @endif
@@ -1288,7 +1319,10 @@
                                 </td>
                                 <td>
                                     @if($phvH->document)
-                                        <a href="{{ document_view_url(route('cars.phvs.download', [$model, $phvH->id])) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
+                                        <x-document-actions
+                                            :view-url="route('cars.phvs.download', [$model, $phvH->id])"
+                                            style="buttons"
+                                        />
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-danger ml-50 car-doc-remove-btn"
                                                 data-remove-url="{{ route('cars.phvs.document.destroy', [$model, $phvH->id]) }}"
@@ -1534,7 +1568,10 @@
                                 <td>{{ ($insuranceH->status && in_array(strtolower($insuranceH->status->name), ['cancelled', 'canceled'], true) && $insuranceH->canceled_date) ? $insuranceH->canceled_date->format('d M, Y') : '—' }}</td>
                                 <td>
                                     @if($insuranceH->insurance_document)
-                                        <a href="{{ document_view_url(asset('uploads/cars/insurance_documents/' . $insuranceH->insurance_document)) }}" target="_blank" class="document-view-link btn btn-sm btn-outline-primary">View</a>
+                                        <x-document-actions
+                                            :view-url="asset('uploads/cars/insurance_documents/' . $insuranceH->insurance_document)"
+                                            style="buttons"
+                                        />
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
@@ -1818,8 +1855,14 @@
                 }
                 var proofLine = frag.querySelector('#sornDetailsModalProofLine');
                 var proofLink = frag.querySelector('#sornDetailsModalProofLink');
+                var proofDownloadLink = frag.querySelector('#sornDetailsModalProofDownloadLink');
                 if (proofLine && proofLink && proofUrl) {
                     proofLink.href = proofUrl;
+                    if (proofDownloadLink) {
+                        proofDownloadLink.href = proofUrl;
+                        var proofFilename = proofUrl.split('/').pop().split('?')[0] || 'sorn-proof';
+                        proofDownloadLink.setAttribute('download', proofFilename);
+                    }
                     proofLine.classList.remove('d-none');
                 }
                 document.body.appendChild(frag);

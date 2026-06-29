@@ -1119,16 +1119,24 @@ class CarController extends Controller
         return $this->downloadCarFile($car, 'uploads/cars', $this->resolveV5DocumentFilename($car, $v5_index), 'v5');
     }
 
-    public function downloadMot(Car $car, int $car_mot)
+    public function downloadMot(Car $car, int $car_mot, Request $request)
     {
         $record = CarMot::where('car_id', $car->id)->where('id', $car_mot)->firstOrFail();
+
+        if ($request->boolean('download')) {
+            return $this->downloadCarFile($car, 'uploads/cars/mot_documents', $record->document, 'mot');
+        }
 
         return $this->viewCarFileInline($car, 'uploads/cars/mot_documents', $record->document);
     }
 
-    public function downloadPhv(Car $car, int $car_phv)
+    public function downloadPhv(Car $car, int $car_phv, Request $request)
     {
         $record = CarPhv::where('car_id', $car->id)->where('id', $car_phv)->firstOrFail();
+
+        if ($request->boolean('download')) {
+            return $this->downloadCarFile($car, 'uploads/cars/phv_documents', $record->document, 'phv');
+        }
 
         return $this->viewCarFileInline($car, 'uploads/cars/phv_documents', $record->document);
     }

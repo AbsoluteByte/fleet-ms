@@ -303,6 +303,10 @@ class AiController extends Controller
             abort(404);
         }
 
+        if (request()->boolean('download')) {
+            return response()->download($path, $safeName);
+        }
+
         return response()->file($path);
     }
 

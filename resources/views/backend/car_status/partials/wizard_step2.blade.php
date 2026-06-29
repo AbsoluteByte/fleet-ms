@@ -733,7 +733,11 @@
                         <ul class="mb-0 pl-3">
                             @foreach($existingSoldDocs as $docPath)
                                 <li>
-                                    <a href="{{ document_view_url(asset($docPath)) }}" target="_blank" rel="noopener noreferrer" class="document-view-link">View file</a>
+                                    <x-document-actions
+                                        :view-url="asset($docPath)"
+                                        style="list-item"
+                                        view-text="View file"
+                                    />
                                 </li>
                             @endforeach
                         </ul>

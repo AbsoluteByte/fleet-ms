@@ -6,3 +6,10 @@
     text-align: right;
 }
 
+@media (max-width: 1330px) {
+    .btn-sm,
+    .btn-group-sm > .btn {
+        padding: 0.5rem 1rem;
+    }
+}
+

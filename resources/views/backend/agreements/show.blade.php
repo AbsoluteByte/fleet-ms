@@ -104,8 +104,19 @@
                                 @endif
                                 <tr>
                                     <td><strong>Start Date:</strong></td>
-                                    <td>{{ $agreement->start_date->format('M d, Y g:i A') }}</td>
+                                    <td>
+                                        {{ $agreement->start_date->format('M d, Y g:i A') }}
+                                        @if($agreement->hasDeferredBillingAnchor())
+                                            <span class="text-muted">(pickup)</span>
+                                        @endif
+                                    </td>
                                 </tr>
+                                @if($agreement->hasDeferredBillingAnchor())
+                                    <tr>
+                                        <td><strong>Regular rent from:</strong></td>
+                                        <td>{{ $agreement->billing_anchor_date->format('M d, Y') }}</td>
+                                    </tr>
+                                @endif
                                 <tr>
                                     <td><strong>End Date:</strong></td>
                                     <td>{{ $agreement->end_date->format('M d, Y') }}</td>
@@ -268,10 +279,11 @@
                                                     <ul class="mb-0 ps-3">
                                                         @foreach($ownInsuranceProofFiles as $proofName)
                                                             <li>
-                                                                <a href="{{ document_view_url(asset('uploads/insurance_documents/' . $proofName)) }}"
-                                                                   target="_blank" rel="noopener noreferrer" class="document-view-link">
-                                                                    View file {{ $loop->iteration }}
-                                                                </a>
+                                                                <x-document-actions
+                                                                    :view-url="asset('uploads/insurance_documents/' . $proofName)"
+                                                                    style="list-item"
+                                                                    :view-text="'View file ' . $loop->iteration"
+                                                                />
                                                             </li>
                                                         @endforeach
                                                     </ul>

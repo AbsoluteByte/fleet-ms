@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\AgreementInvoiceService;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -12,11 +14,12 @@ class Agreement extends Model
     public const PDF_END_TIME = '11:00';
 
     protected $fillable = [
-        'tenant_id', 'company_id', 'start_date', 'end_date', 'driver_id',
+        'tenant_id', 'company_id', 'start_date', 'end_date', 'billing_anchor_date', 'driver_id',
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
         'deposit_amount', 'discount_type', 'discount_value', 'discount_notes', 'security_deposit', 'mileage_out', 'mileage_in',
         'collection_type', 'auto_schedule_collections', 'next_collection_date',
         'condition_report', 'notes', 'status_id', 'parent_agreement_id', 'upgraded_from_agreement_id',
+        'swap_reason', 'swap_phvl_issue_type', 'swap_phvl_issue_notes', 'swap_reason_notes',
         // New insurance fields
         'using_own_insurance', 'insurance_provider_id',
         'own_insurance_provider_name', 'own_insurance_start_date',
@@ -38,6 +41,7 @@ class Agreement extends Model
     protected $casts = [
         'start_date' => 'datetime',
         'end_date' => 'date',
+        'billing_anchor_date' => 'date',
         'next_collection_date' => 'date',
         'agreed_rent' => 'decimal:2',
         'deposit_amount' => 'decimal:2',
@@ -112,6 +116,21 @@ class Agreement extends Model
         return strcasecmp((string) optional($this->status)->name, 'Replacement Vehicle') === 0;
     }
 
+    public function billingAnchorDate(): Carbon
+    {
+        return ($this->billing_anchor_date ?? $this->start_date)->copy()->startOfDay();
+    }
+
+    public function hasDeferredBillingAnchor(): bool
+    {
+        if (! $this->billing_anchor_date || ! $this->start_date) {
+            return false;
+        }
+
+        return $this->billing_anchor_date->copy()->startOfDay()
+            ->gt($this->start_date->copy()->startOfDay());
+    }
+
     public function scopeBillable($query)
     {
         return $query->whereHas('status', function ($statusQuery) {
@@ -141,20 +160,50 @@ class Agreement extends Model
     }
 
     /**
+     * Active-status agreements assigned to a vehicle, including future start dates.
+     */
+    public function scopeWithActiveAssignment($query)
+    {
+        $today = now()->startOfDay();
+
+        return $query
+            ->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Active'))
+            ->whereNull('termination_notice_date')
+            ->whereDate('end_date', '>=', $today);
+    }
+
+    /**
      * @return list<int>
      */
     public static function rentedCarIdsForTenant(int $tenantId, ?int $excludeAgreementId = null): array
     {
         return static::query()
             ->where('tenant_id', $tenantId)
-            ->currentlyActive()
-            ->whereNull('termination_notice_date')
+            ->withActiveAssignment()
             ->when($excludeAgreementId, fn ($query) => $query->where('id', '!=', $excludeAgreementId))
             ->pluck('car_id')
             ->unique()
             ->filter()
             ->values()
             ->all();
+    }
+
+    public static function activeAgreementForCar(int $tenantId, int $carId): ?self
+    {
+        return static::query()
+            ->where('tenant_id', $tenantId)
+            ->where('car_id', $carId)
+            ->withActiveAssignment()
+            ->first();
+    }
+
+    public function swapReasonLabel(): ?string
+    {
+        if (! $this->swap_reason) {
+            return null;
+        }
+
+        return VehicleSwap::reasonLabels()[$this->swap_reason] ?? $this->swap_reason;
     }
 
     public function terminationRecordedBy()
@@ -214,12 +263,35 @@ class Agreement extends Model
         $startDate = $this->start_date;
         $endDate = $this->end_date;
         $collectionType = $this->collection_type;
+        $invoiceService = app(AgreementInvoiceService::class);
 
         // Clear existing auto-generated collections
         $this->collections()->where('is_auto_generated', true)->delete();
 
-        $currentDate = $startDate->copy();
         $collectionNumber = 1;
+
+        if ($this->hasDeferredBillingAnchor()) {
+            $periodStart = $this->start_date->copy()->startOfDay();
+            $anchor = $this->billing_anchor_date->copy()->startOfDay();
+            $proratedAmount = $invoiceService->calculateInitialProrationAmount($this, $periodStart, $anchor);
+
+            if ($proratedAmount > 0) {
+                $this->collections()->create([
+                    'date' => $this->start_date,
+                    'due_date' => $this->start_date,
+                    'method' => 'auto_scheduled',
+                    'amount' => $proratedAmount,
+                    'payment_status' => 'pending',
+                    'is_auto_generated' => true,
+                    'notes' => "Auto-generated collection #$collectionNumber (initial proration until {$anchor->toDateString()})",
+                ]);
+                $collectionNumber++;
+            }
+
+            $currentDate = $anchor->copy();
+        } else {
+            $currentDate = $startDate->copy();
+        }
 
         while ($currentDate <= $endDate) {
             $dueDate = $currentDate->copy();

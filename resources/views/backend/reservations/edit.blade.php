@@ -16,9 +16,14 @@
                 <div class="card reservation-form-card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h4 class="card-title mb-0">Edit reservation</h4>
-                        <a href="{{ route('reservations.index') }}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fa fa-arrow-left"></i> Back to reservations
-                        </a>
+                        <div class="d-flex align-items-center">
+                            <button type="button" class="btn btn-primary btn-sm mr-1" id="btnCreateAgreementFromReservation">
+                                <i class="fa fa-file-contract"></i> Create Agreement
+                            </button>
+                            <a href="{{ route('reservations.index') }}" class="btn btn-outline-secondary btn-sm">
+                                <i class="fa fa-arrow-left"></i> Back to reservations
+                            </a>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-body">
@@ -138,12 +143,51 @@
 @endsection
 @section('js')
     <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260625"></script>
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260625"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260626"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('formEditReservation');
             if (form && window.FleetiqFormValidation && window.validateReservationForm) {
                 FleetiqFormValidation.attach(form, validateReservationForm);
+            }
+
+            var createAgreementBtn = document.getElementById('btnCreateAgreementFromReservation');
+            if (createAgreementBtn && form) {
+                createAgreementBtn.addEventListener('click', function () {
+                    var errors = [];
+                    if (!window.validateReservationForAgreement || !validateReservationForAgreement(form, errors)) {
+                        if (window.FleetiqFormValidation) {
+                            FleetiqFormValidation.showErrors(form, errors);
+                        }
+                        return;
+                    }
+
+                    var params = new URLSearchParams();
+                    params.set('reservation_id', '{{ $reservation->id }}');
+
+                    var driverModeEl = form.querySelector('input[name="driver_mode"]:checked');
+                    var driverMode = driverModeEl ? driverModeEl.value : 'existing';
+                    if (driverMode === 'existing') {
+                        var driverSelect = form.querySelector('[name="driver_id"]');
+                        if (driverSelect && driverSelect.value) {
+                            params.set('driver_id', driverSelect.value);
+                        }
+                    }
+
+                    ['car_id', 'pick_up_date', 'agreed_rent', 'amount_paid'].forEach(function (name) {
+                        var field = form.querySelector('[name="' + name + '"]');
+                        if (field && field.value) {
+                            params.set(name, field.value);
+                        }
+                    });
+
+                    var advanceField = form.querySelector('[name="agreed_advance"]');
+                    if (advanceField && advanceField.value) {
+                        params.set('deposit_amount', advanceField.value);
+                    }
+
+                    window.location.href = '{{ route('agreements.create') }}?' + params.toString();
+                });
             }
         });
     </script>

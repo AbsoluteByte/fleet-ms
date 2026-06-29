@@ -41,9 +41,11 @@
                                     @endif
                                 </td>
                                 <td class="text-right">
-                                    <a href="{{ $archive->fileUrl() }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary document-view-link">
-                                        <i class="fa fa-eye"></i> View
-                                    </a>
+                                    <x-document-actions
+                                        :view-url="asset('uploads/driver_licenses/' . $archive->filename)"
+                                        style="buttons"
+                                        show-icons
+                                    />
                                 </td>
                             </tr>
                         @empty

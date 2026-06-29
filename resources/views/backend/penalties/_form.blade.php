@@ -98,9 +98,13 @@
             @if(isset($model) && $model->document)
                 <small class="text-muted mt-1 d-block">
                     Current Document:
-                    <a href="{{ document_view_url(asset('uploads/penalties/' . $model->document)) }}" target="_blank" class="document-view-link text-primary">
-                        <i class="fa fa-file"></i> View Document
-                    </a>
+                    <x-document-actions
+                        :view-url="asset('uploads/penalties/' . $model->document)"
+                        style="text"
+                        show-icons
+                        view-text="View Document"
+                        download-text="Download"
+                    />
                 </small>
             @endif
             <small class="text-muted">Accepted formats: PDF, JPG, PNG, DOC, DOCX (Max: 5MB)</small>

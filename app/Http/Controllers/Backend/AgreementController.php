@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Agreement;
 use App\Models\BankAccount;
 use App\Models\Car;
+use App\Models\CarReservation;
 use App\Models\Company;
 use App\Models\Driver;
 use App\Models\Invoice;
@@ -13,6 +14,7 @@ use App\Models\Status;
 use App\Models\Tenant;
 use App\Services\AgreementInvoiceService;
 use App\Services\AgreementUpgradeService;
+use App\Services\CarFleetComplianceService;
 use App\Services\PaymentAllocationService;
 use App\Services\PermissionLetterService;
 // Add this
@@ -60,7 +62,7 @@ class AgreementController extends Controller
         return view($this->dir.'index', compact('agreements'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -82,8 +84,19 @@ class AgreementController extends Controller
         $replacementVehicleStatusId = $this->replacementVehicleStatusId();
         $driversActiveAgreements = $this->driversActiveAgreementsForForm($tenant);
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+        $reservationPrefill = null;
+        $reservationId = (int) $request->input('reservation_id', old('reservation_id'));
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements', 'bankAccounts'));
+        if ($reservationId > 0) {
+            $reservation = CarReservation::query()
+                ->where('tenant_id', $tenant->id)
+                ->findOrFail($reservationId);
+
+            $reservationPrefill = $this->prefillAgreementFromReservation($request, $reservation, $model, $statuses);
+            $cars = $this->carsForAgreementForm($tenant, (int) ($model->car_id ?: 0) ?: null);
+        }
+
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements', 'bankAccounts', 'reservationPrefill'));
     }
 
     public function store(Request $request)
@@ -97,12 +110,20 @@ class AgreementController extends Controller
         $validated = $this->validateAgreementRequest($request);
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $validated['status_id']);
         $this->assertEndDateOnOrAfterStartDate($validated);
+        $this->assertBillingAnchorDate($validated, $isReplacementVehicle);
 
         if ($isReplacementVehicle) {
             $this->assertReplacementVehicleParentAgreement($validated, $tenant);
         }
 
-        $this->assertCarNotCurrentlyRented((int) $validated['car_id'], $tenant);
+        $carId = (int) $validated['car_id'];
+        $fromReservation = $this->resolveReservationForAgreement($tenant, $request, $carId);
+
+        if ($fromReservation !== null) {
+            $this->assertCarAvailableForReservationConversion($carId, $tenant, $fromReservation);
+        } else {
+            $this->assertCarAvailableForNewAgreement($carId, $tenant, null);
+        }
 
         $validated['auto_schedule_collections'] = false;
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isReplacementVehicle);
@@ -116,7 +137,9 @@ class AgreementController extends Controller
         }
 
         try {
-            $agreement = DB::transaction(function () use ($validated, $request, $tenant, $agreementPaymentData, $isReplacementVehicle) {
+            $reservationId = $request->input('reservation_id');
+
+            $agreement = DB::transaction(function () use ($validated, $request, $tenant, $agreementPaymentData, $isReplacementVehicle, $reservationId) {
                 $validated = $this->mergeInsuranceData($request, $validated);
 
                 // Create agreement record
@@ -125,6 +148,7 @@ class AgreementController extends Controller
                 $validated = $this->mergeTerminationData($validated);
                 $validated = $this->applyDiscountData($validated, $request);
                 $validated = $this->mergeReplacementVehicleData($validated);
+                unset($validated['reservation_id']);
                 $agreement = Agreement::create($validated);
                 $this->syncTerminatedCarAvailability($agreement);
 
@@ -156,6 +180,13 @@ class AgreementController extends Controller
                             );
                         }
                     }
+                }
+
+                if ($reservationId) {
+                    CarReservation::query()
+                        ->where('tenant_id', $tenant->id)
+                        ->whereKey($reservationId)
+                        ->delete();
                 }
 
                 return $agreement;
@@ -301,12 +332,18 @@ class AgreementController extends Controller
         $validated = $this->validateAgreementRequest($request);
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $validated['status_id']);
         $this->assertEndDateOnOrAfterStartDate($validated);
+        $this->assertBillingAnchorDate($validated, $isReplacementVehicle);
 
         if ($isReplacementVehicle) {
             $this->assertReplacementVehicleParentAgreement($validated, $tenant, $agreement);
         }
 
-        $this->assertCarNotCurrentlyRented((int) $validated['car_id'], $tenant, $agreement->id);
+        $this->assertCarAvailableForAgreementOrTermination(
+            (int) $validated['car_id'],
+            $tenant,
+            $agreement,
+            $validated
+        );
 
         $validated['auto_schedule_collections'] = false;
         [$validated, $agreementPaymentData] = $this->prepareAgreementPaymentData($validated, $request, $isReplacementVehicle);
@@ -337,7 +374,7 @@ class AgreementController extends Controller
                 if (! $isReplacementVehicle) {
                     if ($validated['auto_schedule_collections']) {
                         if ($oldAutoSchedule !== $validated['auto_schedule_collections'] ||
-                            $agreement->wasChanged(['start_date', 'end_date', 'collection_type', 'agreed_rent'])) {
+                            $agreement->wasChanged(['start_date', 'end_date', 'collection_type', 'agreed_rent', 'billing_anchor_date'])) {
                             $agreement->generateCollections();
                         }
                     } else {
@@ -431,12 +468,58 @@ class AgreementController extends Controller
         return $validated;
     }
 
+    /**
+     * @return array{reservation_id: int, amount_paid: float, add_payment: bool}
+     */
+    private function prefillAgreementFromReservation(
+        Request $request,
+        CarReservation $reservation,
+        Agreement $model,
+        $statuses
+    ): array {
+        $driverId = (int) ($request->input('driver_id') ?: $reservation->driver_id);
+        $carId = (int) ($request->input('car_id') ?: $reservation->car_id);
+        $pickUpDate = $request->input('pick_up_date')
+            ?: $reservation->effectivePickUpDate()?->format('Y-m-d')
+            ?: now()->toDateString();
+        $agreedRent = $request->input('agreed_rent', $reservation->agreed_rent);
+        $depositAmount = $request->input('deposit_amount', $reservation->agreed_advance);
+        $amountPaid = (float) $request->input('amount_paid', $reservation->amount_paid ?? 0);
+
+        $model->driver_id = $driverId ?: null;
+        $model->car_id = $carId ?: null;
+        $model->agreed_rent = $agreedRent;
+        $model->deposit_amount = $depositAmount;
+        $model->rent_interval = 'Weekly';
+        $model->collection_type = 'weekly';
+        $model->status_id = $statuses->firstWhere('name', 'Active')?->id;
+        $model->start_date = Carbon::parse($pickUpDate.' 09:00:00');
+        $model->end_date = Carbon::parse($pickUpDate)->addYear();
+
+        if ($carId) {
+            $car = Car::query()->find($carId);
+            $model->company_id = $car?->company_id;
+        }
+
+        return [
+            'reservation_id' => $reservation->id,
+            'amount_paid' => $amountPaid,
+            'add_payment' => $amountPaid > 0,
+            'payment_date' => $pickUpDate,
+        ];
+    }
+
     private function validateAgreementRequest(Request $request): array
     {
         $tenant = Auth::user()->currentTenant();
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $request->input('status_id'));
 
         $rules = [
+            'reservation_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('car_reservations', 'id'),
+            ],
             'company_id' => 'required|exists:companies,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date',
@@ -472,6 +555,7 @@ class AgreementController extends Controller
                 'discount_notes' => 'nullable|string',
                 'collection_type' => 'required|in:weekly,monthly,static',
                 'auto_schedule_collections' => 'boolean',
+                'billing_anchor_date' => 'nullable|date',
                 'collections' => 'array',
                 'collections.*.date' => 'required_if:auto_schedule_collections,0|nullable|date',
                 'collections.*.due_date' => 'nullable|date',
@@ -692,11 +776,99 @@ class AgreementController extends Controller
         return Agreement::rentedCarIdsForTenant($tenant->id, $excludeAgreementId);
     }
 
+    private function assertCarAvailableForAgreementOrTermination(
+        int $carId,
+        Tenant $tenant,
+        ?Agreement $existing = null,
+        array $validated = []
+    ): void {
+        if ($existing && $this->isTerminationOnlyCarCheck($existing, $validated)) {
+            $car = Car::where('tenant_id', $tenant->id)->find($carId);
+
+            if (! $car) {
+                throw ValidationException::withMessages([
+                    'car_id' => ['The selected vehicle could not be found.'],
+                ]);
+            }
+
+            return;
+        }
+
+        $this->assertCarNotCurrentlyRented($carId, $tenant, $existing?->id);
+    }
+
+    private function isTerminationOnlyCarCheck(Agreement $existing, array $validated): bool
+    {
+        $carUnchanged = (int) ($validated['car_id'] ?? 0) === (int) $existing->car_id;
+
+        if (! $carUnchanged) {
+            return false;
+        }
+
+        if (filled($validated['termination_notice_date'] ?? null)) {
+            return true;
+        }
+
+        $statusId = (int) ($validated['status_id'] ?? 0);
+
+        if ($statusId > 0 && $this->isTerminatedStatusId($statusId)) {
+            return true;
+        }
+
+        return $this->isTerminatedStatusId((int) $existing->status_id);
+    }
+
+    private function isTerminatedStatusId(int $statusId): bool
+    {
+        if ($statusId <= 0) {
+            return false;
+        }
+
+        $name = Status::query()->whereKey($statusId)->value('name');
+
+        return strcasecmp((string) $name, 'Terminated') === 0;
+    }
+
     private function assertCarNotCurrentlyRented(int $carId, Tenant $tenant, ?int $excludeAgreementId = null): void
     {
-        $car = Car::where('tenant_id', $tenant->id)
-            ->with(['mots', 'roadTaxes', 'phvs', 'reservations'])
-            ->find($carId);
+        $this->assertCarAvailableForNewAgreement($carId, $tenant, null, $excludeAgreementId);
+    }
+
+    private function assertCarAvailableForReservationConversion(
+        int $carId,
+        Tenant $tenant,
+        CarReservation $reservation
+    ): void {
+        $car = $this->findCarForTenant($carId, $tenant);
+
+        if (! $car) {
+            throw ValidationException::withMessages([
+                'car_id' => ['The selected vehicle could not be found.'],
+            ]);
+        }
+
+        if (! $car->matchesReservationForAgreementConversion($reservation)) {
+            throw ValidationException::withMessages([
+                'car_id' => ['The selected vehicle does not match the linked reservation.'],
+            ]);
+        }
+
+        $rentedCarIds = $this->rentedCarIdsForAgreementForm($tenant);
+
+        if (in_array($carId, $rentedCarIds, true)) {
+            throw ValidationException::withMessages([
+                'car_id' => ['This vehicle already has an active agreement.'],
+            ]);
+        }
+    }
+
+    private function assertCarAvailableForNewAgreement(
+        int $carId,
+        Tenant $tenant,
+        ?CarReservation $fromReservation = null,
+        ?int $excludeAgreementId = null
+    ): void {
+        $car = $this->findCarForTenant($carId, $tenant);
 
         if (! $car) {
             throw ValidationException::withMessages([
@@ -706,11 +878,49 @@ class AgreementController extends Controller
 
         $rentedCarIds = $this->rentedCarIdsForAgreementForm($tenant, $excludeAgreementId);
 
-        if (! $car->isSelectableForAgreement($rentedCarIds)) {
+        if (! $car->isSelectableForAgreement($rentedCarIds, $fromReservation)) {
             throw ValidationException::withMessages([
                 'car_id' => ['The selected vehicle is not available for an agreement.'],
             ]);
         }
+    }
+
+    private function findCarForTenant(int $carId, Tenant $tenant): ?Car
+    {
+        return Car::query()
+            ->where('tenant_id', $tenant->id)
+            ->with(['mots', 'roadTaxes', 'phvs', 'reservations'])
+            ->find($carId);
+    }
+
+    private function resolveReservationForAgreement(Tenant $tenant, Request $request, int $carId): ?CarReservation
+    {
+        $reservationId = (int) $request->input('reservation_id');
+
+        if ($reservationId > 0) {
+            $reservation = CarReservation::query()
+                ->where('tenant_id', $tenant->id)
+                ->whereKey($reservationId)
+                ->first();
+
+            if ($reservation && $this->reservationCoversCar($reservation, $carId)) {
+                return $reservation;
+            }
+        }
+
+        return CarReservation::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('car_id', $carId)
+            ->where('status', 'active')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function reservationCoversCar(CarReservation $reservation, int $carId): bool
+    {
+        $reservationCarId = (int) $reservation->car_id;
+
+        return $reservationCarId === 0 || $reservationCarId === $carId;
     }
 
     private function mergeInsuranceData(Request $request, array $validated, ?Agreement $existing = null): array
@@ -760,6 +970,37 @@ class AgreementController extends Controller
         if ($endDay->lt($startDay)) {
             throw ValidationException::withMessages([
                 'end_date' => ['The end date must be on or after the start date.'],
+            ]);
+        }
+    }
+
+    private function assertBillingAnchorDate(array &$validated, bool $isReplacementVehicle): void
+    {
+        if ($isReplacementVehicle) {
+            $validated['billing_anchor_date'] = null;
+
+            return;
+        }
+
+        if (empty($validated['billing_anchor_date'])) {
+            $validated['billing_anchor_date'] = null;
+
+            return;
+        }
+
+        $startDay = Carbon::parse($validated['start_date'])->startOfDay();
+        $anchorDay = Carbon::parse($validated['billing_anchor_date'])->startOfDay();
+        $endDay = Carbon::parse($validated['end_date'])->startOfDay();
+
+        if ($anchorDay->lte($startDay)) {
+            throw ValidationException::withMessages([
+                'billing_anchor_date' => ['Regular rent due date must be after the agreement start date.'],
+            ]);
+        }
+
+        if ($anchorDay->gt($endDay)) {
+            throw ValidationException::withMessages([
+                'billing_anchor_date' => ['Regular rent due date must be on or before the agreement end date.'],
             ]);
         }
     }
@@ -928,15 +1169,45 @@ class AgreementController extends Controller
 
     private function syncTerminatedCarAvailability(Agreement $agreement): void
     {
-        if (! $agreement->termination_notice_date || ! $agreement->car) {
+        if (! $agreement->car) {
             return;
         }
 
-        $agreement->car->update([
-            'fleet_status' => 'available_for_rent',
+        $agreement->loadMissing('status');
+
+        $isTerminated = filled($agreement->termination_notice_date)
+            || $this->isTerminatedStatusId((int) $agreement->status_id);
+
+        if (! $isTerminated) {
+            return;
+        }
+
+        $car = $agreement->car;
+        $car->update([
             'available_from_date' => $agreement->termination_available_from_date,
             'updatedBy' => Auth::id(),
         ]);
+
+        $stillRented = in_array(
+            $car->id,
+            Agreement::rentedCarIdsForTenant($agreement->tenant_id),
+            true
+        );
+
+        if ($stillRented) {
+            return;
+        }
+
+        $car = $car->fresh();
+        $car->load(['mots', 'roadTaxes', 'phvs']);
+
+        if (in_array($car->fleet_status, [
+            Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
+            Car::FLEET_STATUS_NON_COMPLIANT,
+            Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
+        ], true)) {
+            app(CarFleetComplianceService::class)->syncFleetStatusForCar($car, Auth::id());
+        }
     }
 
     public function payCollection(Request $request, Agreement $agreement, $collectionId)
@@ -1439,6 +1710,14 @@ class AgreementController extends Controller
 
         if (! file_exists($fullPath)) {
             abort(404, 'Document file not found');
+        }
+
+        if (request()->boolean('download')) {
+            return response()->download(
+                $fullPath,
+                'signed_agreement_'.$agreement->id.'.pdf',
+                ['Content-Type' => 'application/pdf']
+            );
         }
 
         return response()->file($fullPath, [

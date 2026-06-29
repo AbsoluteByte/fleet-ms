@@ -12,27 +12,15 @@
 
         FV.requiredField(errors, form, 'old_car_id', 'Old car');
         FV.requiredField(errors, form, 'swapped_with_car_id', 'Swapped with');
-        FV.requiredField(errors, form, 'customer_name', 'Client\'s name');
-        FV.requiredField(errors, form, 'reservation_date', 'Reservation date');
-        FV.requiredField(errors, form, 'pick_up_date', 'Pick up date');
 
-        ['agreed_rent', 'agreed_advance', 'amount_paid'].forEach(function (id) {
-            var el = FV.findField(form, id);
-            var labels = { agreed_rent: 'Agreed rent', agreed_advance: 'Agreed advance', amount_paid: 'Amount paid' };
-            if (!el || el.disabled) {
-                return;
+        var agreedRent = FV.findField(form, 'agreed_rent');
+        if (agreedRent && !agreedRent.disabled) {
+            var rentVal = FV.trim(FV.fieldValue(agreedRent));
+            if (rentVal === '') {
+                FV.addError(errors, agreedRent, 'New agreed rent', 'New agreed rent is required.');
+            } else if (FV.parseNumber(rentVal) === null || FV.parseNumber(rentVal) < 0) {
+                FV.addError(errors, agreedRent, 'New agreed rent', 'New agreed rent must be a valid number (0 or greater).');
             }
-            var val = FV.trim(FV.fieldValue(el));
-            if (val === '') {
-                FV.addError(errors, el, labels[id], labels[id] + ' is required.');
-            } else if (FV.parseNumber(val) === null || FV.parseNumber(val) < 0) {
-                FV.addError(errors, el, labels[id], labels[id] + ' must be a valid number (0 or greater).');
-            }
-        });
-
-        var emailEl = FV.findField(form, 'customer_email');
-        if (emailEl && !FV.isEmpty(FV.fieldValue(emailEl)) && !FV.isValidEmail(FV.fieldValue(emailEl))) {
-            FV.addError(errors, emailEl, 'Email', 'Email must be a valid email address.');
         }
 
         FV.requiredField(errors, form, 'reason_for_swap', 'Reason for swap');

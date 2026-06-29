@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\CarStatusHistory;
@@ -268,14 +269,7 @@ class CarStatusChangeService
                 Rule::exists('cars', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
                 Rule::notIn([$car->id]),
             ],
-            'customer_name' => 'required|string|max:255',
-            'customer_phone' => 'nullable|string|max:50',
-            'customer_email' => 'nullable|email|max:255',
-            'reservation_date' => 'required|date',
-            'pick_up_date' => 'required|date',
             'agreed_rent' => 'required|numeric|min:0',
-            'agreed_advance' => 'required|numeric|min:0',
-            'amount_paid' => 'required|numeric|min:0',
             'reason_for_swap' => ['required', Rule::in(array_keys(VehicleSwap::reasonLabels()))],
             'phvl_issue_type' => [
                 Rule::requiredIf(fn () => $request->input('reason_for_swap') === VehicleSwap::REASON_PHVL_ISSUES),
@@ -299,51 +293,31 @@ class CarStatusChangeService
 
         $validated = $this->sanitizeSwapReasonPayload($validated);
 
-        $oldCar = Car::query()->where('tenant_id', $tenant->id)->whereKey($validated['old_car_id'])->firstOrFail();
+        $agreement = Agreement::activeAgreementForCar($tenant->id, (int) $validated['old_car_id']);
+        $upgradeService = app(AgreementUpgradeService::class);
 
-        $this->assertCarUsableInSwap($oldCar, null, 'old_car_id');
-        $this->assertCarUsableInSwap($car, null, 'car_id');
+        if (! $agreement || ! $upgradeService->canUpgrade($agreement)) {
+            throw ValidationException::withMessages([
+                'old_car_id' => ['The old vehicle must have an active agreement eligible for a car change.'],
+            ]);
+        }
 
-        $balance = $this->computeBalance(
-            (float) $validated['agreed_rent'],
-            (float) $validated['agreed_advance'],
-            (float) $validated['amount_paid']
-        );
-
-        $swap = VehicleSwap::create([
-            'tenant_id' => $tenant->id,
-            'old_car_id' => $validated['old_car_id'],
-            'swapped_with_car_id' => $car->id,
-            'customer_name' => $validated['customer_name'],
-            'customer_phone' => $validated['customer_phone'],
-            'customer_email' => $validated['customer_email'],
-            'reservation_date' => $validated['reservation_date'],
-            'pick_up_date' => $validated['pick_up_date'],
-            'agreed_rent' => $validated['agreed_rent'],
-            'agreed_advance' => $validated['agreed_advance'],
-            'amount_paid' => $validated['amount_paid'],
-            'balance_payable_on_pickup' => $balance,
-            'reason_for_swap' => $validated['reason_for_swap'],
-            'phvl_issue_type' => $validated['phvl_issue_type'],
-            'phvl_issue_notes' => $validated['phvl_issue_notes'],
-            'reason_notes' => $validated['reason_notes'],
-            'status' => VehicleSwap::STATUS_ACTIVE,
-            'created_by' => Auth::id(),
+        $newAgreement = $upgradeService->upgrade($agreement, [
+            'car_id' => $car->id,
+            'agreed_rent' => (float) $validated['agreed_rent'],
+            'swap_reason' => $validated['reason_for_swap'],
+            'swap_phvl_issue_type' => $validated['phvl_issue_type'] ?? null,
+            'swap_phvl_issue_notes' => $validated['phvl_issue_notes'] ?? null,
+            'swap_reason_notes' => $validated['reason_notes'] ?? null,
         ]);
 
-        VehicleSwap::applyVehicleSwapFleetStatus(
-            Car::query()->find($swap->old_car_id),
-            Car::query()->find($swap->swapped_with_car_id),
-            $validated['pick_up_date']
-        );
-
-        $snapshot = array_merge($validated, [
-            'balance_payable_on_pickup' => $balance,
-            'swapped_with_car_id' => $car->id,
-            'vehicle_swap_id' => $swap->id,
-        ]);
-
-        return [$swap->id, $snapshot];
+        return [
+            null,
+            array_merge($validated, [
+                'agreement_id' => $newAgreement->id,
+                'swapped_with_car_id' => $car->id,
+            ]),
+        ];
     }
 
     /**
