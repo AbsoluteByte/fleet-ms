@@ -11,7 +11,7 @@
                 </div>
             </div>
             <p class="px-2">Welcome back, please login to your account.</p>
-            <div class="card-content">
+            <div class="card-content" style="margin-top: 20px !important;">
                 <div class="card-body pt-1" style="margin-top: 0 !important;">
                     @include('alerts')
                     <form method="POST" action="{{ route('login') }}">
