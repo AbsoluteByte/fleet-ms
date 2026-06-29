@@ -5,14 +5,14 @@
     </div>
     <div class="col-lg-7 col-12 p-0">
         <div class="card rounded-0 mb-0 px-2">
-            <div class="card-header pb-1">
+            <div class="card-header pb-1" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
                 <div class="card-title">
                     <h4 class="mb-0">Login</h4>
                 </div>
             </div>
             <p class="px-2">Welcome back, please login to your account.</p>
             <div class="card-content">
-                <div class="card-body pt-1">
+                <div class="card-body pt-1" style="margin-top: 0 !important;">
                     @include('alerts')
                     <form method="POST" action="{{ route('login') }}">
                         @csrf
