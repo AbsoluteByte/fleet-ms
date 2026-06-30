@@ -28,6 +28,7 @@ class Car extends Model
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
         'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
         'seller_notes', 'damaged_notes', 'phv_status', 'phv_applied_date', 'phv_applied_by',
+        'phvl_suspension_status', 'phvl_suspension_status_date',
         'log_book_applied', 'log_book_applied_date', 'logbook_notes', 'old_log_book',
         'log_book_applied_by',
         'sorn_applied', 'sorn_applied_at', 'sorn_applied_by', 'sorn_document',
@@ -46,6 +47,7 @@ class Car extends Model
         'sorn_applied_at' => 'datetime',
         'available_from_date' => 'date',
         'phv_applied_date' => 'date',
+        'phvl_suspension_status_date' => 'date',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -148,6 +150,29 @@ class Car extends Model
     public function sornHistories()
     {
         return $this->hasMany(CarSornHistory::class)->orderByDesc('sorn_started_at')->orderByDesc('id');
+    }
+
+    public function phvlSuspensionHistories()
+    {
+        return $this->hasMany(CarPhvlSuspensionHistory::class)->orderByDesc('created_at')->orderByDesc('id');
+    }
+
+    public function phvlSuspensionStatusLabel(): string
+    {
+        return app(\App\Services\PhvlSuspensionService::class)->effectiveStatus($this) === \App\Services\PhvlSuspensionService::STATUS_ACTIVE
+            ? 'Active (not suspended)'
+            : (\App\Services\PhvlSuspensionService::statusLabels()[app(\App\Services\PhvlSuspensionService::class)->effectiveStatus($this)] ?? '—');
+    }
+
+    public function hasPhvlLicenceRevoked(): bool
+    {
+        return app(\App\Services\PhvlSuspensionService::class)->effectiveStatus($this)
+            === \App\Services\PhvlSuspensionService::STATUS_LICENCE_REVOKED;
+    }
+
+    public function scopeNonFaultDamaged($query)
+    {
+        return app(\App\Services\PhvlSuspensionService::class)->scopeNonFaultDamagedCars($query);
     }
 
     /**
@@ -368,6 +393,10 @@ class Car extends Model
     public function isEligibleForAgreementSelection(): bool
     {
         if ($this->sorn_applied || $this->hasActiveReservation()) {
+            return false;
+        }
+
+        if ($this->hasPhvlLicenceRevoked()) {
             return false;
         }
 

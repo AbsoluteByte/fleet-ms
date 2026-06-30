@@ -77,7 +77,14 @@
                                             $insuranceStatusLabel = strcasecmp($latestInsuranceStatusName, 'Applied') === 0
                                                 ? 'Applied'
                                                 : (strcasecmp($latestInsuranceStatusName, 'Active') === 0 ? 'Active' : 'Inactive');
-                                            $phvCounselLabel = $car->latestPhvCounselName() ?? '—';
+                                            $phvCounselLabel = in_array($car->fleet_status ?? '', [
+                                                \App\Models\Car::FLEET_STATUS_WRITTEN_OFF,
+                                                \App\Models\Car::FLEET_STATUS_STOLEN,
+                                                'for_sale',
+                                                \App\Models\Car::FLEET_STATUS_SOLD,
+                                            ], true)
+                                                ? '—'
+                                                : ($car->latestPhvCounselName() ?? '—');
                                             $carNotificationCount = $carNotificationCounts[$car->registration] ?? 0;
                                             $motExpiry = $car->latestMot()?->expiry_date;
                                             $motExpiryIso = $motExpiry ? $motExpiry->format('Y-m-d') : '';

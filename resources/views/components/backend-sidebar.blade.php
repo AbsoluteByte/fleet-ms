@@ -126,9 +126,14 @@
                         <span class="menu-title">PHVL Management</span>
                     </a>
                     <ul class="menu-content">
-                        <li class="{{ Request::is('admin/phvl') && ! Request::is('admin/phvl/archive*') ? 'active' : '' }}">
+                        <li class="{{ Request::is('admin/phvl') && ! Request::is('admin/phvl/archive*') && ! Request::is('admin/phvl/damaged-cars*') ? 'active' : '' }}">
                             <a href="{{ route('phvl.index') }}">
                                 <span class="menu-title">PHVL</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/phvl/damaged-cars*') ? 'active' : '' }}">
+                            <a href="{{ route('phvl.damaged-cars') }}">
+                                <span class="menu-title">Damaged Cars</span>
                             </a>
                         </li>
                         <li class="{{ Request::is('admin/phvl/archive*') ? 'active' : '' }}">

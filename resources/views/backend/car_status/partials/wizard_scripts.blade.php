@@ -116,13 +116,23 @@
         $('#fleet_swap_reason_for_swap').on('change', toggleSwapReasonSections);
         $('#fleet_swap_phvl_issue_type').on('change', toggleFleetSwapPhvlNotes);
 
+        function toggleDamagedPhvlDate() {
+            const fault = String($('#fleet_damaged_fault_type').val() || '');
+            const status = String($('#fleet_damaged_phvl_status').val() || 'active');
+            const showDate = fault === 'non_fault' && status !== 'active';
+            $('#fleet_damaged_phvl_date_wrap').toggleClass('d-none', !showDate);
+        }
+
         function toggleDamagedFault() {
             const v = String($('#fleet_damaged_fault_type').val() || '');
             $('.fleet-damaged-fault-only').toggleClass('d-none', v !== 'fault');
             $('.fleet-damaged-nonfault-only').toggleClass('d-none', v !== 'non_fault');
+            $('.fleet-damaged-phvl-only').toggleClass('d-none', v !== 'non_fault');
+            toggleDamagedPhvlDate();
         }
 
         $('#fleet_damaged_fault_type').on('change', toggleDamagedFault);
+        $('#fleet_damaged_phvl_status').on('change', toggleDamagedPhvlDate);
 
         $('#fleet_payload_mechanical').on('change', function () {
             $('#fleet_payload_mechanical_notes_wrap').toggleClass('d-none', !this.checked);

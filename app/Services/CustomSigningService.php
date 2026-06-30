@@ -58,6 +58,8 @@ class CustomSigningService
      */
     protected function sendSigningEmail(Agreement $agreement, $token, $signingUrl)
     {
+        $agreement->load(['company', 'car.company', 'driver', 'car']);
+
         // ✅ Step 1: Agreement PDF generate karo attachment k liye
         $pdfAttachmentPath = null;
         try {
@@ -65,7 +67,7 @@ class CustomSigningService
                 'agreement' => $agreement,
                 'driver'    => $agreement->driver,
                 'car'       => $agreement->car,
-                'company'   => $agreement->company,
+                'company'   => $agreement->documentCompany(),
                 'currentDate' => \Carbon\Carbon::now()->format('d/m/Y'),
             ];
 
@@ -92,7 +94,7 @@ class CustomSigningService
         $emailData = [
             'agreement'  => $agreement,
             'driver'     => $agreement->driver,
-            'company'    => $agreement->company,
+            'company'    => $agreement->documentCompany(),
             'signing_url' => $signingUrl,
             'expires_at' => $token->expires_at->format('M d, Y h:i A'),
             'has_attachment' => ($pdfAttachmentPath && file_exists($pdfAttachmentPath)),
@@ -158,15 +160,25 @@ class CustomSigningService
      */
     protected function generateSignedPDF(Agreement $agreement, $signatureData)
     {
-        $agreement->load(['company', 'driver', 'car', 'car.carModel', 'status']);
+        $agreement->load([
+            'company',
+            'driver',
+            'car',
+            'car.company',
+            'car.carModel',
+            'status',
+            'parentAgreement.car',
+            'upgradedFromAgreement.car',
+        ]);
 
         $data = [
             'agreement' => $agreement,
             'driver' => $agreement->driver,
             'car' => $agreement->car,
-            'company' => $agreement->company,
+            'company' => $agreement->documentCompany(),
             'currentDate' => Carbon::now()->format('d/m/Y'),
-            'signature_image' => $signatureData
+            'signature_image' => $signatureData,
+            'previousVehicleRegistration' => $agreement->previousVehicleRegistration(),
         ];
 
         $pdf = PDF::loadView('backend.agreements.agreement_pdf_signed', $data);

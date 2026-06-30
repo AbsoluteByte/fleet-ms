@@ -82,6 +82,9 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::patch('phvl/progress/{car}', [App\Http\Controllers\Backend\PhvlController::class, 'updateProgress'])->name('phvl.update-progress');
     Route::post('phvl/{car}/complete-pass', [App\Http\Controllers\Backend\PhvlController::class, 'completePass'])->name('phvl.complete-pass');
     Route::post('phvl/{car}/add-mot', [App\Http\Controllers\Backend\PhvlController::class, 'addMot'])->name('phvl.add-mot');
+    Route::get('phvl/damaged-cars', [App\Http\Controllers\Backend\DamagedCarsController::class, 'index'])->name('phvl.damaged-cars');
+    Route::get('phvl/damaged-cars/data', [App\Http\Controllers\Backend\DamagedCarsController::class, 'data'])->name('phvl.damaged-cars.data');
+    Route::patch('phvl/damaged-cars/{car}/phvl-status', [App\Http\Controllers\Backend\DamagedCarsController::class, 'updateStatus'])->name('phvl.damaged-cars.update-status');
     Route::get('phvl/archive', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'index'])->name('phvl.archive');
     Route::get('phvl/archive/data', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'data'])->name('phvl.archive.data');
     Route::get('phvl/archive/{archive}/timeline', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'timeline'])->name('phvl.archive.timeline');

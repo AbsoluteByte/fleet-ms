@@ -9,6 +9,7 @@ use App\Models\CarPhv;
 use App\Models\Company;
 use App\Models\InsuranceProvider;
 use App\Services\InsuranceDateRangeReportService;
+use App\Services\TicketTrackingReportService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +20,7 @@ class ReportController extends Controller
 
     public function __construct(
         private readonly InsuranceDateRangeReportService $insuranceReportService,
+        private readonly TicketTrackingReportService $ticketTrackingService,
     ) {
         $this->middleware('role:admin|manager|user');
         view()->share('dir', $this->dir);
@@ -123,6 +125,41 @@ class ReportController extends Controller
             ? $reportInsuranceProviders->firstWhere('id', $insuranceProviderId)
             : null;
 
+        $ticketCarId = $request->filled('ticket_car_id')
+            ? (int) $request->query('ticket_car_id')
+            : null;
+        $ticketAt = $request->query('ticket_at');
+        $ticketTrackingError = null;
+        $ticketTrackingResult = null;
+        $ticketTrackingReady = false;
+        $ticketTrackingQueriedAt = null;
+        $ticketCars = $cars->sortBy('registration')->values();
+
+        if ($ticketCarId !== null || $ticketAt !== null) {
+            if (! $ticketCarId || ! filled($ticketAt)) {
+                $ticketTrackingError = 'Please select a vehicle and date & time.';
+            } else {
+                try {
+                    $parsedAt = Carbon::parse($ticketAt);
+                } catch (\Throwable) {
+                    $parsedAt = null;
+                    $ticketTrackingError = 'Please enter a valid date and time.';
+                }
+
+                if ($parsedAt && ! $ticketCars->contains('id', $ticketCarId)) {
+                    $ticketTrackingError = 'The selected vehicle is not valid.';
+                } elseif ($parsedAt) {
+                    $ticketTrackingResult = $this->ticketTrackingService->findAssignment(
+                        $tenant->id,
+                        $ticketCarId,
+                        $parsedAt
+                    );
+                    $ticketTrackingQueriedAt = $parsedAt;
+                    $ticketTrackingReady = true;
+                }
+            }
+        }
+
         return view($this->dir.'index', compact(
             'cars',
             'insuranceFrom',
@@ -138,6 +175,13 @@ class ReportController extends Controller
             'reportInsuranceProviders',
             'selectedInsuranceCompany',
             'selectedInsuranceProvider',
+            'ticketCarId',
+            'ticketAt',
+            'ticketTrackingError',
+            'ticketTrackingResult',
+            'ticketTrackingReady',
+            'ticketTrackingQueriedAt',
+            'ticketCars',
         ));
     }
 

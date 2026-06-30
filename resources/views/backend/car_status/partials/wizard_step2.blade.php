@@ -421,6 +421,42 @@
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
+            @php
+                $phvlSuspensionStatusOld = old('payload.phvl_suspension_status', $payloadOld('phvl_suspension_status', \App\Services\PhvlSuspensionService::STATUS_ACTIVE));
+                $phvlStatusRequiresDate = $phvlSuspensionStatusOld !== \App\Services\PhvlSuspensionService::STATUS_ACTIVE;
+            @endphp
+            <div class="col-md-6 form-group fleet-damaged-phvl-only {{ old('payload.fault_type') === 'non_fault' ? '' : 'd-none' }}">
+                <label for="fleet_damaged_phvl_status">PHVL suspension status <span class="text-danger">*</span></label>
+                <select name="payload[phvl_suspension_status]" id="fleet_damaged_phvl_status"
+                        class="form-control @error('payload.phvl_suspension_status') is-invalid @enderror">
+                    @foreach(\App\Services\PhvlSuspensionService::statusLabels() as $value => $label)
+                        <option value="{{ $value }}" {{ (string) $phvlSuspensionStatusOld === (string) $value ? 'selected' : '' }}>
+                            {{ $label }}</option>
+                    @endforeach
+                </select>
+                @error('payload.phvl_suspension_status')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-6 form-group fleet-damaged-phvl-only fleet-damaged-phvl-date-only {{ old('payload.fault_type') === 'non_fault' && $phvlStatusRequiresDate ? '' : 'd-none' }}"
+                 id="fleet_damaged_phvl_date_wrap">
+                <label for="fleet_damaged_phvl_status_date">PHVL status date <span class="text-danger">*</span></label>
+                <input type="date" name="payload[phvl_suspension_status_date]" id="fleet_damaged_phvl_status_date"
+                       class="form-control @error('payload.phvl_suspension_status_date') is-invalid @enderror"
+                       value="{{ old('payload.phvl_suspension_status_date', $payloadOld('phvl_suspension_status_date')) }}">
+                @error('payload.phvl_suspension_status_date')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-12 form-group fleet-damaged-phvl-only {{ old('payload.fault_type') === 'non_fault' ? '' : 'd-none' }}">
+                <label for="fleet_damaged_phvl_notes">PHVL suspension notes</label>
+                <textarea name="payload[phvl_suspension_notes]" id="fleet_damaged_phvl_notes" rows="2"
+                          class="form-control @error('payload.phvl_suspension_notes') is-invalid @enderror"
+                          placeholder="Optional">{{ old('payload.phvl_suspension_notes', $payloadOld('phvl_suspension_notes')) }}</textarea>
+                @error('payload.phvl_suspension_notes')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
             <div class="col-md-12 form-group">
                 <div class="custom-control custom-checkbox">
                     <input type="checkbox" class="custom-control-input" id="fleet_payload_mechanical"

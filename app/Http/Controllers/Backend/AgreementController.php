@@ -146,6 +146,7 @@ class AgreementController extends Controller
                 $validated['tenant_id'] = $tenant->id;
                 $validated['createdBy'] = Auth::id();
                 $validated = $this->mergeTerminationData($validated);
+                $validated = $this->mergeClosingData($validated);
                 $validated = $this->applyDiscountData($validated, $request);
                 $validated = $this->mergeReplacementVehicleData($validated);
                 unset($validated['reservation_id']);
@@ -366,6 +367,7 @@ class AgreementController extends Controller
                 $validated['tenant_id'] = $tenant->id;
                 $validated['updatedBy'] = Auth::id();
                 $validated = $this->mergeTerminationData($validated, $agreement);
+                $validated = $this->mergeClosingData($validated);
                 $validated = $this->applyDiscountData($validated, $request, $agreement);
                 $validated = $this->mergeReplacementVehicleData($validated);
                 $agreement->update($validated);
@@ -468,6 +470,15 @@ class AgreementController extends Controller
         return $validated;
     }
 
+    private function mergeClosingData(array $validated): array
+    {
+        if (! $this->isClosingStatusId((int) ($validated['status_id'] ?? 0))) {
+            $validated['closing_date'] = null;
+        }
+
+        return $validated;
+    }
+
     /**
      * @return array{reservation_id: int, amount_paid: float, add_payment: bool}
      */
@@ -541,6 +552,10 @@ class AgreementController extends Controller
             'termination_notice_date' => 'nullable|date',
             'termination_available_from_date' => 'nullable|date',
             'termination_notes' => 'nullable|string',
+            'closing_date' => [
+                $this->isClosingStatusId((int) $request->input('status_id')) ? 'required' : 'nullable',
+                'date',
+            ],
         ];
 
         if ($isReplacementVehicle) {
@@ -811,11 +826,33 @@ class AgreementController extends Controller
 
         $statusId = (int) ($validated['status_id'] ?? 0);
 
-        if ($statusId > 0 && $this->isTerminatedStatusId($statusId)) {
+        if ($statusId > 0 && $this->isClosingStatusId($statusId)) {
             return true;
         }
 
-        return $this->isTerminatedStatusId((int) $existing->status_id);
+        return $this->isClosingStatusId((int) $existing->status_id);
+    }
+
+    private function isClosingStatusId(int $statusId): bool
+    {
+        if ($statusId <= 0) {
+            return false;
+        }
+
+        $name = Status::query()->whereKey($statusId)->value('name');
+
+        return in_array(strtolower((string) $name), ['expired', 'terminated'], true);
+    }
+
+    private function isExpiredStatusId(int $statusId): bool
+    {
+        if ($statusId <= 0) {
+            return false;
+        }
+
+        $name = Status::query()->whereKey($statusId)->value('name');
+
+        return strcasecmp((string) $name, 'Expired') === 0;
     }
 
     private function isTerminatedStatusId(int $statusId): bool
@@ -1175,8 +1212,10 @@ class AgreementController extends Controller
 
         $agreement->loadMissing('status');
 
+        $statusId = (int) $agreement->status_id;
         $isTerminated = filled($agreement->termination_notice_date)
-            || $this->isTerminatedStatusId((int) $agreement->status_id);
+            || $this->isTerminatedStatusId($statusId)
+            || ($this->isExpiredStatusId($statusId) && filled($agreement->closing_date));
 
         if (! $isTerminated) {
             return;
@@ -1278,7 +1317,7 @@ class AgreementController extends Controller
     private function makePermissionLetterPdf(Agreement $agreement): array
     {
         $agreement->load([
-            'company', 'driver', 'car', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
+            'company', 'driver', 'car', 'car.company', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
         ]);
 
         $activeCarInsurance = $agreement->car?->currentActiveInsurance();
@@ -1291,11 +1330,13 @@ class AgreementController extends Controller
             ? $agreement->own_insurance_end_date
             : $activeCarInsurance?->expiry_date;
 
-        $letterMeta = app(PermissionLetterService::class)->resolveLetterMeta($agreement->company);
+        $documentCompany = $agreement->documentCompany();
+
+        $letterMeta = app(PermissionLetterService::class)->resolveLetterMeta($documentCompany);
 
         $data = [
             'agreement' => $agreement,
-            'company' => $agreement->company,
+            'company' => $documentCompany,
             'driver' => $agreement->driver,
             'car' => $agreement->car,
             'policyNumber' => $policyNumber,
@@ -1317,17 +1358,7 @@ class AgreementController extends Controller
      */
     private function makeAgreementPdf(Agreement $agreement): array
     {
-        $agreement->load([
-            'company', 'driver', 'car', 'car.carModel', 'status', 'insuranceProvider',
-        ]);
-
-        $data = [
-            'agreement' => $agreement,
-            'driver' => $agreement->driver,
-            'car' => $agreement->car,
-            'company' => $agreement->company,
-            'currentDate' => Carbon::now()->format('d/m/Y'),
-        ];
+        $data = $this->agreementPdfViewData($agreement);
 
         $pdf = PDF::loadView($this->dir.'.agreement_pdf', $data);
         $pdf->setPaper('A4', 'portrait');
@@ -1335,6 +1366,33 @@ class AgreementController extends Controller
         $filename = 'Agreement_'.$agreement->id.'_'.str_replace(' ', '_', $agreement->driver->full_name).'.pdf';
 
         return [$pdf, $filename];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function agreementPdfViewData(Agreement $agreement): array
+    {
+        $agreement->load([
+            'company',
+            'driver',
+            'car',
+            'car.company',
+            'car.carModel',
+            'status',
+            'insuranceProvider',
+            'parentAgreement.car',
+            'upgradedFromAgreement.car',
+        ]);
+
+        return [
+            'agreement' => $agreement,
+            'driver' => $agreement->driver,
+            'car' => $agreement->car,
+            'company' => $agreement->documentCompany(),
+            'currentDate' => Carbon::now()->format('d/m/Y'),
+            'previousVehicleRegistration' => $agreement->previousVehicleRegistration(),
+        ];
     }
 
     /**
@@ -1429,15 +1487,7 @@ class AgreementController extends Controller
     private function generatePDFForESign(Agreement $agreement)
     {
         try {
-            $agreement->load(['company', 'driver', 'car', 'car.carModel', 'status']);
-
-            $data = [
-                'agreement' => $agreement,
-                'driver' => $agreement->driver,
-                'car' => $agreement->car,
-                'company' => $agreement->company,
-                'currentDate' => Carbon::now()->format('d/m/Y'),
-            ];
+            $data = $this->agreementPdfViewData($agreement);
 
             $pdf = PDF::loadView('backend.agreements.agreement_pdf', $data);
             $pdf->setPaper('A4', 'portrait');

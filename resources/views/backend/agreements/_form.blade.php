@@ -112,6 +112,18 @@
                 </div>
             </div>
 
+            <div class="col-md-6" id="agreement-closing-section" style="display: none;">
+                <div class="mb-3">
+                    <label for="closing_date" class="form-label">Closing date &amp; time <span class="text-danger">*</span></label>
+                    <input type="datetime-local" name="closing_date" id="closing_date"
+                           class="form-control @error('closing_date') is-invalid @enderror"
+                           value="{{ old('closing_date') ?? (isset($model) && $model->closing_date ? $model->closing_date->format('Y-m-d\TH:i') : '') }}">
+                    @error('closing_date')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
             <div class="col-md-6" id="parent-agreement-section" style="display: none;">
                 <div class="mb-3">
                     <label for="parent_agreement_id" class="form-label">Original agreement *</label>
@@ -1042,6 +1054,29 @@
             });
         }
 
+        function isClosingStatusSelected() {
+            const statusSelect = document.getElementById('status_id');
+
+            if (!statusSelect || !statusSelect.selectedOptions.length) {
+                return false;
+            }
+
+            const statusName = String(statusSelect.selectedOptions[0].dataset.statusName || '').toLowerCase();
+
+            return statusName === 'expired' || statusName === 'terminated';
+        }
+
+        function toggleClosingDateSection() {
+            const section = document.getElementById('agreement-closing-section');
+            const show = isClosingStatusSelected();
+
+            if (section) {
+                section.style.display = show ? '' : 'none';
+            }
+
+            setFieldRequired('closing_date', show);
+        }
+
         function isReplacementVehicleStatusSelected() {
             const statusSelect = document.getElementById('status_id');
 
@@ -1561,12 +1596,16 @@
         // Initialize toggle states
         document.addEventListener('DOMContentLoaded', function() {
             toggleReplacementVehicleMode();
+            toggleClosingDateSection();
             toggleInsuranceSections();
             toggleAgreementPaymentFields();
             updateVehicleInsuranceDisplay();
             updateDriverActiveAgreementWarning();
 
-            document.getElementById('status_id')?.addEventListener('change', toggleReplacementVehicleMode);
+            document.getElementById('status_id')?.addEventListener('change', function () {
+                toggleReplacementVehicleMode();
+                toggleClosingDateSection();
+            });
             document.getElementById('driver_id')?.addEventListener('change', function() {
                 updateDriverActiveAgreementWarning();
 
@@ -1583,7 +1622,10 @@
                         populateOriginalAgreementOptions();
                     }
                 });
-                $('#status_id').on('change', toggleReplacementVehicleMode);
+                $('#status_id').on('change', function () {
+                    toggleReplacementVehicleMode();
+                    toggleClosingDateSection();
+                });
             }
 
             document.getElementById('add_payment')?.addEventListener('change', toggleAgreementPaymentFields);

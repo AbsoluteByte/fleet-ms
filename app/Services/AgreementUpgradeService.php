@@ -181,7 +181,7 @@ class AgreementUpgradeService
 
             $newAgreement = Agreement::create([
                 'tenant_id' => $old->tenant_id,
-                'company_id' => $old->company_id,
+                'company_id' => $car->company_id,
                 'driver_id' => $old->driver_id,
                 'car_id' => $car->id,
                 'start_date' => $changeDate,

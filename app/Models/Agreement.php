@@ -36,6 +36,7 @@ class Agreement extends Model
         'termination_available_from_date',
         'termination_notes',
         'termination_recorded_by',
+        'closing_date',
     ];
 
     protected $casts = [
@@ -59,6 +60,7 @@ class Agreement extends Model
         'esign_completed_at' => 'datetime',
         'termination_notice_date' => 'date',
         'termination_available_from_date' => 'date',
+        'closing_date' => 'datetime',
     ];
 
     public function company()
@@ -114,6 +116,63 @@ class Agreement extends Model
     public function isReplacementVehicle(): bool
     {
         return strcasecmp((string) optional($this->status)->name, 'Replacement Vehicle') === 0;
+    }
+
+    public function previousVehicleRegistration(): ?string
+    {
+        if ($this->isReplacementVehicle()) {
+            $registration = $this->parentAgreement?->car?->registration;
+
+            return $registration ? (string) $registration : null;
+        }
+
+        if ($this->isUpgradedAgreement()) {
+            $registration = $this->upgradedFromAgreement?->car?->registration;
+
+            return $registration ? (string) $registration : null;
+        }
+
+        return null;
+    }
+
+    public function documentCompany(): ?Company
+    {
+        return $this->car?->company ?? $this->company;
+    }
+
+    /**
+     * When the driver assignment on this car ends for ticket-tracking / historical lookups.
+     */
+    public function effectiveAssignmentEndAt(): Carbon
+    {
+        $candidates = [];
+
+        $upgradedTo = $this->relationLoaded('upgradedToAgreement')
+            ? $this->upgradedToAgreement
+            : $this->upgradedToAgreement()->first();
+
+        if ($upgradedTo?->start_date) {
+            $candidates[] = $upgradedTo->start_date->copy();
+        }
+
+        if ($this->closing_date) {
+            $candidates[] = $this->closing_date->copy();
+        }
+
+        if ($this->end_date) {
+            $candidates[] = $this->end_date->copy()->setTimeFromTimeString(self::PDF_END_TIME);
+        }
+
+        return collect($candidates)->sort()->first() ?? now();
+    }
+
+    public function isAssignedAt(Carbon $at): bool
+    {
+        if (! $this->start_date) {
+            return false;
+        }
+
+        return $this->start_date->lte($at) && $at->lt($this->effectiveAssignmentEndAt());
     }
 
     public function billingAnchorDate(): Carbon

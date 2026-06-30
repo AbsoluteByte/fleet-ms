@@ -209,6 +209,9 @@
         <div class="col-title">Vehicle Details</div>
         <div class="field"><span class="lbl">Make &amp; Model:</span> {{ strtoupper($car->carModel->name ?? '') }}</div>
         <div class="field"><span class="lbl">Vehicle REG:</span> {{ strtoupper($car->registration) }}</div>
+        @if(!empty($previousVehicleRegistration))
+            <div class="field"><span class="lbl">Previous Vehicle REG:</span> {{ strtoupper($previousVehicleRegistration) }}</div>
+        @endif
         <div class="field"><span class="lbl">Mileage Out:</span> {{ $agreement->mileage_out ? number_format($agreement->mileage_out) : '' }}</div>
         <div class="field"><span class="lbl">Date/Time Out:</span> {{ $agreement->start_date->format('d.m.Y') }} {{ $agreement->start_date->format('H:i') }} HRS</div>
         <div class="field"><span class="lbl">Date/Time Due:</span> {{ $agreement->end_date->format('d.m.Y') }} {{ \App\Models\Agreement::PDF_END_TIME }} HRS</div>

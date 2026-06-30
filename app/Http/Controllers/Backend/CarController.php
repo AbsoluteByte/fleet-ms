@@ -344,6 +344,7 @@ class CarController extends Controller
             'statusHistories.changedBy',
             'statusHistories.reservation',
             'statusHistories.vehicleSwap',
+            'phvlSuspensionHistories.changedBy',
         ]);
         $this->sortCarHistoryRelations($car);
 

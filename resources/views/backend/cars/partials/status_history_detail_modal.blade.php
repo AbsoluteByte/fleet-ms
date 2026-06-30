@@ -92,6 +92,8 @@
                                         {{ $value ? 'Yes' : 'No' }}
                                     @elseif($key === 'disposal_outcome' && isset($writtenOffDisposalLabels[$value]))
                                         {{ $writtenOffDisposalLabels[$value] }}
+                                    @elseif($key === 'phvl_suspension_status')
+                                        {{ \App\Services\PhvlSuspensionService::statusLabels()[$value] ?? $value }}
                                     @elseif($key === 'driver_id' && $value)
                                         @php
                                             $historyDriver = ($statusHistoryDrivers ?? collect())->get((int) $value);

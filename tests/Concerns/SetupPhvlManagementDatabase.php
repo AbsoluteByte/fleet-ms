@@ -59,6 +59,10 @@ trait SetupPhvlManagementDatabase
             $table->string('color')->nullable();
             $table->string('fleet_status')->default('preparation_for_phvl');
             $table->string('phv_status')->nullable();
+            $table->string('phvl_suspension_status', 32)->nullable();
+            $table->date('phvl_suspension_status_date')->nullable();
+            $table->boolean('sorn_applied')->default(false);
+            $table->date('available_from_date')->nullable();
             $table->unsignedBigInteger('createdBy')->nullable();
             $table->unsignedBigInteger('updatedBy')->nullable();
             $table->timestamps();
@@ -98,10 +102,58 @@ trait SetupPhvlManagementDatabase
 
             $table->unique('car_id');
         });
+
+        Schema::create('car_status_histories', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id');
+            $table->string('previous_status')->nullable();
+            $table->string('new_status');
+            $table->foreignId('reservation_id')->nullable();
+            $table->foreignId('vehicle_swap_id')->nullable();
+            $table->json('status_data')->nullable();
+            $table->foreignId('changed_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('car_phvl_suspension_histories', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id');
+            $table->string('from_status', 32)->nullable();
+            $table->string('to_status', 32);
+            $table->date('event_date')->nullable();
+            $table->foreignId('car_status_history_id')->nullable();
+            $table->foreignId('changed_by')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('car_reservations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id')->nullable();
+            $table->string('status')->default('active');
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('vehicle_swaps', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('old_car_id')->nullable();
+            $table->foreignId('swapped_with_car_id')->nullable();
+            $table->string('status')->default('active');
+            $table->timestamps();
+        });
     }
 
     protected function tearDownPhvlManagementDatabase(): void
     {
+        Schema::dropIfExists('vehicle_swaps');
+        Schema::dropIfExists('car_reservations');
+        Schema::dropIfExists('car_phvl_suspension_histories');
+        Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('car_phvl_progress');
         Schema::dropIfExists('car_phvs');
         Schema::dropIfExists('car_mots');

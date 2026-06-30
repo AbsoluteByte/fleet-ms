@@ -166,6 +166,82 @@ class VehicleSwapAgreementTest extends TestCase
         $response->assertOk();
     }
 
+    public function test_swap_uses_new_car_company_for_agreement_and_documents(): void
+    {
+        $oldCompany = Company::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Samore Traders Ltd',
+        ]);
+        $newCompany = Company::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Proactive Hybrid Corporate Ltd',
+        ]);
+
+        $this->oldCar->update(['company_id' => $oldCompany->id]);
+        $this->newCar->update(['company_id' => $newCompany->id]);
+        $this->agreement->update(['company_id' => $oldCompany->id]);
+
+        $this->from(route('vehicle-swaps.create'))
+            ->post(route('vehicle-swaps.store'), [
+                'old_car_id' => $this->oldCar->id,
+                'swapped_with_car_id' => $this->newCar->id,
+                'agreed_rent' => 250,
+                'reason_for_swap' => VehicleSwap::REASON_UPGRADE,
+            ]);
+
+        $newAgreement = Agreement::query()
+            ->where('upgraded_from_agreement_id', $this->agreement->id)
+            ->with(['car.company', 'company'])
+            ->firstOrFail();
+
+        $this->assertSame($newCompany->id, $newAgreement->company_id);
+        $this->assertSame($newCompany->id, $newAgreement->documentCompany()?->id);
+
+        $letterMeta = app(\App\Services\PermissionLetterService::class)
+            ->resolveLetterMeta($newAgreement->documentCompany());
+
+        $this->assertSame('PROACTIVE HYBRID CORPORATE LTD', $letterMeta['owned_by_name']);
+
+        $this->get(route('agreements.permission-letter', $newAgreement))->assertOk();
+    }
+
+    public function test_document_company_uses_car_company_when_stored_agreement_company_differs(): void
+    {
+        $oldCompany = Company::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Samore Traders Ltd',
+        ]);
+        $newCompany = Company::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Proactive Hybrid Corporate Ltd',
+        ]);
+
+        $this->newCar->update(['company_id' => $newCompany->id]);
+
+        $swappedAgreement = Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $oldCompany->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $this->newCar->id,
+            'start_date' => '2026-06-18 10:00:00',
+            'end_date' => '2027-06-01',
+            'agreed_rent' => 250,
+            'rent_interval' => 'weekly',
+            'deposit_amount' => 500,
+            'collection_type' => 'weekly',
+            'using_own_insurance' => false,
+            'status_id' => $this->activeStatus->id,
+            'upgraded_from_agreement_id' => $this->agreement->id,
+            'createdBy' => $this->user->id,
+            'updatedBy' => $this->user->id,
+        ]);
+
+        $swappedAgreement->load(['car.company', 'company']);
+
+        $this->assertSame($oldCompany->id, $swappedAgreement->company_id);
+        $this->assertSame($newCompany->id, $swappedAgreement->documentCompany()?->id);
+    }
+
     public function test_future_start_active_agreement_appears_in_swap_old_car_list(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-29 10:00:00'));

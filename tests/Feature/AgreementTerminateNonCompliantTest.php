@@ -191,6 +191,7 @@ class AgreementTerminateNonCompliantTest extends TestCase
                 'collection_type' => 'weekly',
                 'deposit_amount' => 200,
                 'status_id' => $terminatedStatus->id,
+                'closing_date' => '2026-06-20T14:30',
             ]);
 
         $response->assertRedirect(route('agreements.index'));

@@ -8,6 +8,7 @@ use App\Models\CarReservation;
 use App\Models\CarStatusHistory;
 use App\Models\Tenant;
 use App\Models\VehicleSwap;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
@@ -121,6 +122,22 @@ class CarStatusChangeService
                 $history->update([
                     'status_data' => array_merge($statusData, ['documents' => $documents]),
                 ]);
+            }
+
+            if ($target === 'damaged' && ($statusData['fault_type'] ?? '') === 'non_fault') {
+                $phvlStatus = $statusData['phvl_suspension_status'] ?? PhvlSuspensionService::STATUS_ACTIVE;
+                $eventDate = ! empty($statusData['phvl_suspension_status_date'])
+                    ? Carbon::parse($statusData['phvl_suspension_status_date'])
+                    : null;
+
+                app(PhvlSuspensionService::class)->applyStatus(
+                    $car->fresh(),
+                    $phvlStatus,
+                    $eventDate,
+                    $statusData['phvl_suspension_notes'] ?? null,
+                    $history->id,
+                    Auth::id()
+                );
             }
         });
     }
@@ -360,10 +377,38 @@ class CarStatusChangeService
                 'nullable',
                 'string',
             ],
+            'payload.phvl_suspension_status' => [
+                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'),
+                'nullable',
+                Rule::in(PhvlSuspensionService::statuses()),
+            ],
+            'payload.phvl_suspension_status_date' => [
+                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'
+                    && $request->input('payload.phvl_suspension_status', PhvlSuspensionService::STATUS_ACTIVE) !== PhvlSuspensionService::STATUS_ACTIVE),
+                'nullable',
+                'date',
+            ],
+            'payload.phvl_suspension_notes' => 'nullable|string|max:1000',
         ]);
 
         $payload = $validated['payload'];
         $payload['mechanical'] = $request->boolean('payload.mechanical');
+
+        if ($payload['fault_type'] === 'non_fault') {
+            $payload['phvl_suspension_status'] = $request->input(
+                'payload.phvl_suspension_status',
+                PhvlSuspensionService::STATUS_ACTIVE
+            );
+            if ($payload['phvl_suspension_status'] === PhvlSuspensionService::STATUS_ACTIVE) {
+                unset($payload['phvl_suspension_status_date']);
+            }
+        } else {
+            unset(
+                $payload['phvl_suspension_status'],
+                $payload['phvl_suspension_status_date'],
+                $payload['phvl_suspension_notes']
+            );
+        }
 
         $this->cancelActiveReservationsAndSwapsForCar($car);
 

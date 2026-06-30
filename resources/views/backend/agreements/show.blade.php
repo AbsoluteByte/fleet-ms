@@ -121,6 +121,12 @@
                                     <td><strong>End Date:</strong></td>
                                     <td>{{ $agreement->end_date->format('M d, Y') }}</td>
                                 </tr>
+                                @if($agreement->closing_date)
+                                    <tr>
+                                        <td><strong>Closing date &amp; time:</strong></td>
+                                        <td>{{ $agreement->closing_date->format('M d, Y h:i A') }}</td>
+                                    </tr>
+                                @endif
                                 @if($agreement->termination_notice_date)
                                     <tr>
                                         <td><strong>Termination Notice:</strong></td>

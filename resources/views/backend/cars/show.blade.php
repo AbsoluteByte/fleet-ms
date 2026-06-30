@@ -79,6 +79,51 @@
                                     <i class="fa fa-edit"></i> Edit current status details
                                 </a>
                             </div>
+                            @if($car->fleet_status === 'damaged')
+                                <div class="col-md-6 mb-3">
+                                    <strong>PHVL suspension:</strong>
+                                    <p class="mb-0">{{ $car->phvlSuspensionStatusLabel() }}</p>
+                                    @if($car->phvl_suspension_status_date)
+                                        <small class="text-muted d-block">Status date: {{ $car->phvl_suspension_status_date->format('d M, Y') }}</small>
+                                    @endif
+                                    @if($car->phvlSuspensionHistories->isNotEmpty())
+                                        <a href="{{ route('phvl.damaged-cars') }}" class="btn btn-sm btn-outline-secondary mt-1">
+                                            <i class="fa fa-list"></i> Manage on Damaged Cars
+                                        </a>
+                                    @endif
+                                </div>
+                            @endif
+                            @if($car->fleet_status === 'damaged' && $car->phvlSuspensionHistories->isNotEmpty())
+                                <div class="col-12 mb-4">
+                                    <h4 class="border-bottom pb-2 mb-3 mt-2">PHVL suspension history</h4>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered">
+                                            <thead class="thead-light">
+                                            <tr>
+                                                <th>When</th>
+                                                <th>From</th>
+                                                <th>To</th>
+                                                <th>Event date</th>
+                                                <th>By</th>
+                                                <th>Notes</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach($car->phvlSuspensionHistories as $phvlEntry)
+                                                <tr>
+                                                    <td class="text-nowrap">{{ $phvlEntry->created_at?->format('d/m/Y H:i') }}</td>
+                                                    <td>{{ $phvlEntry->from_status ? (\App\Services\PhvlSuspensionService::statusLabels()[$phvlEntry->from_status] ?? $phvlEntry->from_status) : '—' }}</td>
+                                                    <td>{{ \App\Services\PhvlSuspensionService::statusLabels()[$phvlEntry->to_status] ?? $phvlEntry->to_status }}</td>
+                                                    <td>{{ $phvlEntry->event_date?->format('d/m/Y') ?? '—' }}</td>
+                                                    <td>{{ $phvlEntry->changedBy->name ?? '—' }}</td>
+                                                    <td style="white-space: pre-wrap;">{{ $phvlEntry->notes ?: '—' }}</td>
+                                                </tr>
+                                            @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            @endif
                             @if($car->statusHistories->isNotEmpty())
                                 @php
                                     $historyStep2Statuses = ['reserved', 'vehicle_swap', 'damaged', 'written_off', 'stolen', 'for_sale', 'sold'];

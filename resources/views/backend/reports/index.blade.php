@@ -7,7 +7,7 @@
                 <div class="card">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
                         <h4 class="card-title mb-0">Reports</h4>
-                        <div class="btn-group mt-25 mt-md-0">
+                        <div class="btn-group mt-25 mt-md-0" id="reportsExportGroup">
                             <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" id="reportsExportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                 <i class="fa fa-download mr-50"></i> Export
                             </button>
@@ -23,8 +23,14 @@
 
                             @php
                                 $insuranceReportRequested = filled($insuranceFrom) || filled($insuranceTo);
+                                $ticketReportRequested = filled($ticketCarId ?? null) || filled($ticketAt ?? null);
+                                $activeMainTab = $ticketReportRequested
+                                    ? 'ticket'
+                                    : ($insuranceReportRequested ? 'insurance' : 'mots');
+                                $ticketAtInputValue = filled($ticketAt ?? null)
+                                    ? \Carbon\Carbon::parse($ticketAt)->format('Y-m-d\TH:i')
+                                    : '';
                                 $insuranceReportReady = filled($insuranceFrom) && filled($insuranceTo) && ! $insuranceDateError;
-                                $activeMainTab = $insuranceReportRequested ? 'insurance' : 'mots';
                             @endphp
 
                             <ul class="nav nav-pills mb-2" id="reports-tabs" role="tablist">
@@ -36,6 +42,9 @@
                                 </li>
                                 <li class="nav-item">
                                     <a class="nav-link {{ $activeMainTab === 'insurance' ? 'active' : '' }}" id="reports-insurance-tab" data-toggle="pill" href="#reports-insurance-pane" role="tab" aria-controls="reports-insurance-pane" aria-selected="{{ $activeMainTab === 'insurance' ? 'true' : 'false' }}">Insurance</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link {{ $activeMainTab === 'ticket' ? 'active' : '' }}" id="reports-ticket-tab" data-toggle="pill" href="#reports-ticket-pane" role="tab" aria-controls="reports-ticket-pane" aria-selected="{{ $activeMainTab === 'ticket' ? 'true' : 'false' }}">Ticket Tracking</a>
                                 </li>
                             </ul>
 
@@ -221,6 +230,91 @@
                                                 </div>
                                             @endforeach
                                         </div>
+                                    @endif
+                                </div>
+
+                                <div class="tab-pane fade {{ $activeMainTab === 'ticket' ? 'show active' : '' }}" id="reports-ticket-pane" role="tabpanel" aria-labelledby="reports-ticket-tab">
+                                    <form method="GET" action="{{ route('reports.index') }}" class="mb-2" id="reportsTicketTrackingForm">
+                                        <div class="form-row align-items-end">
+                                            <div class="form-group col-md-4 col-lg-3 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="ticket_car_id">Vehicle</label>
+                                                <select name="ticket_car_id" id="ticket_car_id" class="form-control select-search" required>
+                                                    <option value="">— Select vehicle —</option>
+                                                    @foreach($ticketCars as $ticketCar)
+                                                        <option value="{{ $ticketCar->id }}" @selected((int) ($ticketCarId ?? 0) === (int) $ticketCar->id)>
+                                                            {{ $ticketCar->registration }} — {{ $ticketCar->carModel->name ?? 'Unknown model' }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="form-group col-md-4 col-lg-3 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="ticket_at">Date &amp; time</label>
+                                                <input type="datetime-local" name="ticket_at" id="ticket_at" class="form-control" value="{{ $ticketAtInputValue }}" required>
+                                            </div>
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <button type="submit" class="btn btn-primary btn-block">Next</button>
+                                            </div>
+                                        </div>
+                                    </form>
+
+                                    @if($ticketTrackingError ?? false)
+                                        <div class="alert alert-danger">{{ $ticketTrackingError }}</div>
+                                    @elseif(! ($ticketTrackingReady ?? false))
+                                        <p class="text-muted mb-2">Select a vehicle and date &amp; time, then click Next to see who was driving.</p>
+                                    @else
+                                        @php
+                                            $queriedCar = $ticketCars->firstWhere('id', $ticketCarId);
+                                        @endphp
+                                        <p class="text-muted small mb-1">
+                                            Lookup for
+                                            <strong>{{ $queriedCar?->registration ?? '—' }}</strong>
+                                            at
+                                            <strong>{{ $ticketTrackingQueriedAt?->format('d M Y, H:i') }}</strong>.
+                                        </p>
+
+                                        @if($ticketTrackingResult)
+                                            @php
+                                                $ticketDriver = $ticketTrackingResult->driver;
+                                                $ticketAgreement = $ticketTrackingResult;
+                                            @endphp
+                                            <div class="card border">
+                                                <div class="card-body">
+                                                    <h5 class="card-title mb-1">Driver found</h5>
+                                                    <dl class="row mb-0">
+                                                        <dt class="col-sm-3">Vehicle</dt>
+                                                        <dd class="col-sm-9">{{ $queriedCar?->registration }} — {{ $queriedCar?->carModel?->name ?? '—' }}</dd>
+
+                                                        <dt class="col-sm-3">Driver</dt>
+                                                        <dd class="col-sm-9">{{ $ticketDriver?->full_name ?: '—' }}</dd>
+
+                                                        <dt class="col-sm-3">Phone</dt>
+                                                        <dd class="col-sm-9">{{ $ticketDriver?->phone_number ?: '—' }}</dd>
+
+                                                        <dt class="col-sm-3">Licence</dt>
+                                                        <dd class="col-sm-9">{{ $ticketDriver?->driver_license_number ?: '—' }}</dd>
+
+                                                        <dt class="col-sm-3">Agreement</dt>
+                                                        <dd class="col-sm-9">
+                                                            <a href="{{ route('agreements.show', $ticketAgreement) }}">Agreement #{{ $ticketAgreement->id }}</a>
+                                                        </dd>
+
+                                                        <dt class="col-sm-3">Hire period</dt>
+                                                        <dd class="col-sm-9">
+                                                            {{ $ticketAgreement->start_date?->format('d M Y, H:i') ?? '—' }}
+                                                            to
+                                                            {{ $ticketAgreement->effectiveAssignmentEndAt()->format('d M Y, H:i') }}
+                                                        </dd>
+
+                                                        <dt class="col-sm-3">Status</dt>
+                                                        <dd class="col-sm-9">{{ $ticketAgreement->status?->name ?? '—' }}</dd>
+                                                    </dl>
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div class="alert alert-warning mb-0">
+                                                No driver was assigned to this vehicle at the selected date and time.
+                                            </div>
+                                        @endif
                                     @endif
                                 </div>
                             </div>
@@ -508,6 +602,14 @@
 
             const insuranceReportMeta = @json($insuranceReportMeta);
 
+            function setReportsExportVisible(isVisible) {
+                $('#reportsExportGroup').toggle(isVisible);
+            }
+
+            if (activeReportTab === 'ticket') {
+                setReportsExportVisible(false);
+            }
+
             const motFilters = { company: '', from: '', to: '', includeMissing: false };
             const phvlFilters = { company: '', from: '', to: '', includeMissing: false };
 
@@ -710,15 +812,21 @@
 
                 if (href === '#reports-phvl-pane') {
                     activeReportTab = 'phvl';
+                    setReportsExportVisible(true);
                 } else if (href === '#reports-insurance-pane') {
                     activeReportTab = 'insurance';
+                    setReportsExportVisible(true);
                     initAllInsuranceDataTables();
                     const table = initInsuranceDataTable(activeInsuranceSubTab);
                     if (table) {
                         table.columns.adjust().responsive.recalc();
                     }
+                } else if (href === '#reports-ticket-pane') {
+                    activeReportTab = 'ticket';
+                    setReportsExportVisible(false);
                 } else {
                     activeReportTab = 'mots';
+                    setReportsExportVisible(true);
                 }
 
                 closeAllFilterPanels();
@@ -956,6 +1064,10 @@
             }
 
             function runActiveTabExport(exportFn) {
+                if (activeReportTab === 'ticket') {
+                    return;
+                }
+
                 if (activeReportTab === 'insurance') {
                     const table = initInsuranceDataTable(activeInsuranceSubTab);
                     if (!table) {

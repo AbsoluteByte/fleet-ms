@@ -162,6 +162,7 @@ trait SetupAgreementChangeCarDatabase
             $table->date('termination_available_from_date')->nullable();
             $table->text('termination_notes')->nullable();
             $table->unsignedBigInteger('termination_recorded_by')->nullable();
+            $table->dateTime('closing_date')->nullable();
             $table->unsignedBigInteger('createdBy')->nullable();
             $table->unsignedBigInteger('updatedBy')->nullable();
             $table->timestamps();
