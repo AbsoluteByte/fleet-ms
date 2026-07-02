@@ -5,6 +5,9 @@
         .header-navbar-shadow {
             height: 80px !important;
         }
+        .btn-group > form .btn {
+            border-radius: 0 !important;
+        }
     </style>
 @endpush
 

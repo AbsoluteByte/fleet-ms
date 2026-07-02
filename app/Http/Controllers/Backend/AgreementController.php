@@ -16,9 +16,9 @@ use App\Models\Tenant;
 use App\Services\AgreementInvoiceService;
 use App\Services\AgreementUpgradeService;
 use App\Services\AgreementClientDocumentsService;
+use App\Services\AgreementPdfService;
 use App\Services\CarFleetComplianceService;
 use App\Services\PaymentAllocationService;
-use App\Services\PermissionLetterService;
 // Add this
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -1483,41 +1483,7 @@ class AgreementController extends Controller
      */
     private function makePermissionLetterPdf(Agreement $agreement): array
     {
-        $agreement->load([
-            'company', 'driver', 'car', 'car.company', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
-        ]);
-
-        $activeCarInsurance = $agreement->car?->currentActiveInsurance();
-
-        $policyNumber = $agreement->using_own_insurance
-            ? $agreement->own_insurance_policy_number
-            : optional($activeCarInsurance?->insuranceProvider)->policy_number;
-
-        $insuranceExpiryDate = $agreement->using_own_insurance
-            ? $agreement->own_insurance_end_date
-            : $activeCarInsurance?->expiry_date;
-
-        $documentCompany = $agreement->documentCompany();
-
-        $letterMeta = app(PermissionLetterService::class)->resolveLetterMeta($documentCompany);
-
-        $data = [
-            'agreement' => $agreement,
-            'company' => $documentCompany,
-            'driver' => $agreement->driver,
-            'car' => $agreement->car,
-            'policyNumber' => $policyNumber,
-            'letterDate' => $agreement->start_date->format('d.m.Y'),
-            'contractEndingDate' => $insuranceExpiryDate?->format('d.m.Y') ?? '—',
-            'letterMeta' => $letterMeta,
-        ];
-
-        $pdf = PDF::loadView($this->dir.'.permission_letter_pdf', $data);
-        $pdf->setPaper('A4', 'portrait');
-
-        $filename = 'Permission_Letter_'.$agreement->id.'_'.str_replace(' ', '_', $agreement->driver->full_name).'.pdf';
-
-        return [$pdf, $filename];
+        return app(AgreementPdfService::class)->makePermissionLetterPdf($agreement);
     }
 
     /**
@@ -1525,14 +1491,7 @@ class AgreementController extends Controller
      */
     private function makeAgreementPdf(Agreement $agreement): array
     {
-        $data = $this->agreementPdfViewData($agreement);
-
-        $pdf = PDF::loadView($this->dir.'.agreement_pdf', $data);
-        $pdf->setPaper('A4', 'portrait');
-
-        $filename = 'Agreement_'.$agreement->id.'_'.str_replace(' ', '_', $agreement->driver->full_name).'.pdf';
-
-        return [$pdf, $filename];
+        return app(AgreementPdfService::class)->makeAgreementPdf($agreement);
     }
 
     /**
@@ -1540,26 +1499,7 @@ class AgreementController extends Controller
      */
     private function agreementPdfViewData(Agreement $agreement): array
     {
-        $agreement->load([
-            'company',
-            'driver',
-            'car',
-            'car.company',
-            'car.carModel',
-            'status',
-            'insuranceProvider',
-            'parentAgreement.car',
-            'upgradedFromAgreement.car',
-        ]);
-
-        return [
-            'agreement' => $agreement,
-            'driver' => $agreement->driver,
-            'car' => $agreement->car,
-            'company' => $agreement->documentCompany(),
-            'currentDate' => Carbon::now()->format('d/m/Y'),
-            'previousVehicleRegistration' => $agreement->previousVehicleRegistration(),
-        ];
+        return app(AgreementPdfService::class)->agreementPdfViewData($agreement);
     }
 
     /**

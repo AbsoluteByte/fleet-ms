@@ -40,6 +40,7 @@ class PaymentController extends Controller
 
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
+            ->with(['agreements' => fn ($query) => $query->currentlyActive()->with('car')])
             ->withCount(['invoices', 'payments'])
             ->orderBy('first_name')
             ->orderBy('last_name')
@@ -103,6 +104,7 @@ class PaymentController extends Controller
 
             if ($selectedDriver) {
                 $openInvoices = $selectedDriver->activeInvoices()
+                    ->with(['sourceAgreement.car'])
                     ->orderBy('invoice_date')
                     ->orderBy('due_date')
                     ->get();

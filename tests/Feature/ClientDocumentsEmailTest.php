@@ -170,7 +170,7 @@ class ClientDocumentsEmailTest extends TestCase
         File::deleteDirectory(public_path('uploads/cars/insurance_documents'));
         File::deleteDirectory(public_path('uploads/cars'));
         File::deleteDirectory(public_path('uploads/insurance_documents'));
-        File::deleteDirectory(public_path('uploads/agreements/temp'));
+        File::deleteDirectory(storage_path('app/temp/agreement_client_docs'));
 
         parent::tearDown();
     }
@@ -184,6 +184,10 @@ class ClientDocumentsEmailTest extends TestCase
         $this->assertContains('Company insurance document', $payload['attachedLabels']);
         $this->assertContains('Private Hire Driver license', $payload['attachedLabels']);
         $this->assertContains('Private Hire Driver card', $payload['attachedLabels']);
+        $this->assertContains('Agreement PDF', $payload['attachedLabels']);
+        $this->assertContains('Permission letter', $payload['attachedLabels']);
+        $this->assertNotContains('Agreement PDF', $payload['missingDocuments']);
+        $this->assertNotContains('Permission letter', $payload['missingDocuments']);
     }
 
     public function test_collects_client_insurance_documents_when_client_insurance_selected(): void

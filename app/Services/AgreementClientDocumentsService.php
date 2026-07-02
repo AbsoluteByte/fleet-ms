@@ -3,8 +3,6 @@
 namespace App\Services;
 
 use App\Models\Agreement;
-use Illuminate\Support\Facades\File;
-use PDF;
 
 class AgreementClientDocumentsService
 {
@@ -178,77 +176,37 @@ class AgreementClientDocumentsService
         array &$missingDocuments,
         array &$generatedTempFiles
     ): void {
-        $directory = public_path('uploads/agreements/temp');
-        if (! file_exists($directory)) {
-            File::makeDirectory($directory, 0755, true, true);
-        }
+        $pdfService = app(AgreementPdfService::class);
 
-        $agreementPdfPath = $directory.'/agreement_'.$agreement->id.'_client_docs_'.uniqid().'.pdf';
-        $permissionPdfPath = $directory.'/permission_letter_'.$agreement->id.'_client_docs_'.uniqid().'.pdf';
+        [$agreementPdf, $agreementFilename] = $pdfService->makeAgreementPdf($agreement);
+        $agreementPdfPath = $pdfService->writePdfToTempPath($agreementPdf, 'agreement', $agreement->id);
+        $generatedTempFiles[] = $agreementPdfPath;
+        $this->pushGeneratedAttachment($attachments, $attachedLabels, 'Agreement PDF', $agreementPdfPath, $agreementFilename);
 
-        try {
-            $agreementData = [
-                'agreement' => $agreement,
-                'driver' => $agreement->driver,
-                'car' => $agreement->car,
-                'company' => $agreement->documentCompany(),
-                'currentDate' => now()->format('d/m/Y'),
-                'previousVehicleRegistration' => $agreement->previousVehicleRegistration(),
-            ];
-            $agreementPdf = PDF::loadView('backend.agreements.agreement_pdf', $agreementData);
-            $agreementPdf->setPaper('A4', 'portrait');
-            $agreementPdf->save($agreementPdfPath);
+        [$permissionPdf, $permissionFilename] = $pdfService->makePermissionLetterPdf($agreement);
+        $permissionPdfPath = $pdfService->writePdfToTempPath($permissionPdf, 'permission_letter', $agreement->id);
+        $generatedTempFiles[] = $permissionPdfPath;
+        $this->pushGeneratedAttachment($attachments, $attachedLabels, 'Permission letter', $permissionPdfPath, $permissionFilename);
+    }
 
-            $generatedTempFiles[] = $agreementPdfPath;
-            $this->pushFileIfExists(
-                $attachments,
-                $attachedLabels,
-                $missingDocuments,
-                'Agreement PDF',
-                $agreementPdfPath,
-                'Agreement_'.$agreement->id.'.pdf'
-            );
-        } catch (\Throwable) {
-            $missingDocuments[] = 'Agreement PDF';
-        }
-
-        try {
-            $activeCarInsurance = $agreement->car?->currentActiveInsurance();
-            $policyNumber = $agreement->using_own_insurance
-                ? $agreement->own_insurance_policy_number
-                : optional($activeCarInsurance?->insuranceProvider)->policy_number;
-            $insuranceExpiryDate = $agreement->using_own_insurance
-                ? $agreement->own_insurance_end_date
-                : $activeCarInsurance?->expiry_date;
-            $documentCompany = $agreement->documentCompany();
-            $letterMeta = app(PermissionLetterService::class)->resolveLetterMeta($documentCompany);
-
-            $permissionData = [
-                'agreement' => $agreement,
-                'company' => $documentCompany,
-                'driver' => $agreement->driver,
-                'car' => $agreement->car,
-                'policyNumber' => $policyNumber,
-                'letterDate' => $agreement->start_date->format('d.m.Y'),
-                'contractEndingDate' => $insuranceExpiryDate?->format('d.m.Y') ?? '—',
-                'letterMeta' => $letterMeta,
-            ];
-            $permissionPdf = PDF::loadView('backend.agreements.permission_letter_pdf', $permissionData);
-            $permissionPdf->setPaper('A4', 'portrait');
-            $permissionPdf->save($permissionPdfPath);
-
-            $generatedTempFiles[] = $permissionPdfPath;
-            $this->pushFileIfExists(
-                $attachments,
-                $attachedLabels,
-                $missingDocuments,
-                'Permission letter',
-                $permissionPdfPath,
-                'Permission_Letter_'.$agreement->id.'.pdf'
-            );
-        } catch (\Throwable) {
-            $missingDocuments[] = 'Permission letter';
-        }
+    /**
+     * @param  list<array{path: string, as: string, label: string, mime: string}>  $attachments
+     * @param  list<string>  $attachedLabels
+     */
+    private function pushGeneratedAttachment(
+        array &$attachments,
+        array &$attachedLabels,
+        string $label,
+        string $fullPath,
+        string $filename
+    ): void {
+        $attachments[] = [
+            'path' => $fullPath,
+            'as' => $filename,
+            'label' => $label,
+            'mime' => 'application/pdf',
+        ];
+        $attachedLabels[] = $label;
     }
 
     /**

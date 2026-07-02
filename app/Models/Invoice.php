@@ -61,6 +61,22 @@ class Invoice extends Model
         return $this->hasMany(PaymentAllocation::class);
     }
 
+    public function sourceAgreement()
+    {
+        return $this->belongsTo(Agreement::class, 'source_id');
+    }
+
+    public function vehicleRegistrationLabel(): string
+    {
+        if (! in_array($this->invoice_type, ['agreement', 'agreement_deposit'], true) || ! $this->source_id) {
+            return '—';
+        }
+
+        $registration = $this->sourceAgreement?->car?->registration;
+
+        return is_string($registration) && $registration !== '' ? $registration : '—';
+    }
+
     public function markAsPaid($amountPaid = null)
     {
         $payment = $amountPaid ?? $this->balance_amount;

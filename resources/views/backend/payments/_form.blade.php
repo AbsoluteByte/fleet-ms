@@ -116,6 +116,7 @@
                         <thead>
                         <tr>
                             <th>Invoice No</th>
+                            <th>Vehicle</th>
                             <th>Invoice Date</th>
                             <th>Due Date</th>
                             <th>Balance</th>
@@ -127,6 +128,7 @@
                         @foreach($openInvoices as $invoice)
                             <tr data-invoice-balance="{{ $invoice->balance_amount }}">
                                 <td>{{ $invoice->invoice_no }}</td>
+                                <td>{{ $invoice->vehicleRegistrationLabel() }}</td>
                                 <td>{{ optional($invoice->invoice_date)->format('d M Y') }}</td>
                                 <td>{{ optional($invoice->due_date)->format('d M Y') }}</td>
                                 <td>£{{ number_format($invoice->balance_amount, 2) }}</td>

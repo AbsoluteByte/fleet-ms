@@ -18,7 +18,7 @@
                                     <thead>
                                     <tr>
                                         <th>Driver</th>
-                                        <th>Email</th>
+                                        <th>Vehicle</th>
                                         <th>Phone</th>
                                         <th>Invoices</th>
                                         <th>Payments</th>
@@ -33,7 +33,16 @@
                                             <td>
                                                 <strong>{{ $driver->selectOptionLabel() ?: 'N/A' }}</strong>
                                             </td>
-                                            <td>{{ $driver->email ?? 'N/A' }}</td>
+                                            <td>
+                                                @php
+                                                    $registrations = $driver->agreements
+                                                        ->pluck('car.registration')
+                                                        ->filter()
+                                                        ->unique()
+                                                        ->values();
+                                                @endphp
+                                                {{ $registrations->isNotEmpty() ? $registrations->implode(', ') : '—' }}
+                                            </td>
                                             <td>{{ $driver->phone_number ?? 'N/A' }}</td>
                                             <td>{{ $driver->invoices_count }}</td>
                                             <td>{{ $driver->payments_count }}</td>
