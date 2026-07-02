@@ -138,7 +138,7 @@
                 </div>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="mb-3">
                     <label for="start_date" class="form-label">Start Date &amp; Time *</label>
                     <input type="datetime-local" name="start_date" id="start_date"
@@ -150,7 +150,7 @@
                 </div>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="mb-3">
                     <label for="end_date" class="form-label">End Date *</label>
                     <input type="date" name="end_date" id="end_date"
@@ -158,6 +158,33 @@
                            value="{{ old('end_date') ?? (isset($model) ? $model->end_date?->format('Y-m-d') : '') }}" required>
                     @error('end_date')
                     <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="mutual_detail_slip_document" class="form-label">Mutual Detail Slip <span class="text-muted font-weight-normal">(multiple files)</span></label>
+                    <input type="file" name="mutual_detail_slip_document[]" id="mutual_detail_slip_document"
+                           class="form-control @error('mutual_detail_slip_document') is-invalid @enderror"
+                           accept=".pdf,.jpg,.jpeg,.png"
+                           multiple>
+                    @if(isset($model) && $model->id && $model->mutualDetailSlipFileNames() !== [])
+                        @foreach($model->mutualDetailSlipFileNames() as $slipName)
+                            <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}:
+                                <x-document-actions
+                                    :view-url="asset('uploads/agreement_documents/' . $slipName)"
+                                    style="list-item"
+                                />
+                            </small>
+                        @endforeach
+                    @endif
+                    <div class="form-text">Accepted formats: PDF, JPG, JPEG, PNG (Max: 5MB per file)</div>
+                    @error('mutual_detail_slip_document')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    @error('mutual_detail_slip_document.*')
+                    <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
                 </div>
             </div>
@@ -761,6 +788,7 @@
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
         </div>
+
     </div>
 </div>
 

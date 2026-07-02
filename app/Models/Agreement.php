@@ -24,7 +24,7 @@ class Agreement extends Model
         'using_own_insurance', 'insurance_provider_id',
         'own_insurance_provider_name', 'own_insurance_start_date',
         'own_insurance_end_date', 'own_insurance_type',
-        'own_insurance_policy_number', 'own_insurance_proof_document', 'createdBy', 'updatedBy',
+        'own_insurance_policy_number', 'own_insurance_proof_document', 'mutual_detail_slip_document', 'createdBy', 'updatedBy',
 
         'hellosign_request_id',
         'hellosign_sign_url',
@@ -52,6 +52,7 @@ class Agreement extends Model
 
         'using_own_insurance' => 'boolean',
         'own_insurance_proof_document' => 'array',
+        'mutual_detail_slip_document' => 'array',
         'own_insurance_start_date' => 'date',
         'own_insurance_end_date' => 'date',
 
@@ -281,6 +282,23 @@ class Agreement extends Model
     public function ownInsuranceProofFileNames(): array
     {
         $names = $this->own_insurance_proof_document;
+
+        if (is_string($names) && $names !== '') {
+            return [$names];
+        }
+
+        return array_values(array_filter(
+            is_array($names) ? $names : [],
+            fn ($n) => is_string($n) && $n !== ''
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function mutualDetailSlipFileNames(): array
+    {
+        $names = $this->mutual_detail_slip_document;
 
         if (is_string($names) && $names !== '') {
             return [$names];

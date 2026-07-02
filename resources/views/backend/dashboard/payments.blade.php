@@ -226,6 +226,17 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.7; }
         }
+        .card .card-header {
+            position: static !important;
+            z-index: auto !important;
+            width: auto !important;
+        }
+        .card .card-content {
+            margin-top: 0 !important;
+        }
+        .navbar-floating .header-navbar-shadow {
+            height: 85px !important;
+        }
     </style>
 @endsection
 

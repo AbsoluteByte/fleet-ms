@@ -173,6 +173,7 @@ class DashboardController extends Controller
         $tenant = Auth::user()->currentTenant();
         $fleetNotificationExcludedStatuses = ['written_off', 'stolen', 'sold'];
         $nonRoadTaxNotificationExcludedStatuses = array_merge($fleetNotificationExcludedStatuses, ['for_sale']);
+        $complianceNotificationExcludedStatuses = Car::fleetStatusesExcludedFromComplianceNotifications();
 
         if (! $tenant) {
             return [
@@ -422,9 +423,9 @@ class DashboardController extends Controller
 
         // ==================== 5. PHV LICENSES (latest PHV per car only) ====================
         $phvRows = CarPhv::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
+            ->whereHas('car', function ($query) use ($tenant, $complianceNotificationExcludedStatuses) {
                 $query->where('tenant_id', $tenant->id)
-                    ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
+                    ->whereNotIn('fleet_status', $complianceNotificationExcludedStatuses);
             })
             ->get();
         $expiringPhvs = $this->latestPhvPerCar($phvRows)
@@ -474,9 +475,9 @@ class DashboardController extends Controller
 
         // ==================== 6. MOT CERTIFICATES (latest MOT per car only) ====================
         $motRows = CarMot::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
+            ->whereHas('car', function ($query) use ($tenant, $complianceNotificationExcludedStatuses) {
                 $query->where('tenant_id', $tenant->id)
-                    ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
+                    ->whereNotIn('fleet_status', $complianceNotificationExcludedStatuses);
             })
             ->get();
         $expiringMots = $this->latestMotPerCar($motRows)
@@ -524,10 +525,10 @@ class DashboardController extends Controller
 
         // ==================== 7. ROAD TAX — latest period per car (exclude SORN: vehicle off the road) ====================
         $allRoadTaxes = CarRoadTax::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant, $fleetNotificationExcludedStatuses) {
+            ->whereHas('car', function ($query) use ($tenant, $complianceNotificationExcludedStatuses) {
                 $query->where('tenant_id', $tenant->id)
                     ->where('sorn_applied', false)
-                    ->whereNotIn('fleet_status', $fleetNotificationExcludedStatuses);
+                    ->whereNotIn('fleet_status', $complianceNotificationExcludedStatuses);
             })
             ->get();
 
@@ -576,7 +577,7 @@ class DashboardController extends Controller
             ]);
         }
 
-        $carsMissingRoadTax = $this->carsMissingRoadTax($tenant, $allRoadTaxes, $fleetNotificationExcludedStatuses);
+        $carsMissingRoadTax = $this->carsMissingRoadTax($tenant, $allRoadTaxes, $complianceNotificationExcludedStatuses);
 
         foreach ($carsMissingRoadTax as $car) {
             $notifications->push([
@@ -1005,7 +1006,7 @@ class DashboardController extends Controller
 
     /**
      * Cars that need a road tax record (none on file, or latest period cannot be calculated).
-     * Same eligibility as expiring road tax: tenant fleet, not SORN, not written off/stolen/sold.
+     * Same eligibility as expiring road tax: tenant fleet, not SORN, not damaged/stolen/for sale/written off/sold.
      */
     private function carsMissingRoadTax($tenant, Collection $allRoadTaxes, array $fleetNotificationExcludedStatuses): Collection
     {

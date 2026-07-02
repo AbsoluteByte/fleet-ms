@@ -480,6 +480,17 @@
         .card-header .badge-pill {
             font-size: 0.85rem;
         }
+        .card .card-header {
+            position: static !important;
+            z-index: auto !important;
+            width: auto !important;
+        }
+        .card .card-content {
+            margin-top: 0 !important;
+        }
+        .navbar-floating .header-navbar-shadow {
+            height: 85px !important;
+        }
     </style>
 @endsection
 

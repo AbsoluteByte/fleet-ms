@@ -157,6 +157,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
         ->name('agreements.resend-esign');
     Route::get('agreements/{agreement}/view-signed', [App\Http\Controllers\Backend\AgreementController::class, 'viewSignedDocument'])
         ->name('agreements.view-signed');
+    Route::post('agreements/{agreement}/send-client-documents', [App\Http\Controllers\Backend\AgreementController::class, 'sendClientDocumentsEmail'])
+        ->name('agreements.send-client-documents');
+    Route::get('agreements/{agreement}/preview-client-documents-email', [App\Http\Controllers\Backend\AgreementController::class, 'previewClientDocumentsEmail'])
+        ->name('agreements.preview-client-documents-email');
 
     // Settings
     Route::get('payments/drivers/{driver}', [App\Http\Controllers\Backend\PaymentController::class, 'driver'])->name('payments.driver');

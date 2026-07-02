@@ -259,6 +259,22 @@ class Car extends Model
         ];
     }
 
+    /**
+     * Fleet statuses that should not generate MOT, road tax, or PHV expiry notifications.
+     *
+     * @return list<string>
+     */
+    public static function fleetStatusesExcludedFromComplianceNotifications(): array
+    {
+        return [
+            'damaged',
+            self::FLEET_STATUS_STOLEN,
+            'for_sale',
+            self::FLEET_STATUS_WRITTEN_OFF,
+            self::FLEET_STATUS_SOLD,
+        ];
+    }
+
     public function isExcludedFromPhvlManagement(): bool
     {
         return in_array($this->fleet_status, self::fleetStatusesExcludedFromPhvlManagement(), true);

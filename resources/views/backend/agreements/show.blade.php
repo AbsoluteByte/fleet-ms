@@ -9,8 +9,8 @@
 @endpush
 
 @section('content')
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2">
+    <div class="justify-content-between align-items-center mb-4">
+        <h1 class="h2 mb-2">
             <i class="fa fa-handshake me-2"></i>
             Agreement Details
         </h1>
@@ -27,6 +27,19 @@
                 <i class="fa fa-file-text-o me-2"></i>
                 Permission Letter
             </a>
+            <form action="{{ route('agreements.send-client-documents', $agreement) }}" method="POST" class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Send client documents to {{ $agreement->driver->email ?? 'driver email' }}?')">
+                    <i class="fa fa-envelope me-2"></i>
+                    Send Client Documents
+                </button>
+            </form>
+            @if(config('app.dev_mode'))
+                <a href="{{ route('agreements.preview-client-documents-email', $agreement) }}" class="btn btn-outline-secondary" target="_blank" rel="noopener noreferrer">
+                    <i class="fa fa-eye me-2"></i>
+                    Preview Client Documents Email
+                </a>
+            @endif
             @if($canUpgradeCar)
                 <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#changeCarModal">
                     <i class="fa fa-exchange me-2"></i>
@@ -216,6 +229,7 @@
                     @php
                         $activeCarInsurance = $agreement->car?->currentActiveInsurance();
                         $ownInsuranceProofFiles = $agreement->ownInsuranceProofFileNames();
+                        $mutualDetailSlipFiles = $agreement->mutualDetailSlipFileNames();
                     @endphp
                     <div class="mt-3 pt-3 border-top">
                         <h6>Insurance Details</h6>
@@ -307,6 +321,25 @@
                                 </table>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="mt-3 pt-3 border-top">
+                        <h6>Mutual Detail Slip</h6>
+                        @if($mutualDetailSlipFiles !== [])
+                            <ul class="mb-0 ps-3">
+                                @foreach($mutualDetailSlipFiles as $slipName)
+                                    <li>
+                                        <x-document-actions
+                                            :view-url="asset('uploads/agreement_documents/' . $slipName)"
+                                            style="list-item"
+                                            :view-text="'View file ' . $loop->iteration"
+                                        />
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @else
+                            <p class="mb-0 text-muted">No mutual detail slip uploaded.</p>
+                        @endif
                     </div>
 
                     @if($agreement->termination_notice_date && $agreement->termination_notes)

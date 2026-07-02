@@ -2411,7 +2411,7 @@ body[data-col='1-column'] .header-navbar.floating-nav {
   background-color : transparent;
   position: fixed;
   width: calc(100% - calc(2.2rem * 2) - 260px);
-  z-index: 999;
+  z-index: 11;
   background: #fff;
   padding-bottom: 20px;
   border-bottom: 1px solid rgba(34, 41, 47, 0.1);

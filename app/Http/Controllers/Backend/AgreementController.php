@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Mail\AgreementClientDocumentsMail;
 use App\Models\Agreement;
 use App\Models\BankAccount;
 use App\Models\Car;
@@ -14,6 +15,7 @@ use App\Models\Status;
 use App\Models\Tenant;
 use App\Services\AgreementInvoiceService;
 use App\Services\AgreementUpgradeService;
+use App\Services\AgreementClientDocumentsService;
 use App\Services\CarFleetComplianceService;
 use App\Services\PaymentAllocationService;
 use App\Services\PermissionLetterService;
@@ -23,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -141,6 +144,7 @@ class AgreementController extends Controller
 
             $agreement = DB::transaction(function () use ($validated, $request, $tenant, $agreementPaymentData, $isReplacementVehicle, $reservationId) {
                 $validated = $this->mergeInsuranceData($request, $validated);
+                $validated = $this->mergeMutualDetailSlipData($request, $validated);
 
                 // Create agreement record
                 $validated['tenant_id'] = $tenant->id;
@@ -362,6 +366,7 @@ class AgreementController extends Controller
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
 
                 $validated = $this->mergeInsuranceData($request, $validated, $agreement);
+                $validated = $this->mergeMutualDetailSlipData($request, $validated, $agreement);
 
                 // Update agreement record
                 $validated['tenant_id'] = $tenant->id;
@@ -436,6 +441,9 @@ class AgreementController extends Controller
             DB::transaction(function () use ($agreement) {
                 foreach ($agreement->ownInsuranceProofFileNames() as $name) {
                     $this->deleteInsuranceProofFile($name);
+                }
+                foreach ($agreement->mutualDetailSlipFileNames() as $name) {
+                    $this->deleteMutualDetailSlipFile($name);
                 }
 
                 // Delete related collections first
@@ -549,6 +557,8 @@ class AgreementController extends Controller
             'own_insurance_policy_number' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_proof_document' => 'nullable|array',
             'own_insurance_proof_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'mutual_detail_slip_document' => 'nullable|array',
+            'mutual_detail_slip_document.*' => 'file|mimes:pdf,jpg,jpeg,png|max:5120',
             'termination_notice_date' => 'nullable|date',
             'termination_available_from_date' => 'nullable|date',
             'termination_notes' => 'nullable|string',
@@ -996,6 +1006,19 @@ class AgreementController extends Controller
         return $validated;
     }
 
+    private function mergeMutualDetailSlipData(Request $request, array $validated, ?Agreement $existing = null): array
+    {
+        $names = $existing?->mutualDetailSlipFileNames() ?? [];
+
+        foreach ($this->collectMutualDetailSlipUploads($request) as $file) {
+            $names[] = $this->uploadMutualDetailSlipFile($file);
+        }
+
+        $validated['mutual_detail_slip_document'] = $names === [] ? null : array_values(array_unique($names));
+
+        return $validated;
+    }
+
     /**
      * @param  array<string, mixed>  $validated
      */
@@ -1195,9 +1218,53 @@ class AgreementController extends Controller
         return $filename;
     }
 
+    /**
+     * @return list<\Illuminate\Http\UploadedFile>
+     */
+    private function collectMutualDetailSlipUploads(Request $request): array
+    {
+        if (! $request->hasFile('mutual_detail_slip_document')) {
+            return [];
+        }
+
+        $files = $request->file('mutual_detail_slip_document');
+
+        return collect(is_array($files) ? $files : [$files])
+            ->filter(fn ($file) => $file && $file->isValid())
+            ->values()
+            ->all();
+    }
+
+    private function uploadMutualDetailSlipFile($file): string
+    {
+        $directory = 'uploads/agreement_documents';
+        $path = public_path($directory);
+
+        if (! file_exists($path)) {
+            mkdir($path, 0755, true);
+        }
+
+        $filename = time().'_'.$file->getClientOriginalName();
+
+        if (! $file->move($path, $filename)) {
+            throw new \Exception('Failed to upload mutual detail slip document');
+        }
+
+        return $filename;
+    }
+
     private function deleteInsuranceProofFile(string $filename): void
     {
         $filePath = public_path('uploads/insurance_documents/'.$filename);
+
+        if (File::exists($filePath)) {
+            File::delete($filePath);
+        }
+    }
+
+    private function deleteMutualDetailSlipFile(string $filename): void
+    {
+        $filePath = public_path('uploads/agreement_documents/'.$filename);
 
         if (File::exists($filePath)) {
             File::delete($filePath);
@@ -1308,6 +1375,106 @@ class AgreementController extends Controller
             return $pdf->stream($filename);
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to generate permission letter: '.$e->getMessage());
+        }
+    }
+
+    public function sendClientDocumentsEmail(Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        $agreement->loadMissing(['driver', 'car', 'company', 'car.company']);
+
+        if (! $agreement->driver?->email) {
+            return redirect()->back()->with('error', 'Driver email is missing. Cannot send client documents.');
+        }
+
+        $service = app(AgreementClientDocumentsService::class);
+        $generatedTempFiles = [];
+
+        try {
+            $payload = $service->collectForAgreement($agreement);
+            $generatedTempFiles = $payload['generatedTempFiles'];
+
+            Mail::to($agreement->driver->email)->send(new AgreementClientDocumentsMail(
+                $agreement,
+                $payload['attachments'],
+                $payload['attachedLabels'],
+                $payload['missingDocuments']
+            ));
+
+            $sentCount = count($payload['attachments']);
+            $missingCount = count($payload['missingDocuments']);
+
+            $message = "Client documents email sent to {$agreement->driver->email}. Attached: {$sentCount}.";
+            if ($missingCount > 0) {
+                $message .= " Missing listed in email: {$missingCount}.";
+            }
+
+            return redirect()->back()->with('success', $message);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Failed to send client documents email: '.$e->getMessage());
+        } finally {
+            foreach ($generatedTempFiles as $tempPath) {
+                if (is_string($tempPath) && file_exists($tempPath)) {
+                    @unlink($tempPath);
+                }
+            }
+        }
+    }
+
+    public function previewClientDocumentsEmail(Agreement $agreement)
+    {
+        if (! config('app.dev_mode')) {
+            abort(404);
+        }
+
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        $agreement->loadMissing(['driver', 'car', 'company', 'car.company']);
+
+        $service = app(AgreementClientDocumentsService::class);
+        $generatedTempFiles = [];
+
+        try {
+            $payload = $service->collectForAgreement($agreement);
+            $generatedTempFiles = $payload['generatedTempFiles'];
+
+            $mailable = new AgreementClientDocumentsMail(
+                $agreement,
+                $payload['attachments'],
+                $payload['attachedLabels'],
+                $payload['missingDocuments']
+            );
+
+            $company = $agreement->documentCompany();
+            $carReg = $agreement->car?->registration ?: 'Vehicle';
+            $subject = "Documents for {$carReg} - Agreement #{$agreement->id}";
+
+            return view('backend.agreements.client-documents-email-preview', [
+                'agreement' => $agreement,
+                'recipient' => $agreement->driver?->email,
+                'subject' => $subject,
+                'attachments' => $payload['attachments'],
+                'attachedLabels' => $payload['attachedLabels'],
+                'missingDocuments' => $payload['missingDocuments'],
+                'emailHtml' => $mailable->render(),
+            ]);
+        } catch (\Throwable $e) {
+            abort(500, 'Failed to preview client documents email: '.$e->getMessage());
+        } finally {
+            foreach ($generatedTempFiles as $tempPath) {
+                if (is_string($tempPath) && file_exists($tempPath)) {
+                    @unlink($tempPath);
+                }
+            }
         }
     }
 
