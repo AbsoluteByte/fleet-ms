@@ -824,23 +824,17 @@ class CarController extends Controller
     private function sortCarHistoryRelations(Car $car): void
     {
         $mots = $car->mots
-            ->sortByDesc(function ($m) {
-                return optional($m->expiry_date)->timestamp ?? 0;
-            })
+            ->sortByDesc(fn ($m) => [optional($m->expiry_date)->timestamp ?? 0, $m->id])
             ->values();
         $car->setRelation('mots', $mots);
 
         $roadTaxes = $car->roadTaxes
-            ->sortByDesc(function ($r) {
-                return optional($r->start_date)->timestamp ?? 0;
-            })
+            ->sortByDesc(fn ($r) => [optional($r->start_date)->timestamp ?? 0, $r->id])
             ->values();
         $car->setRelation('roadTaxes', $roadTaxes);
 
         $phvs = $car->phvs
-            ->sortByDesc(function ($p) {
-                return optional($p->expiry_date)->timestamp ?? 0;
-            })
+            ->sortByDesc(fn ($p) => [optional($p->expiry_date)->timestamp ?? 0, $p->id])
             ->values();
         $car->setRelation('phvs', $phvs);
 
@@ -1232,6 +1226,10 @@ class CarController extends Controller
 
                 $existingMot = ! empty($motData['id']) ? $existingMots->get($motData['id']) : null;
 
+                if ($existingMot && ! $this->isEditableMotRow($existingMot, $car)) {
+                    continue;
+                }
+
                 $hasDocument = $request->hasFile("mots.{$index}.document")
                     || ($existingMot && $existingMot->document);
 
@@ -1239,7 +1237,7 @@ class CarController extends Controller
                     $errors["mots.{$index}.document"] = 'MOT document is required when MOT details are provided.';
                 }
 
-                if ($this->motRowRequiresCompleteDetails($existingMot, $car) && empty($motData['test_date'])) {
+                if ($this->isEditableMotRow($existingMot, $car) && empty($motData['test_date'])) {
                     $errors["mots.{$index}.test_date"] = 'Test date is required when MOT details are provided.';
                 }
             }
@@ -1252,6 +1250,11 @@ class CarController extends Controller
                 }
 
                 $existingPhv = ! empty($phvData['id']) ? $existingPhvs->get($phvData['id']) : null;
+
+                if ($existingPhv && ! $this->isEditablePhvRow($existingPhv, $car)) {
+                    continue;
+                }
+
                 $hasDocument = $request->hasFile("phvs.{$index}.document")
                     || ($existingPhv && $existingPhv->document);
 
@@ -1272,7 +1275,7 @@ class CarController extends Controller
             || $request->hasFile("mots.{$index}.document");
     }
 
-    private function motRowRequiresCompleteDetails(?CarMot $existingMot, ?Car $car): bool
+    private function isEditableMotRow(?CarMot $existingMot, ?Car $car): bool
     {
         if (! $existingMot) {
             return true;
@@ -1281,6 +1284,17 @@ class CarController extends Controller
         $latestMotId = $car?->latestMot()?->id;
 
         return $latestMotId && (int) $existingMot->id === (int) $latestMotId;
+    }
+
+    private function isEditablePhvRow(?CarPhv $existingPhv, ?Car $car): bool
+    {
+        if (! $existingPhv) {
+            return true;
+        }
+
+        $latestPhvId = $car?->latestPhv()?->id;
+
+        return $latestPhvId && (int) $existingPhv->id === (int) $latestPhvId;
     }
 
     private function historyRowHasValues(array $row, array $keys): bool

@@ -130,9 +130,20 @@
                                             <td>£{{ number_format($payment->amount, 2) }}</td>
                                             <td>£{{ number_format($payment->allocated_amount, 2) }}</td>
                                             <td>£{{ number_format($payment->unallocated_amount, 2) }}</td>
-                                            <td>{{ $payment->notes ?: '-' }}</td>
                                             <td>
-                                                <a href="{{ route('payments.show', $payment) }}" class="btn btn-sm btn-outline-info">
+                                                <span class="payment-notes-text">{{ $payment->notes ?: '—' }}</span>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-secondary ml-50 edit-payment-notes-btn"
+                                                        title="{{ $payment->notes ? 'Edit notes' : 'Add notes' }}"
+                                                        data-payment-no="{{ $payment->payment_no }}"
+                                                        data-notes="{{ e($payment->notes ?? '') }}"
+                                                        data-update-url="{{ route('payments.notes.update', $payment) }}"
+                                                        data-redirect-to="{{ route('payments.driver', $driver).'#payments' }}">
+                                                    <i class="fa fa-edit"></i>
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <a href="{{ route('payments.show', $payment) }}" class="btn btn-sm btn-outline-info" title="View payment">
                                                     <i class="fa fa-eye"></i>
                                                 </a>
                                             </td>
@@ -151,6 +162,8 @@
             </div>
         </div>
     </div>
+
+    @include('backend.payments.partials.notes-modal')
 @endsection
 
 @section('css')
@@ -194,6 +207,24 @@
 
             activateTabFromHash();
             window.addEventListener('hashchange', activateTabFromHash);
+
+            document.querySelectorAll('.edit-payment-notes-btn').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var form = document.getElementById('paymentNotesForm');
+                    var notesInput = document.getElementById('paymentNotesInput');
+                    var subtitle = document.getElementById('paymentNotesModalSubtitle');
+                    var redirectInput = document.getElementById('paymentNotesRedirectTo');
+
+                    form.action = button.getAttribute('data-update-url');
+                    redirectInput.value = button.getAttribute('data-redirect-to') || '';
+                    notesInput.value = button.getAttribute('data-notes') || '';
+                    subtitle.textContent = button.getAttribute('data-payment-no') || 'Payment';
+
+                    if (window.jQuery) {
+                        window.jQuery('#paymentNotesModal').modal('show');
+                    }
+                });
+            });
         });
     </script>
 @endsection

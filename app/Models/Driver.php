@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\DriverPersistenceService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
@@ -255,5 +256,18 @@ class Driver extends Model
         return $this->collections()
             ->where('payment_status', 'overdue')
             ->with(['agreement.car']);
+    }
+
+    public function isProfileCompleteForAgreement(): bool
+    {
+        return app(DriverPersistenceService::class)->isProfileCompleteForAgreement($this);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function missingProfileFieldLabels(): array
+    {
+        return app(DriverPersistenceService::class)->missingProfileFieldLabels($this);
     }
 }

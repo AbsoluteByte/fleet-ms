@@ -6,6 +6,22 @@
 
     var FV = global.FleetiqFormValidation;
 
+    function getDriverSection(form) {
+        return form ? form.querySelector('#reservation-driver-section') : null;
+    }
+
+    function isCompleteLinkedDriverMode(form) {
+        var section = getDriverSection(form);
+
+        return !!(section && section.getAttribute('data-complete-linked-driver') === '1');
+    }
+
+    function isDriverProfileComplete(form) {
+        var section = getDriverSection(form);
+
+        return !section || section.getAttribute('data-driver-complete') === '1';
+    }
+
     function validateReservationForm(form, errors, options) {
         errors = errors || [];
         options = options || {};
@@ -27,17 +43,40 @@
             }
         });
 
-        var driverModeEl = form.querySelector('input[name="driver_mode"]:checked');
-        var driverMode = driverModeEl ? driverModeEl.value : 'new';
+        var amountPaidEl = FV.findField(form, 'amount_paid');
+        var amountPaid = amountPaidEl ? FV.parseNumber(FV.fieldValue(amountPaidEl)) : null;
+        if (amountPaid !== null && amountPaid > 0) {
+            FV.requiredField(errors, form, 'payment_method', 'Payment method');
 
-        if (driverMode === 'existing') {
-            FV.requiredField(errors, form, 'driver_id', 'Driver');
-        } else if (typeof global.validateDriverForm === 'function') {
-            var driverOptions = { embedded: true };
-            if (options.minimalNewDriver) {
-                driverOptions.minimal = true;
+            var paymentMethodEl = FV.findField(form, 'payment_method');
+            var paymentMethod = paymentMethodEl ? FV.trim(FV.fieldValue(paymentMethodEl)) : '';
+
+            if (paymentMethod === 'Bank Transfer') {
+                var bankAccountSelect = form.querySelector('[data-bank-account-select]');
+                var bankAccountsConfigured = bankAccountSelect && !bankAccountSelect.disabled;
+
+                if (bankAccountsConfigured) {
+                    FV.requiredField(errors, form, 'bank_account_id', 'Bank account');
+                }
             }
-            global.validateDriverForm(form, errors, driverOptions);
+        }
+
+        if (isCompleteLinkedDriverMode(form) && typeof global.validateDriverForm === 'function') {
+            global.validateDriverForm(form, errors, { embedded: true });
+        } else {
+            var driverModeEl = form.querySelector('input[name="driver_mode"]:checked')
+                || form.querySelector('input[name="driver_mode"][type="hidden"]');
+            var driverMode = driverModeEl ? driverModeEl.value : 'new';
+
+            if (driverMode === 'existing') {
+                FV.requiredField(errors, form, 'driver_id', 'Driver');
+            } else if (typeof global.validateDriverForm === 'function') {
+                var driverOptions = { embedded: true };
+                if (options.minimalNewDriver) {
+                    driverOptions.minimal = true;
+                }
+                global.validateDriverForm(form, errors, driverOptions);
+            }
         }
 
         return errors.length === 0;
@@ -46,11 +85,29 @@
     function validateReservationForAgreement(form, errors) {
         errors = errors || [];
 
+        if (!isDriverProfileComplete(form)) {
+            if (isCompleteLinkedDriverMode(form) && typeof global.validateDriverForm === 'function') {
+                global.validateDriverForm(form, errors, { embedded: true });
+                if (errors.length > 0) {
+                    return false;
+                }
+            }
+
+            errors.push({
+                field: null,
+                label: 'Driver',
+                message: 'Complete and save the driver profile on this page before creating an agreement.'
+            });
+
+            return false;
+        }
+
         if (!validateReservationForm(form, errors)) {
             return false;
         }
 
-        var driverModeEl = form.querySelector('input[name="driver_mode"]:checked');
+        var driverModeEl = form.querySelector('input[name="driver_mode"]:checked')
+            || form.querySelector('input[name="driver_mode"][type="hidden"]');
         var driverMode = driverModeEl ? driverModeEl.value : 'existing';
 
         if (driverMode === 'new') {

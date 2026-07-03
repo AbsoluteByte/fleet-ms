@@ -365,13 +365,88 @@
 
 @php
     $isCarEdit = isset($model) && $model->id;
-    if (is_array($oldMots = old('mots'))) {
-        $motsForMain = collect($oldMots)->values();
-        if ($motsForMain->isEmpty()) {
-            $motsForMain = collect([[]]);
+
+    $carHistoryRowId = static function ($row): ?int {
+        if (is_array($row)) {
+            return isset($row['id']) && $row['id'] !== '' && $row['id'] !== null ? (int) $row['id'] : null;
         }
-        $motsOlder = collect();
-        $useMotsSplit = false;
+
+        return isset($row->id) ? (int) $row->id : null;
+    };
+
+    $carHistoryRowDate = static function ($row, string $key, string $format = 'Y-m-d'): string {
+        if (is_array($row)) {
+            $value = $row[$key] ?? null;
+        } else {
+            $value = $row->{$key} ?? null;
+        }
+
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return $value instanceof \Carbon\CarbonInterface
+            ? $value->format($format)
+            : \Carbon\Carbon::parse($value)->format($format);
+    };
+
+    $carHistoryRowValue = static function ($row, string $key, $default = '') {
+        if (is_array($row)) {
+            return $row[$key] ?? $default;
+        }
+
+        return $row->{$key} ?? $default;
+    };
+
+    $partitionCarHistoryOldInput = static function (array $rows, string $dateKey) use ($carHistoryRowId): array {
+        $collection = collect($rows)->values();
+        $withId = $collection->filter(fn ($row) => $carHistoryRowId($row) !== null);
+        $withoutId = $collection->filter(fn ($row) => $carHistoryRowId($row) === null);
+        $sortedExisting = $withId
+            ->sortByDesc(function ($row) use ($dateKey, $carHistoryRowId) {
+                $date = is_array($row) ? ($row[$dateKey] ?? null) : ($row->{$dateKey} ?? null);
+                $timestamp = $date ? \Carbon\Carbon::parse($date)->timestamp : 0;
+
+                return [$timestamp, $carHistoryRowId($row) ?? 0];
+            })
+            ->values();
+        $main = $sortedExisting->take(1)->concat($withoutId)->values();
+        $older = $sortedExisting->slice(1)->values();
+
+        return [$main, $older, $older->isNotEmpty()];
+    };
+
+    $resolveHistoryRowForModal = static function ($row, string $relation) use ($isCarEdit, $model, $carHistoryRowId) {
+        if (! $isCarEdit || ! isset($model)) {
+            return $row;
+        }
+
+        $id = $carHistoryRowId($row);
+        if ($id) {
+            $found = $model->{$relation}->firstWhere('id', $id);
+            if ($found) {
+                return $found;
+            }
+        }
+
+        return $row;
+    };
+
+    if (is_array($oldMots = old('mots'))) {
+        if ($isCarEdit) {
+            [$motsForMain, $motsOlder, $useMotsSplit] = $partitionCarHistoryOldInput($oldMots, 'expiry_date');
+            if ($motsForMain->isEmpty()) {
+                $motsForMain = collect([[]]);
+                $useMotsSplit = false;
+            }
+        } else {
+            $motsForMain = collect($oldMots)->values();
+            if ($motsForMain->isEmpty()) {
+                $motsForMain = collect([[]]);
+            }
+            $motsOlder = collect();
+            $useMotsSplit = false;
+        }
     } elseif ($isCarEdit && $model->mots->isNotEmpty()) {
         $motsForMain = $model->mots->take(1);
         $motsOlder = $model->mots->slice(1)->values();
@@ -381,6 +456,7 @@
         $motsOlder = collect();
         $useMotsSplit = false;
     }
+    $motsOlderForModal = $motsOlder->map(fn ($row) => $resolveHistoryRowForModal($row, 'mots'));
     $showMotViewAll = $isCarEdit && $useMotsSplit && $motsOlder->isNotEmpty();
     $motMainCount = $motsForMain->count();
     $motHiddenStartIndex = $motMainCount;
@@ -410,9 +486,10 @@
             <div class="card-body">
                 <div id="mots-container">
                     @foreach($motsForMain as $index => $mot)
+                        @php $motId = $carHistoryRowId($mot); @endphp
                         <div class="mot-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
-                            @if(isset($mot->id))
-                                <input type="hidden" name="mots[{{ $index }}][id]" value="{{ $mot->id }}">
+                            @if($motId)
+                                <input type="hidden" name="mots[{{ $index }}][id]" value="{{ $motId }}">
                             @endif
 
                             <div class="col-md-2">
@@ -477,10 +554,10 @@
                                            class="form-control @error('mots.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
                                     @if((is_object($mot) && $mot->document) || (isset($mot['document']) && $mot['document']))
-                                        @if(isset($model) && $model->id && is_object($mot) && isset($mot->id))
+                                        @if(isset($model) && $model->id && $motId)
                                             <x-car-document-actions
-                                                :view-url="route('cars.mots.download', [$model, $mot->id])"
-                                                :remove-url="route('cars.mots.document.destroy', [$model, $mot->id])"
+                                                :view-url="route('cars.mots.download', [$model, $motId])"
+                                                :remove-url="route('cars.mots.document.destroy', [$model, $motId])"
                                                 label="MOT document"
                                             />
                                         @else
@@ -502,9 +579,9 @@
                                 <div class="form-group">
                                     <label>&nbsp;</label>
                                     <div>
-                                        @if(isset($model) && $model->id && is_object($mot) && isset($mot->id))
+                                        @if(isset($model) && $model->id && $motId)
                                             <x-car-record-delete-button
-                                                :delete-url="route('cars.mots.destroy', [$model, $mot->id])"
+                                                :delete-url="route('cars.mots.destroy', [$model, $motId])"
                                                 label="MOT record"
                                             />
                                         @elseif($motsForMain->count() > 1 || $index > 0)
@@ -522,12 +599,13 @@
                     @if($isCarEdit && $useMotsSplit && $motsOlder->isNotEmpty())
                         @php $hMot = $motHiddenStartIndex; @endphp
                         @foreach($motsOlder as $motP)
-                            <div class="mot-preserved" data-record-id="{{ $motP->id }}">
-                                <input type="hidden" name="mots[{{ $hMot }}][id]" value="{{ $motP->id }}">
-                                <input type="hidden" name="mots[{{ $hMot }}][test_date]" value="{{ $motP->test_date ? $motP->test_date->format('Y-m-d') : '' }}">
-                                <input type="hidden" name="mots[{{ $hMot }}][expiry_date]" value="{{ $motP->expiry_date->format('Y-m-d') }}">
-                                <input type="hidden" name="mots[{{ $hMot }}][amount]" value="{{ $motP->amount }}">
-                                <input type="hidden" name="mots[{{ $hMot }}][term]" value="{{ e($motP->term) }}">
+                            @php $motPId = $carHistoryRowId($motP); @endphp
+                            <div class="mot-preserved" data-record-id="{{ $motPId }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][id]" value="{{ $motPId }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][test_date]" value="{{ $carHistoryRowDate($motP, 'test_date') }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][expiry_date]" value="{{ $carHistoryRowDate($motP, 'expiry_date') }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][amount]" value="{{ $carHistoryRowValue($motP, 'amount') }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][term]" value="{{ e($carHistoryRowValue($motP, 'term')) }}">
                             </div>
                             @php $hMot++; @endphp
                         @endforeach
@@ -562,22 +640,23 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach($motsOlder as $motH)
-                            <tr data-hist-mot-id="{{ $motH->id }}">
-                                <td>{{ $motH->test_date ? $motH->test_date->format('d M, Y') : '—' }}</td>
-                                <td>{{ $motH->expiry_date->format('d M, Y') }}</td>
-                                <td>£{{ number_format($motH->amount, 2) }}</td>
-                                <td>{{ $motH->term }}</td>
+                            @foreach($motsOlderForModal as $motH)
+                            @php $motHId = $carHistoryRowId($motH); @endphp
+                            <tr data-hist-mot-id="{{ $motHId }}">
+                                <td>{{ $carHistoryRowDate($motH, 'test_date', 'd M, Y') ?: '—' }}</td>
+                                <td>{{ $carHistoryRowDate($motH, 'expiry_date', 'd M, Y') ?: '—' }}</td>
+                                <td>£{{ number_format((float) $carHistoryRowValue($motH, 'amount', 0), 2) }}</td>
+                                <td>{{ $carHistoryRowValue($motH, 'term') }}</td>
                                 <td>
-                                    @if($motH->document)
+                                    @if(is_object($motH) && $motH->document && $motHId)
                                         <x-document-actions
-                                            :view-url="route('cars.mots.download', [$model, $motH->id])"
+                                            :view-url="route('cars.mots.download', [$model, $motHId])"
                                             style="buttons"
                                             view-text="View"
                                         />
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-danger ml-50 car-doc-remove-btn"
-                                                data-remove-url="{{ route('cars.mots.document.destroy', [$model, $motH->id]) }}"
+                                                data-remove-url="{{ route('cars.mots.document.destroy', [$model, $motHId]) }}"
                                                 data-doc-label="MOT document"
                                                 title="Remove document only">
                                             <i class="fa fa-times"></i>
@@ -587,10 +666,12 @@
                                     @endif
                                 </td>
                                 <td class="text-right">
+                                    @if($motHId)
                                     <x-car-record-delete-button
-                                        :delete-url="route('cars.mots.destroy', [$model, $motH->id])"
+                                        :delete-url="route('cars.mots.destroy', [$model, $motHId])"
                                         label="MOT record"
                                     />
+                                    @endif
                                 </td>
                             </tr>
                             @endforeach
@@ -605,12 +686,20 @@
 
 @php
     if (is_array($oldRts = old('road_taxes'))) {
-        $roadTaxesForMain = collect($oldRts)->values();
-        if ($roadTaxesForMain->isEmpty()) {
-            $roadTaxesForMain = collect([[]]);
+        if ($isCarEdit) {
+            [$roadTaxesForMain, $roadTaxesOlder, $useRoadTaxSplit] = $partitionCarHistoryOldInput($oldRts, 'start_date');
+            if ($roadTaxesForMain->isEmpty()) {
+                $roadTaxesForMain = collect([[]]);
+                $useRoadTaxSplit = false;
+            }
+        } else {
+            $roadTaxesForMain = collect($oldRts)->values();
+            if ($roadTaxesForMain->isEmpty()) {
+                $roadTaxesForMain = collect([[]]);
+            }
+            $roadTaxesOlder = collect();
+            $useRoadTaxSplit = false;
         }
-        $roadTaxesOlder = collect();
-        $useRoadTaxSplit = false;
     } elseif ($isCarEdit && $model->roadTaxes->isNotEmpty()) {
         $roadTaxesForMain = $model->roadTaxes->take(1);
         $roadTaxesOlder = $model->roadTaxes->slice(1)->values();
@@ -620,6 +709,7 @@
         $roadTaxesOlder = collect();
         $useRoadTaxSplit = false;
     }
+    $roadTaxesOlderForModal = $roadTaxesOlder->map(fn ($row) => $resolveHistoryRowForModal($row, 'roadTaxes'));
     $showRoadTaxViewAll = $isCarEdit && $useRoadTaxSplit && $roadTaxesOlder->isNotEmpty();
     $hasRoadTaxHistory = $showRoadTaxViewAll;
     $hasSornHistory = $isCarEdit && isset($model) && $model->sornHistories->isNotEmpty();
@@ -669,9 +759,10 @@
                 <div id="roadtax-container" @if($isCarEdit && $model->sorn_applied) class="d-none" @endif>
                     @if(!($isCarEdit && $model->sorn_applied))
                     @foreach($roadTaxesForMain as $index => $roadTax)
+                        @php $roadTaxId = $carHistoryRowId($roadTax); @endphp
                         <div class="roadtax-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
-                            @if(is_object($roadTax) && isset($roadTax->id))
-                                <input type="hidden" name="road_taxes[{{ $index }}][id]" value="{{ $roadTax->id }}">
+                            @if($roadTaxId)
+                                <input type="hidden" name="road_taxes[{{ $index }}][id]" value="{{ $roadTaxId }}">
                             @endif
                             <div class="col-md-4">
                                 <div class="form-group">
@@ -725,9 +816,9 @@
                                 <div class="form-group">
                                     <label>&nbsp;</label>
                                     <div>
-                                        @if(isset($model) && $model->id && is_object($roadTax) && isset($roadTax->id))
+                                        @if(isset($model) && $model->id && $roadTaxId)
                                             <x-car-record-delete-button
-                                                :delete-url="route('cars.road-taxes.destroy', [$model, $roadTax->id])"
+                                                :delete-url="route('cars.road-taxes.destroy', [$model, $roadTaxId])"
                                                 label="Road tax record"
                                             />
                                         @elseif($roadTaxesForMain->count() > 1 || $index > 0)
@@ -746,10 +837,10 @@
                     @if($isCarEdit && $useRoadTaxSplit && $roadTaxesOlder->isNotEmpty())
                         @php $hRt = $rtHiddenStartIndex; @endphp
                         @foreach($roadTaxesOlder as $rtP)
-                            <div class="roadtax-preserved" data-record-id="{{ $rtP->id }}">
-                                <input type="hidden" name="road_taxes[{{ $hRt }}][start_date]" value="{{ $rtP->start_date->format('Y-m-d') }}">
-                                <input type="hidden" name="road_taxes[{{ $hRt }}][term]" value="{{ e($rtP->term) }}">
-                                <input type="hidden" name="road_taxes[{{ $hRt }}][amount]" value="{{ $rtP->amount }}">
+                            <div class="roadtax-preserved" data-record-id="{{ $carHistoryRowId($rtP) }}">
+                                <input type="hidden" name="road_taxes[{{ $hRt }}][start_date]" value="{{ $carHistoryRowDate($rtP, 'start_date') }}">
+                                <input type="hidden" name="road_taxes[{{ $hRt }}][term]" value="{{ e($carHistoryRowValue($rtP, 'term')) }}">
+                                <input type="hidden" name="road_taxes[{{ $hRt }}][amount]" value="{{ $carHistoryRowValue($rtP, 'amount') }}">
                             </div>
                             @php $hRt++; @endphp
                         @endforeach
@@ -1083,12 +1174,20 @@
 
 @php
     if (is_array($oldPhvs = old('phvs'))) {
-        $phvsForMain = collect($oldPhvs)->values();
-        if ($phvsForMain->isEmpty()) {
-            $phvsForMain = collect([[]]);
+        if ($isCarEdit) {
+            [$phvsForMain, $phvsOlder, $usePhvSplit] = $partitionCarHistoryOldInput($oldPhvs, 'expiry_date');
+            if ($phvsForMain->isEmpty()) {
+                $phvsForMain = collect([[]]);
+                $usePhvSplit = false;
+            }
+        } else {
+            $phvsForMain = collect($oldPhvs)->values();
+            if ($phvsForMain->isEmpty()) {
+                $phvsForMain = collect([[]]);
+            }
+            $phvsOlder = collect();
+            $usePhvSplit = false;
         }
-        $phvsOlder = collect();
-        $usePhvSplit = false;
     } elseif ($isCarEdit && $model->phvs->isNotEmpty()) {
         $phvsForMain = $model->phvs->take(1);
         $phvsOlder = $model->phvs->slice(1)->values();
@@ -1098,6 +1197,7 @@
         $phvsOlder = collect();
         $usePhvSplit = false;
     }
+    $phvsOlderForModal = $phvsOlder->map(fn ($row) => $resolveHistoryRowForModal($row, 'phvs'));
     $showPhvViewAll = $isCarEdit && $usePhvSplit && $phvsOlder->isNotEmpty();
     $phvMainCount = $phvsForMain->count();
     $phvHiddenStartIndex = $phvMainCount;
@@ -1126,9 +1226,10 @@
             <div class="card-body">
                 <div id="phv-container">
                     @foreach($phvsForMain as $index => $phv)
+                        @php $phvId = $carHistoryRowId($phv); @endphp
                         <div class="phv-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
-                            @if(isset($phv->id))
-                                <input type="hidden" name="phvs[{{ $index }}][id]" value="{{ $phv->id }}">
+                            @if($phvId)
+                                <input type="hidden" name="phvs[{{ $index }}][id]" value="{{ $phvId }}">
                             @endif
 
                             <div class="col-md-2">
@@ -1214,10 +1315,10 @@
                                            class="form-control @error('phvs.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
                                     @if((is_object($phv) && $phv->document) || (isset($phv['document']) && $phv['document']))
-                                        @if(isset($model) && $model->id && is_object($phv) && isset($phv->id))
+                                        @if(isset($model) && $model->id && $phvId)
                                             <x-car-document-actions
-                                                :view-url="route('cars.phvs.download', [$model, $phv->id])"
-                                                :remove-url="route('cars.phvs.document.destroy', [$model, $phv->id])"
+                                                :view-url="route('cars.phvs.download', [$model, $phvId])"
+                                                :remove-url="route('cars.phvs.document.destroy', [$model, $phvId])"
                                                 label="PHV document"
                                             />
                                         @else
@@ -1239,9 +1340,9 @@
                                 <div class="form-group">
                                     <label>&nbsp;</label>
                                     <div>
-                                        @if(isset($model) && $model->id && is_object($phv) && isset($phv->id))
+                                        @if(isset($model) && $model->id && $phvId)
                                             <x-car-record-delete-button
-                                                :delete-url="route('cars.phvs.destroy', [$model, $phv->id])"
+                                                :delete-url="route('cars.phvs.destroy', [$model, $phvId])"
                                                 label="PHV record"
                                             />
                                         @elseif($phvsForMain->count() > 1 || $index > 0)
@@ -1259,15 +1360,16 @@
                     @if($isCarEdit && $usePhvSplit && $phvsOlder->isNotEmpty())
                         @php $hPhv = $phvHiddenStartIndex; @endphp
                         @foreach($phvsOlder as $phvP)
-                            <div class="phv-preserved" data-record-id="{{ $phvP->id }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][id]" value="{{ $phvP->id }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][counsel_id]" value="{{ $phvP->counsel_id }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][amount]" value="{{ $phvP->amount }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][start_date]" value="{{ $phvP->start_date->format('Y-m-d') }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][expiry_date]" value="{{ $phvP->expiry_date->format('Y-m-d') }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][notify_before_expiry]" value="{{ $phvP->notify_before_expiry }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][phv_applied]" value="{{ $phvP->phv_applied ? 1 : 0 }}">
-                                <input type="hidden" name="phvs[{{ $hPhv }}][phv_applied_date]" value="{{ $phvP->phv_applied_date ? $phvP->phv_applied_date->format('Y-m-d') : '' }}">
+                            @php $phvPId = $carHistoryRowId($phvP); @endphp
+                            <div class="phv-preserved" data-record-id="{{ $phvPId }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][id]" value="{{ $phvPId }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][counsel_id]" value="{{ $carHistoryRowValue($phvP, 'counsel_id') }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][amount]" value="{{ $carHistoryRowValue($phvP, 'amount') }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][start_date]" value="{{ $carHistoryRowDate($phvP, 'start_date') }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][expiry_date]" value="{{ $carHistoryRowDate($phvP, 'expiry_date') }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][notify_before_expiry]" value="{{ $carHistoryRowValue($phvP, 'notify_before_expiry') }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][phv_applied]" value="{{ $carHistoryRowValue($phvP, 'phv_applied') ? 1 : 0 }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][phv_applied_date]" value="{{ $carHistoryRowDate($phvP, 'phv_applied_date') }}">
                             </div>
                             @php $hPhv++; @endphp
                         @endforeach
@@ -1304,28 +1406,29 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach($phvsOlder as $phvH)
-                            <tr data-hist-phv-id="{{ $phvH->id }}">
-                                <td>{{ $phvH->counsel->name ?? 'N/A' }}</td>
-                                <td>{{ $phvH->start_date->format('d M, Y') }}</td>
-                                <td>{{ $phvH->expiry_date->format('d M, Y') }}</td>
-                                <td>£{{ number_format($phvH->amount, 2) }}</td>
-                                <td>{{ $phvH->notify_before_expiry }} days</td>
+                            @foreach($phvsOlderForModal as $phvH)
+                            @php $phvHId = $carHistoryRowId($phvH); @endphp
+                            <tr data-hist-phv-id="{{ $phvHId }}">
+                                <td>{{ is_object($phvH) ? ($phvH->counsel->name ?? 'N/A') : 'N/A' }}</td>
+                                <td>{{ $carHistoryRowDate($phvH, 'start_date', 'd M, Y') ?: '—' }}</td>
+                                <td>{{ $carHistoryRowDate($phvH, 'expiry_date', 'd M, Y') ?: '—' }}</td>
+                                <td>£{{ number_format((float) $carHistoryRowValue($phvH, 'amount', 0), 2) }}</td>
+                                <td>{{ $carHistoryRowValue($phvH, 'notify_before_expiry') }} days</td>
                                 <td>
-                                    {{ $phvH->phv_applied ? 'Yes' : 'No' }}
-                                    @if($phvH->phv_applied_date)
-                                        <br><small>{{ $phvH->phv_applied_date->format('d M, Y') }}</small>
+                                    {{ $carHistoryRowValue($phvH, 'phv_applied') ? 'Yes' : 'No' }}
+                                    @if($carHistoryRowDate($phvH, 'phv_applied_date', 'd M, Y'))
+                                        <br><small>{{ $carHistoryRowDate($phvH, 'phv_applied_date', 'd M, Y') }}</small>
                                     @endif
                                 </td>
                                 <td>
-                                    @if($phvH->document)
+                                    @if(is_object($phvH) && $phvH->document && $phvHId)
                                         <x-document-actions
-                                            :view-url="route('cars.phvs.download', [$model, $phvH->id])"
+                                            :view-url="route('cars.phvs.download', [$model, $phvHId])"
                                             style="buttons"
                                         />
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-danger ml-50 car-doc-remove-btn"
-                                                data-remove-url="{{ route('cars.phvs.document.destroy', [$model, $phvH->id]) }}"
+                                                data-remove-url="{{ route('cars.phvs.document.destroy', [$model, $phvHId]) }}"
                                                 data-doc-label="PHV document"
                                                 title="Remove document only">
                                             <i class="fa fa-times"></i>
@@ -1335,10 +1438,12 @@
                                     @endif
                                 </td>
                                 <td class="text-right">
+                                    @if($phvHId)
                                     <x-car-record-delete-button
-                                        :delete-url="route('cars.phvs.destroy', [$model, $phvH->id])"
+                                        :delete-url="route('cars.phvs.destroy', [$model, $phvHId])"
                                         label="PHV record"
                                     />
+                                    @endif
                                 </td>
                             </tr>
                             @endforeach

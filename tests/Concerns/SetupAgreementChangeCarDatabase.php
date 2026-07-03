@@ -193,6 +193,7 @@ trait SetupAgreementChangeCarDatabase
             $table->string('payment_no')->unique();
             $table->foreignId('driver_id')->nullable();
             $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
             $table->date('payment_date')->nullable();
             $table->decimal('amount', 12, 2)->default(0);
             $table->text('notes')->nullable();

@@ -27,6 +27,8 @@ class CarReservation extends Model
         'agreed_rent',
         'agreed_advance',
         'amount_paid',
+        'payment_method',
+        'bank_account_id',
         'balance_payable_on_pickup',
         'created_by',
     ];
@@ -130,6 +132,11 @@ class CarReservation extends Model
     public function driver()
     {
         return $this->belongsTo(Driver::class);
+    }
+
+    public function bankAccount()
+    {
+        return $this->belongsTo(BankAccount::class);
     }
 
     public function clientName(): string

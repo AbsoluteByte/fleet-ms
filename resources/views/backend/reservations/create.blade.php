@@ -108,6 +108,9 @@
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                                 @enderror
                                             </div>
+                                            @include('backend.reservations._payment_fields', [
+                                                'bankAccounts' => $bankAccounts,
+                                            ])
                                             <div class="col-md-12 form-group">
                                                 <label for="balance_payable_on_pickup_display">Balance payable on pick up</label>
                                                 <input type="text" id="balance_payable_on_pickup_display" class="form-control"

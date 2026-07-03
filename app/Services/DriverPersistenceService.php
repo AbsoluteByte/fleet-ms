@@ -32,6 +32,53 @@ class DriverPersistenceService
     ];
 
     /**
+     * Scalar profile fields required before creating an agreement.
+     *
+     * @return array<string, string>
+     */
+    public static function requiredProfileFieldLabels(): array
+    {
+        return [
+            'first_name' => 'First Name',
+            'last_name' => 'Last Name',
+            'dob' => 'Date of Birth',
+            'email' => 'Email',
+            'phone_number' => 'Phone Number',
+            'address1' => 'Address Line 1',
+            'post_code' => 'Post Code',
+            'town' => 'Town',
+            'country_id' => 'Country',
+            'driver_license_number' => 'Driver License Number',
+            'driver_license_expiry_date' => 'Driver License Expiry Date',
+            'next_of_kin' => 'Next of Kin',
+            'next_of_kin_phone' => 'Next of Kin Phone',
+        ];
+    }
+
+    public function isProfileCompleteForAgreement(Driver $driver): bool
+    {
+        return $this->missingProfileFieldLabels($driver) === [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function missingProfileFieldLabels(Driver $driver): array
+    {
+        $missing = [];
+
+        foreach (self::requiredProfileFieldLabels() as $field => $label) {
+            $value = $driver->{$field};
+
+            if (! filled($value)) {
+                $missing[] = $label;
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
      * @return list<string>
      */
     public static function documentFields(): array

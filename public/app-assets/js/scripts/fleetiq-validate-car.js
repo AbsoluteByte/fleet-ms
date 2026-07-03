@@ -17,6 +17,42 @@
         return opt ? FV.trim(opt.text).toLowerCase() : '';
     }
 
+    function isHistoricalMotRow(form, index) {
+        if (form.querySelector('#mots-preserved input[name="mots[' + index + '][id]"]')) {
+            return true;
+        }
+
+        var latestMotId = form.getAttribute('data-latest-mot-id');
+        if (!latestMotId) {
+            return false;
+        }
+
+        var idInput = form.querySelector('input[name="mots[' + index + '][id]"]');
+        if (!idInput || FV.isEmpty(idInput.value)) {
+            return false;
+        }
+
+        return String(idInput.value) !== String(latestMotId);
+    }
+
+    function isHistoricalPhvRow(form, index) {
+        if (form.querySelector('#phv-preserved input[name="phvs[' + index + '][id]"]')) {
+            return true;
+        }
+
+        var latestPhvId = form.getAttribute('data-latest-phv-id');
+        if (!latestPhvId) {
+            return false;
+        }
+
+        var idInput = form.querySelector('input[name="phvs[' + index + '][id]"]');
+        if (!idInput || FV.isEmpty(idInput.value)) {
+            return false;
+        }
+
+        return String(idInput.value) !== String(latestPhvId);
+    }
+
     function motRowHasProvidedDetails(form, index, row) {
         if (FV.rowHasAnyValue(row, MOT_DETAIL_KEYS)) {
             return true;
@@ -39,6 +75,36 @@
             return false;
         }
         return !!rowContainer.querySelector('.car-doc-remove-btn, a.document-view-link, [data-has-document="1"]');
+    }
+
+    function validateInsuranceTransitions(form, errors) {
+        var hasInsurance = form.querySelector('#has_insurance');
+        if (!hasInsurance || !hasInsurance.checked) {
+            return;
+        }
+
+        var statusSel = FV.findField(form, 'insurance_status_id');
+        var statusName = insuranceStatusName(form);
+        var currentStatus = (form.getAttribute('data-current-insurance-status') || '').toLowerCase();
+        var hasDocOnFile = form.getAttribute('data-has-insurance-document') === '1';
+
+        if (currentStatus === 'active' && statusName === 'applied') {
+            FV.addError(errors, statusSel, 'Insurance status', 'Applied status is not allowed when current insurance status is Active.');
+        }
+
+        if ((statusName === 'cancelled' || statusName === 'canceled') && currentStatus !== 'active') {
+            FV.addError(errors, statusSel, 'Insurance status', 'Canceled status is only allowed when current insurance status is Active.');
+        }
+
+        if (statusName === 'cancelled' || statusName === 'canceled') {
+            var insDoc = FV.findField(form, 'insurance_document');
+            var hasInsDoc = (insDoc && insDoc.files && insDoc.files.length)
+                || (insDoc && insDoc.closest('.form-group') && insDoc.closest('.form-group').querySelector('.car-doc-remove-btn'))
+                || hasDocOnFile;
+            if (!hasInsDoc) {
+                FV.addError(errors, insDoc, 'Insurance document', 'Insurance document is required before insurance cancelation.');
+            }
+        }
     }
 
     function validateCarForm(form, errors) {
@@ -91,7 +157,7 @@
 
         var motRows = FV.getIndexedRows(form, 'mots');
         Object.keys(motRows).forEach(function (index) {
-            if (form.querySelector('#mots-preserved input[name="mots[' + index + '][id]"]')) {
+            if (isHistoricalMotRow(form, index)) {
                 return;
             }
             var row = motRows[index];
@@ -118,7 +184,7 @@
 
         var phvRows = FV.getIndexedRows(form, 'phvs');
         Object.keys(phvRows).forEach(function (index) {
-            if (form.querySelector('#phv-preserved input[name="phvs[' + index + '][id]"]')) {
+            if (isHistoricalPhvRow(form, index)) {
                 return;
             }
             var row = phvRows[index];
@@ -149,17 +215,13 @@
                 FV.requiredField(errors, form, 'insurance_applied_date', 'Insurance date applied');
             } else if (statusName === 'cancelled' || statusName === 'canceled') {
                 FV.requiredField(errors, form, 'insurance_canceled_date', 'Insurance canceled date');
-                var insDoc = FV.findField(form, 'insurance_document');
-                var hasInsDoc = (insDoc && insDoc.files && insDoc.files.length)
-                    || (insDoc && insDoc.closest('.form-group') && insDoc.closest('.form-group').querySelector('.car-doc-remove-btn'));
-                if (!hasInsDoc) {
-                    FV.addError(errors, insDoc, 'Insurance document', 'Insurance document is required for cancelled insurance status.');
-                }
             } else if (statusName === 'active') {
                 FV.requiredField(errors, form, 'insurance_start_date', 'Insurance start date');
                 FV.requiredField(errors, form, 'insurance_expiry_date', 'Insurance expiry date');
                 FV.requiredField(errors, form, 'insurance_notify_before_expiry', 'Notify before expiry');
             }
+
+            validateInsuranceTransitions(form, errors);
 
             var insDocInput = FV.findField(form, 'insurance_document');
             if (insDocInput) {

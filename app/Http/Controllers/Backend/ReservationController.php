@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agreement;
+use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\Driver;
@@ -57,11 +59,7 @@ class ReservationController extends Controller
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        $cars = Car::query()
-            ->forCurrentTenant()
-            ->with(['company', 'carModel'])
-            ->orderBy('registration')
-            ->get();
+        $cars = Car::forAgreementFormSelection($tenant->id);
 
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
@@ -73,8 +71,9 @@ class ReservationController extends Controller
         $driver = null;
         $selectedDriverId = null;
         $driverMode = old('driver_mode', 'existing');
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view('backend.reservations.create', compact('cars', 'drivers', 'driver', 'selectedDriverId', 'driverMode'));
+        return view('backend.reservations.create', compact('cars', 'drivers', 'driver', 'selectedDriverId', 'driverMode', 'bankAccounts'));
     }
 
     public function edit(CarReservation $reservation)
@@ -88,11 +87,7 @@ class ReservationController extends Controller
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        $cars = Car::query()
-            ->forCurrentTenant()
-            ->with(['company', 'carModel'])
-            ->orderBy('registration')
-            ->get();
+        $cars = Car::forAgreementFormSelection($tenant->id, $reservation->car_id);
 
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
@@ -114,8 +109,23 @@ class ReservationController extends Controller
         }
         $selectedDriverId = $reservation->driver_id;
         $driverMode = old('driver_mode', $reservation->driver_id ? 'existing' : 'new');
+        $driverProfileIncomplete = $reservation->driver_id
+            && $driver->exists
+            && ! $driver->isProfileCompleteForAgreement();
+        $missingDriverFields = $driverProfileIncomplete ? $driver->missingProfileFieldLabels() : [];
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view('backend.reservations.edit', compact('cars', 'drivers', 'reservation', 'driver', 'selectedDriverId', 'driverMode'));
+        return view('backend.reservations.edit', compact(
+            'cars',
+            'drivers',
+            'reservation',
+            'driver',
+            'selectedDriverId',
+            'driverMode',
+            'driverProfileIncomplete',
+            'missingDriverFields',
+            'bankAccounts'
+        ));
     }
 
     public function store(Request $request, DriverPersistenceService $driverPersistence)
@@ -137,7 +147,7 @@ class ReservationController extends Controller
         $carId = $validated['car_id'] ?? null;
         if ($carId !== null) {
             $car = Car::query()->forCurrentTenant()->whereKey($carId)->firstOrFail();
-            $this->assertCarAssignable($car, null);
+            $this->assertCarAssignable($car, null, $tenant->id);
         }
 
         $balance = $this->computeBalance(
@@ -163,6 +173,7 @@ class ReservationController extends Controller
                 'agreed_rent' => $validated['agreed_rent'],
                 'agreed_advance' => $validated['agreed_advance'],
                 'amount_paid' => $validated['amount_paid'],
+                ...$this->paymentAttributesFromValidated($validated),
                 'balance_payable_on_pickup' => $balance,
                 'status' => 'active',
                 'created_by' => Auth::id(),
@@ -189,16 +200,23 @@ class ReservationController extends Controller
 
         $reservation->load('driver');
 
+        $linkedDriver = $reservation->driver;
+        $completeLinkedDriver = $reservation->driver_id
+            && $linkedDriver
+            && ! $linkedDriver->isProfileCompleteForAgreement();
+
         $validated = $this->validatedReservationPayload(
             $request,
             $driverPersistence,
-            null
+            $completeLinkedDriver ? $linkedDriver : null,
+            false,
+            $completeLinkedDriver
         );
 
         $carId = $validated['car_id'] ?? null;
         if ($carId !== null) {
             $car = Car::query()->forCurrentTenant()->whereKey($carId)->firstOrFail();
-            $this->assertCarAssignable($car, $reservation->id);
+            $this->assertCarAssignable($car, $reservation->id, $tenant->id);
         }
 
         $balance = $this->computeBalance(
@@ -209,8 +227,15 @@ class ReservationController extends Controller
 
         $oldCarId = $reservation->car_id;
 
-        DB::transaction(function () use ($request, $reservation, $validated, $balance, $carId, $oldCarId, $tenant, $driverPersistence) {
-            $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence);
+        DB::transaction(function () use ($request, $reservation, $validated, $balance, $carId, $oldCarId, $tenant, $driverPersistence, $completeLinkedDriver, $linkedDriver) {
+            $driverId = $this->resolveDriverId(
+                $request,
+                $validated,
+                $tenant,
+                $driverPersistence,
+                false,
+                $completeLinkedDriver ? $linkedDriver : null
+            );
             $driverSnapshot = $this->driverSnapshot($driverId);
 
             $reservation->update([
@@ -225,6 +250,7 @@ class ReservationController extends Controller
                 'agreed_rent' => $validated['agreed_rent'],
                 'agreed_advance' => $validated['agreed_advance'],
                 'amount_paid' => $validated['amount_paid'],
+                ...$this->paymentAttributesFromValidated($validated),
                 'balance_payable_on_pickup' => $balance,
             ]);
 
@@ -263,7 +289,8 @@ class ReservationController extends Controller
         Request $request,
         DriverPersistenceService $driverPersistence,
         ?Driver $existingDriver = null,
-        bool $allowMinimalNewDriver = false
+        bool $allowMinimalNewDriver = false,
+        bool $completeLinkedDriver = false
     ): array {
         $tenant = Auth::user()->currentTenant();
 
@@ -282,9 +309,29 @@ class ReservationController extends Controller
             'agreed_rent' => 'required|numeric|min:0',
             'agreed_advance' => 'required|numeric|min:0',
             'amount_paid' => 'required|numeric|min:0',
+            'payment_method' => [
+                Rule::requiredIf(fn () => (float) $request->input('amount_paid', 0) > 0),
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'bank_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => $request->input('payment_method') === 'Bank Transfer'
+                    && (float) $request->input('amount_paid', 0) > 0),
+                Rule::exists('bank_accounts', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+            ],
         ];
 
-        if ($driverMode === 'existing') {
+        if ($completeLinkedDriver && $existingDriver) {
+            $rules['driver_mode'] = 'required|in:existing';
+            $rules['driver_id'] = [
+                'required',
+                Rule::exists('drivers', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+                Rule::in([$existingDriver->id]),
+            ];
+            $rules = array_merge($rules, $driverPersistence->validationRules($existingDriver));
+        } elseif ($driverMode === 'existing') {
             $rules['driver_id'] = [
                 'required',
                 Rule::exists('drivers', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
@@ -304,8 +351,21 @@ class ReservationController extends Controller
         array $validated,
         $tenant,
         DriverPersistenceService $driverPersistence,
-        bool $minimalNewDriver = false
+        bool $minimalNewDriver = false,
+        ?Driver $linkedDriverToUpdate = null
     ): int {
+        if ($linkedDriverToUpdate !== null) {
+            $driverAttributes = $driverPersistence->attributesFromValidated(
+                $request,
+                $validated,
+                $linkedDriverToUpdate,
+                false
+            );
+            $driverPersistence->updateFromValidatedAttributes($linkedDriverToUpdate, $driverAttributes, $tenant);
+
+            return $linkedDriverToUpdate->id;
+        }
+
         if (($validated['driver_mode'] ?? 'new') === 'existing') {
             return (int) $validated['driver_id'];
         }
@@ -360,7 +420,40 @@ class ReservationController extends Controller
         return number_format(max(0, round($balance, 2)), 2, '.', '');
     }
 
-    private function assertCarAssignable(Car $car, ?int $reservationBeingEditedId): void
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{payment_method: ?string, bank_account_id: ?int}
+     */
+    private function paymentAttributesFromValidated(array $validated): array
+    {
+        $amountPaid = (float) ($validated['amount_paid'] ?? 0);
+
+        if ($amountPaid <= 0) {
+            return [
+                'payment_method' => null,
+                'bank_account_id' => null,
+            ];
+        }
+
+        $paymentMethod = $validated['payment_method'] ?? null;
+
+        return [
+            'payment_method' => $paymentMethod,
+            'bank_account_id' => $paymentMethod === 'Bank Transfer'
+                ? ($validated['bank_account_id'] ?? null)
+                : null,
+        ];
+    }
+
+    private function bankAccountsForTenant(int $tenantId)
+    {
+        return BankAccount::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('bank_name')
+            ->get();
+    }
+
+    private function assertCarAssignable(Car $car, ?int $reservationBeingEditedId, int $tenantId): void
     {
         foreach (self::BLOCKED_FLEET_STATUSES as $blocked) {
             if ($car->fleet_status === $blocked) {
@@ -388,12 +481,21 @@ class ReservationController extends Controller
             ]);
         }
 
+        $keepingSameCar = $reservationBeingEditedId
+            && CarReservation::query()->find($reservationBeingEditedId)?->car_id === $car->id;
+
+        if (! $keepingSameCar) {
+            $rentedCarIds = Agreement::rentedCarIdsForTenant($tenantId);
+            if (! $car->isSelectableForAgreement($rentedCarIds)) {
+                throw ValidationException::withMessages([
+                    'car_id' => __('This vehicle is not available for reservation.'),
+                ]);
+            }
+        }
+
         if ($car->fleet_status !== 'reserved') {
             return;
         }
-
-        $keepingSameCar = $reservationBeingEditedId
-            && CarReservation::query()->find($reservationBeingEditedId)?->car_id === $car->id;
 
         if (! $keepingSameCar) {
             throw ValidationException::withMessages([

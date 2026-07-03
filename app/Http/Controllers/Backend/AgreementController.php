@@ -18,6 +18,7 @@ use App\Services\AgreementUpgradeService;
 use App\Services\AgreementClientDocumentsService;
 use App\Services\AgreementPdfService;
 use App\Services\CarFleetComplianceService;
+use App\Services\DriverPersistenceService;
 use App\Services\PaymentAllocationService;
 // Add this
 use Carbon\Carbon;
@@ -99,7 +100,21 @@ class AgreementController extends Controller
             $cars = $this->carsForAgreementForm($tenant, (int) ($model->car_id ?: 0) ?: null);
         }
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements', 'bankAccounts', 'reservationPrefill'));
+        $driverProfileIncomplete = false;
+        $missingDriverFields = [];
+        $selectedDriverId = (int) old('driver_id', $model->driver_id ?? 0);
+        if ($selectedDriverId > 0) {
+            $selectedDriver = Driver::query()
+                ->where('tenant_id', $tenant->id)
+                ->find($selectedDriverId);
+
+            if ($selectedDriver) {
+                $missingDriverFields = $selectedDriver->missingProfileFieldLabels();
+                $driverProfileIncomplete = $missingDriverFields !== [];
+            }
+        }
+
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements', 'bankAccounts', 'reservationPrefill', 'driverProfileIncomplete', 'missingDriverFields'));
     }
 
     public function store(Request $request)
@@ -111,6 +126,10 @@ class AgreementController extends Controller
                 ->with('error', 'No active company found!');
         }
         $validated = $this->validateAgreementRequest($request);
+        $driver = Driver::query()
+            ->where('tenant_id', $tenant->id)
+            ->findOrFail($validated['driver_id']);
+        $this->assertDriverProfileCompleteForAgreement($driver);
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $validated['status_id']);
         $this->assertEndDateOnOrAfterStartDate($validated);
         $this->assertBillingAnchorDate($validated, $isReplacementVehicle);
@@ -525,6 +544,8 @@ class AgreementController extends Controller
             'amount_paid' => $amountPaid,
             'add_payment' => $amountPaid > 0,
             'payment_date' => $pickUpDate,
+            'payment_method' => $reservation->payment_method,
+            'bank_account_id' => $reservation->bank_account_id,
         ];
     }
 
@@ -766,31 +787,7 @@ class AgreementController extends Controller
 
     private function carsForAgreementForm(Tenant $tenant, ?int $alwaysIncludeCarId = null, ?int $excludeAgreementId = null)
     {
-        $rentedCarIds = $this->rentedCarIdsForAgreementForm($tenant, $excludeAgreementId);
-
-        $cars = Car::where('tenant_id', $tenant->id)
-            ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status', 'insurances.insuranceProvider'])
-            ->get()
-            ->filter(function (Car $car) use ($rentedCarIds, $alwaysIncludeCarId) {
-                if ($alwaysIncludeCarId && (int) $car->id === (int) $alwaysIncludeCarId) {
-                    return true;
-                }
-
-                return $car->isSelectableForAgreement($rentedCarIds);
-            });
-
-        if ($alwaysIncludeCarId) {
-            $currentCar = Car::where('tenant_id', $tenant->id)
-                ->where('id', $alwaysIncludeCarId)
-                ->with(['carModel', 'mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status', 'insurances.insuranceProvider'])
-                ->first();
-
-            if ($currentCar && ! $cars->contains('id', $alwaysIncludeCarId)) {
-                $cars = $cars->push($currentCar);
-            }
-        }
-
-        return $cars->sortBy('registration')->values();
+        return Car::forAgreementFormSelection($tenant->id, $alwaysIncludeCarId, $excludeAgreementId);
     }
 
     /**
@@ -879,6 +876,21 @@ class AgreementController extends Controller
     private function assertCarNotCurrentlyRented(int $carId, Tenant $tenant, ?int $excludeAgreementId = null): void
     {
         $this->assertCarAvailableForNewAgreement($carId, $tenant, null, $excludeAgreementId);
+    }
+
+    private function assertDriverProfileCompleteForAgreement(Driver $driver): void
+    {
+        $missing = $driver->missingProfileFieldLabels();
+
+        if ($missing === []) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'driver_id' => __('Complete the driver profile before creating an agreement: :fields.', [
+                'fields' => implode(', ', $missing),
+            ]),
+        ]);
     }
 
     private function assertCarAvailableForReservationConversion(

@@ -17,6 +17,17 @@
                 </ul>
             </div>
         @endif
+        @if(! empty($driverProfileIncomplete) && ! empty($missingDriverFields))
+            <div class="alert alert-warning mb-3">
+                <i class="fa fa-exclamation-triangle me-1"></i>
+                <strong>Driver profile incomplete.</strong>
+                Complete the following before saving this agreement:
+                {{ implode(', ', $missingDriverFields) }}.
+                @if(! empty($model->driver_id))
+                    <a href="{{ route('drivers.edit', $model->driver_id) }}" class="alert-link">Edit driver profile</a>
+                @endif
+            </div>
+        @endif
         @php
             $reservationPrefill = $reservationPrefill ?? null;
             $linkedReservationId = old('reservation_id', $reservationPrefill['reservation_id'] ?? null);
@@ -640,8 +651,8 @@
     ];
     if ($reservationPrefill && ($reservationPrefill['add_payment'] ?? false) && ! old('agreement_payments')) {
         $defaultPaymentRows = [[
-            'payment_method' => '',
-            'bank_account_id' => '',
+            'payment_method' => $reservationPrefill['payment_method'] ?? '',
+            'bank_account_id' => $reservationPrefill['bank_account_id'] ?? '',
             'payment_date' => $reservationPrefill['payment_date'] ?? now()->toDateString(),
             'amount' => $reservationPrefill['amount_paid'],
             'notes' => 'Payment from reservation #'.$reservationPrefill['reservation_id'],

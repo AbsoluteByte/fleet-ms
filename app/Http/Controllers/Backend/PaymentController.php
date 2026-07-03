@@ -186,6 +186,26 @@ class PaymentController extends Controller
         return redirect()->route('payments.show', $payment);
     }
 
+    public function updateNotes(Request $request, Payment $payment)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $payment->load('driver');
+        $this->authorizeDriver($payment->driver, $tenant);
+
+        $validated = $request->validate([
+            'notes' => 'nullable|string|max:5000',
+        ]);
+
+        $payment->update([
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        $redirectTo = $request->input('redirect_to', route('payments.driver', $payment->driver_id));
+
+        return redirect()->to($redirectTo)
+            ->with('success', 'Payment notes updated.');
+    }
+
     public function destroy(Payment $payment)
     {
         $tenant = Auth::user()->currentTenant();

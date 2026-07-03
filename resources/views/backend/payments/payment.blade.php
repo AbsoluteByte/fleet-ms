@@ -45,8 +45,18 @@
                             <p>£{{ number_format($payment->unallocated_amount, 2) }}</p>
                         </div>
                         <div class="col-12 mb-2">
-                            <strong>Notes</strong>
-                            <p>{{ $payment->notes ?: '-' }}</p>
+                            <div class="d-flex align-items-center justify-content-between">
+                                <strong>Notes</strong>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-primary edit-payment-notes-btn"
+                                        data-payment-no="{{ $payment->payment_no }}"
+                                        data-notes="{{ e($payment->notes ?? '') }}"
+                                        data-update-url="{{ route('payments.notes.update', $payment) }}"
+                                        data-redirect-to="{{ route('payments.show', $payment) }}">
+                                    <i class="fa fa-edit"></i> {{ $payment->notes ? 'Edit Notes' : 'Add Notes' }}
+                                </button>
+                            </div>
+                            <p class="mb-0 mt-50">{{ $payment->notes ?: '—' }}</p>
                         </div>
                     </div>
 
@@ -89,4 +99,30 @@
             </div>
         </div>
     </div>
+
+    @include('backend.payments.partials.notes-modal')
+@endsection
+
+@section('js')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.edit-payment-notes-btn').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var form = document.getElementById('paymentNotesForm');
+                    var notesInput = document.getElementById('paymentNotesInput');
+                    var subtitle = document.getElementById('paymentNotesModalSubtitle');
+                    var redirectInput = document.getElementById('paymentNotesRedirectTo');
+
+                    form.action = button.getAttribute('data-update-url');
+                    redirectInput.value = button.getAttribute('data-redirect-to') || '';
+                    notesInput.value = button.getAttribute('data-notes') || '';
+                    subtitle.textContent = button.getAttribute('data-payment-no') || 'Payment';
+
+                    if (window.jQuery) {
+                        window.jQuery('#paymentNotesModal').modal('show');
+                    }
+                });
+            });
+        });
+    </script>
 @endsection

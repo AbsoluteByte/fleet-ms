@@ -665,6 +665,12 @@
                 'Registration', 'Company', 'Model', 'Color', 'Status',
                 'PHV Council', 'Insurance Status', 'MOT Expiry', 'Road Tax Expiry', 'PHV Expiry'
             ];
+            const carsExportFilenamePrefix = 'vehicle-list';
+            const carsExportTitle = 'Vehicle List';
+
+            function carsExportFilename(extension) {
+                return carsExportFilenamePrefix + '-' + new Date().toISOString().slice(0, 10) + extension;
+            }
             let quickFilter = '';
 
             const dataTable = $('#dataTable').DataTable({
@@ -975,7 +981,7 @@
                 }
 
                 if (advancedFilters.carStatus) {
-                    lines.push('Car status: ' + selectedOptionText('carsFilterStatus'));
+                    lines.push('Vehicle status: ' + selectedOptionText('carsFilterStatus'));
                 }
 
                 if (advancedFilters.model) {
@@ -1001,7 +1007,7 @@
                 }
 
                 return {
-                    title: 'Cars Export',
+                    title: carsExportTitle,
                     lines: lines,
                 };
             }
@@ -1071,7 +1077,7 @@
                     lines.push(row.map(csvEscape).join(','));
                 });
 
-                downloadCsv('cars-export-' + new Date().toISOString().slice(0, 10) + '.csv', lines);
+                downloadCsv(carsExportFilename('.csv'), lines);
             }
 
             function exportCarsPdf() {
@@ -1136,10 +1142,19 @@
                         tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
                         tableCell: { fontSize: 7 }
                     },
-                    defaultStyle: { fontSize: 8 }
+                    defaultStyle: { fontSize: 8 },
+                    footer: function (currentPage, pageCount) {
+                        return {
+                            text: 'Page ' + currentPage + ' of ' + pageCount,
+                            alignment: 'center',
+                            fontSize: 8,
+                            color: '#5e5873',
+                            margin: [0, 8, 0, 0]
+                        };
+                    }
                 };
 
-                pdfMake.createPdf(doc).download('cars-export-' + new Date().toISOString().slice(0, 10) + '.pdf');
+                pdfMake.createPdf(doc).download(carsExportFilename('.pdf'));
             }
 
             $('#carsExportCsv').on('click', exportCarsCsv);

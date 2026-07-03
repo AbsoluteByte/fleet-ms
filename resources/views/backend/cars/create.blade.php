@@ -27,7 +27,7 @@
 @endsection
 
 @push('js')
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-car.js') }}?v=20260624"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-car.js') }}?v=20260703"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('formCreateCar');

@@ -41,6 +41,17 @@
     @php
         $carEditLocked = $model->isFleetStatusLockedForEditing();
         $carStatusLabel = $model->fleetStatusLabel();
+        $editLatestMotId = $model->latestMot()?->id ?? '';
+        $editLatestPhvId = $model->latestPhv()?->id ?? '';
+        $editCurrentInsuranceStatus = '';
+        $editHasInsuranceDocument = '0';
+        $latestInsuranceForEdit = $model->insurances
+            ->sortByDesc(fn ($insurance) => [optional($insurance->created_at)->timestamp ?? 0, $insurance->id])
+            ->first();
+        if ($latestInsuranceForEdit) {
+            $editCurrentInsuranceStatus = strtolower(trim((string) optional($latestInsuranceForEdit->status)->name));
+            $editHasInsuranceDocument = $latestInsuranceForEdit->insurance_document ? '1' : '0';
+        }
     @endphp
 
     @if($carEditLocked)
@@ -85,6 +96,10 @@
                             <form action="{{ route($url . 'update', $model->id) }}" method="POST"
                                   enctype="multipart/form-data"
                                   id="formEditCar" novalidate
+                                  data-latest-mot-id="{{ $editLatestMotId }}"
+                                  data-latest-phv-id="{{ $editLatestPhvId }}"
+                                  data-current-insurance-status="{{ $editCurrentInsuranceStatus }}"
+                                  data-has-insurance-document="{{ $editHasInsuranceDocument }}"
                                   @if($carEditLocked) class="car-edit-locked-form" @endif
                                   @if($carEditLocked) onsubmit="return false;" @endif>
                                 @csrf
@@ -109,7 +124,7 @@
     @endpush
 @else
     @push('js')
-        <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-car.js') }}?v=20260624"></script>
+        <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-car.js') }}?v=20260703"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 var form = document.getElementById('formEditCar');

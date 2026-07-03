@@ -17,7 +17,10 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h4 class="card-title mb-0">Edit reservation</h4>
                         <div class="d-flex align-items-center">
-                            <button type="button" class="btn btn-primary btn-sm mr-1" id="btnCreateAgreementFromReservation">
+                            <button type="button"
+                                    class="btn btn-primary btn-sm mr-1"
+                                    id="btnCreateAgreementFromReservation"
+                                    @if($driverProfileIncomplete) disabled title="Complete and save driver details first" @endif>
                                 <i class="fa fa-file-contract"></i> Create Agreement
                             </button>
                             <a href="{{ route('reservations.index') }}" class="btn btn-outline-secondary btn-sm">
@@ -38,6 +41,8 @@
                                     'driver' => $driver,
                                     'selectedDriverId' => $selectedDriverId,
                                     'driverMode' => $driverMode,
+                                    'driverProfileIncomplete' => $driverProfileIncomplete,
+                                    'missingDriverFields' => $missingDriverFields,
                                 ])
 
                                 <div class="card mb-2">
@@ -116,6 +121,10 @@
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                                 @enderror
                                             </div>
+                                            @include('backend.reservations._payment_fields', [
+                                                'bankAccounts' => $bankAccounts,
+                                                'reservation' => $reservation,
+                                            ])
                                             <div class="col-md-12 form-group">
                                                 <label for="balance_payable_on_pickup_display">Balance payable on pick up</label>
                                                 <input type="text" id="balance_payable_on_pickup_display" class="form-control"
@@ -143,7 +152,7 @@
 @endsection
 @section('js')
     <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260625"></script>
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260626"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260703"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('formEditReservation');
@@ -165,13 +174,9 @@
                     var params = new URLSearchParams();
                     params.set('reservation_id', '{{ $reservation->id }}');
 
-                    var driverModeEl = form.querySelector('input[name="driver_mode"]:checked');
-                    var driverMode = driverModeEl ? driverModeEl.value : 'existing';
-                    if (driverMode === 'existing') {
-                        var driverSelect = form.querySelector('[name="driver_id"]');
-                        if (driverSelect && driverSelect.value) {
-                            params.set('driver_id', driverSelect.value);
-                        }
+                    var driverIdField = form.querySelector('[name="driver_id"]');
+                    if (driverIdField && driverIdField.value) {
+                        params.set('driver_id', driverIdField.value);
                     }
 
                     ['car_id', 'pick_up_date', 'agreed_rent', 'amount_paid'].forEach(function (name) {

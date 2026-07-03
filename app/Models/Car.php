@@ -307,13 +307,16 @@ class Car extends Model
     /**
      * Council name from the PHV row with the latest expiry date (current or most recent).
      */
+    public function latestPhv(): ?CarPhv
+    {
+        return $this->phvs
+            ->sortByDesc(fn (CarPhv $p) => [optional($p->expiry_date)->timestamp ?? 0, $p->id])
+            ->first();
+    }
+
     public function latestPhvCounselName(): ?string
     {
-        $phv = $this->phvs
-            ->sortByDesc(fn (CarPhv $p) => optional($p->expiry_date)->timestamp ?? 0)
-            ->first();
-
-        return $phv?->counsel?->name;
+        return $this->latestPhv()?->counsel?->name;
     }
 
     /**
@@ -466,6 +469,45 @@ class Car extends Model
         }
 
         return $this->isEligibleForAgreementSelection();
+    }
+
+    /**
+     * Cars eligible for agreement or reservation forms (excludes rented / blocked statuses).
+     *
+     * @return \Illuminate\Support\Collection<int, Car>
+     */
+    public static function forAgreementFormSelection(
+        int $tenantId,
+        ?int $alwaysIncludeCarId = null,
+        ?int $excludeAgreementId = null
+    ): \Illuminate\Support\Collection {
+        $rentedCarIds = Agreement::rentedCarIdsForTenant($tenantId, $excludeAgreementId);
+
+        $cars = static::query()
+            ->where('tenant_id', $tenantId)
+            ->with(['company', 'carModel', 'mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status', 'insurances.insuranceProvider'])
+            ->get()
+            ->filter(function (Car $car) use ($rentedCarIds, $alwaysIncludeCarId) {
+                if ($alwaysIncludeCarId && (int) $car->id === (int) $alwaysIncludeCarId) {
+                    return true;
+                }
+
+                return $car->isSelectableForAgreement($rentedCarIds);
+            });
+
+        if ($alwaysIncludeCarId && ! $cars->contains('id', $alwaysIncludeCarId)) {
+            $currentCar = static::query()
+                ->where('tenant_id', $tenantId)
+                ->whereKey($alwaysIncludeCarId)
+                ->with(['company', 'carModel', 'mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status', 'insurances.insuranceProvider'])
+                ->first();
+
+            if ($currentCar) {
+                $cars = $cars->push($currentCar);
+            }
+        }
+
+        return $cars->sortBy('registration')->values();
     }
 
     public function matchesReservationForAgreementConversion(CarReservation $reservation): bool

@@ -1,122 +1,155 @@
 @php
     $selectedDriverId = old('driver_id', $selectedDriverId ?? null);
     $driverMode = old('driver_mode', $driverMode ?? ($selectedDriverId ? 'existing' : 'new'));
+    $driverProfileIncomplete = $driverProfileIncomplete ?? false;
+    $missingDriverFields = $missingDriverFields ?? [];
 @endphp
 
-<div class="card mb-2" id="reservation-driver-section">
+<div class="card mb-2" id="reservation-driver-section"
+     data-driver-complete="{{ $driverProfileIncomplete ? '0' : '1' }}"
+     data-complete-linked-driver="{{ $driverProfileIncomplete ? '1' : '0' }}">
     <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
         <h5 class="card-title mb-0">Driver</h5>
     </div>
     <div class="card-body" style="margin-top: 0 !important;">
-        <div class="form-group">
-            <label class="d-block mb-1">Client / driver <span class="text-danger">*</span></label>
-            <div class="btn-group mb-2" role="group" aria-label="Driver mode">
-                <label class="btn btn-outline-primary {{ $driverMode === 'existing' ? 'active' : '' }}">
-                    <input type="radio" name="driver_mode" value="existing" class="d-none" autocomplete="off"
-                           {{ $driverMode === 'existing' ? 'checked' : '' }}> Existing driver
-                </label>
-                <label class="btn btn-outline-primary {{ $driverMode === 'new' ? 'active' : '' }}">
-                    <input type="radio" name="driver_mode" value="new" class="d-none" autocomplete="off"
-                           {{ $driverMode === 'new' ? 'checked' : '' }}> New driver
-                </label>
-            </div>
-            @error('driver_mode')
-            <div class="text-danger small">{{ $message }}</div>
-            @enderror
-        </div>
-
-        <div id="reservation-existing-driver-panel" class="{{ $driverMode === 'existing' ? '' : 'd-none' }}">
-            <div class="form-group mb-0">
-                <label for="reservation_driver_id">Select driver <span class="text-danger">*</span></label>
-                <select name="driver_id" id="reservation_driver_id"
-                        class="form-control select-search @error('driver_id') is-invalid @enderror">
-                    <option value="">— Select driver —</option>
-                    @include('backend.drivers._select_options', [
-                        'drivers' => $drivers,
-                        'selectedId' => $selectedDriverId,
-                    ])
-                </select>
-                @error('driver_id')
-                <div class="invalid-feedback d-block">{{ $message }}</div>
-                @enderror
-                @if($drivers->isEmpty())
-                    <small class="text-muted d-block mt-1">No drivers yet — use “New driver” to add one.</small>
+        @if($driverProfileIncomplete)
+            <div class="alert alert-warning mb-3">
+                <i class="fa fa-exclamation-triangle me-1"></i>
+                <strong>Driver profile incomplete.</strong>
+                Complete the following before creating an agreement:
+                {{ implode(', ', $missingDriverFields) }}.
+                @if(! empty($driver?->id))
+                    <a href="{{ route('drivers.edit', $driver->id) }}" class="alert-link">Complete on driver page</a>
                 @endif
             </div>
-        </div>
 
-        <div id="reservation-new-driver-panel" class="{{ $driverMode === 'new' ? '' : 'd-none' }}">
-            @include('backend.drivers._form', [
-                'model' => $driver,
-                'hideFormActions' => true,
-                'minimalDriverForm' => $minimalDriverForm ?? false,
-            ])
-        </div>
+            <input type="hidden" name="driver_mode" value="existing">
+            <input type="hidden" name="driver_id" value="{{ $selectedDriverId }}">
+
+            <p class="text-muted small mb-2">
+                Linked driver: <strong>{{ $driver->full_name ?: ('Driver #'.$driver->id) }}</strong>
+            </p>
+
+            <div id="reservation-complete-linked-driver-panel">
+                @include('backend.drivers._form', [
+                    'model' => $driver,
+                    'hideFormActions' => true,
+                    'minimalDriverForm' => false,
+                ])
+            </div>
+        @else
+            <div class="form-group">
+                <label class="d-block mb-1">Client / driver <span class="text-danger">*</span></label>
+                <div class="btn-group mb-2" role="group" aria-label="Driver mode">
+                    <label class="btn btn-outline-primary {{ $driverMode === 'existing' ? 'active' : '' }}">
+                        <input type="radio" name="driver_mode" value="existing" class="d-none" autocomplete="off"
+                               {{ $driverMode === 'existing' ? 'checked' : '' }}> Existing driver
+                    </label>
+                    <label class="btn btn-outline-primary {{ $driverMode === 'new' ? 'active' : '' }}">
+                        <input type="radio" name="driver_mode" value="new" class="d-none" autocomplete="off"
+                               {{ $driverMode === 'new' ? 'checked' : '' }}> New driver
+                    </label>
+                </div>
+                @error('driver_mode')
+                <div class="text-danger small">{{ $message }}</div>
+                @enderror
+            </div>
+
+            <div id="reservation-existing-driver-panel" class="{{ $driverMode === 'existing' ? '' : 'd-none' }}">
+                <div class="form-group mb-0">
+                    <label for="reservation_driver_id">Select driver <span class="text-danger">*</span></label>
+                    <select name="driver_id" id="reservation_driver_id"
+                            class="form-control select-search @error('driver_id') is-invalid @enderror">
+                        <option value="">— Select driver —</option>
+                        @include('backend.drivers._select_options', [
+                            'drivers' => $drivers,
+                            'selectedId' => $selectedDriverId,
+                        ])
+                    </select>
+                    @error('driver_id')
+                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                    @if($drivers->isEmpty())
+                        <small class="text-muted d-block mt-1">No drivers yet — use “New driver” to add one.</small>
+                    @endif
+                </div>
+            </div>
+
+            <div id="reservation-new-driver-panel" class="{{ $driverMode === 'new' ? '' : 'd-none' }}">
+                @include('backend.drivers._form', [
+                    'model' => $driver,
+                    'hideFormActions' => true,
+                    'minimalDriverForm' => $minimalDriverForm ?? false,
+                ])
+            </div>
+        @endif
     </div>
 </div>
 
-@push('js')
-    <script>
-        (function () {
-            function initReservationDriverModeToggle() {
-                const section = document.getElementById('reservation-driver-section');
-                const existingPanel = document.getElementById('reservation-existing-driver-panel');
-                const newPanel = document.getElementById('reservation-new-driver-panel');
-                const driverSelect = document.getElementById('reservation_driver_id');
+@if(! ($driverProfileIncomplete ?? false))
+    @push('js')
+        <script>
+            (function () {
+                function initReservationDriverModeToggle() {
+                    const section = document.getElementById('reservation-driver-section');
+                    const existingPanel = document.getElementById('reservation-existing-driver-panel');
+                    const newPanel = document.getElementById('reservation-new-driver-panel');
+                    const driverSelect = document.getElementById('reservation_driver_id');
 
-                if (!section || !existingPanel || !newPanel) {
-                    return;
-                }
+                    if (!section || !existingPanel || !newPanel) {
+                        return;
+                    }
 
-                function setPanelEnabled(panel, enabled) {
-                    panel.querySelectorAll('input, select, textarea, button').forEach(function (el) {
-                        if (el.name === 'driver_mode') {
-                            return;
+                    function setPanelEnabled(panel, enabled) {
+                        panel.querySelectorAll('input, select, textarea, button').forEach(function (el) {
+                            if (el.name === 'driver_mode') {
+                                return;
+                            }
+                            el.disabled = !enabled;
+                        });
+                    }
+
+                    function refreshDriverMode() {
+                        const checked = section.querySelector('input[name="driver_mode"]:checked');
+                        const mode = checked ? checked.value : 'new';
+                        const useExisting = mode === 'existing';
+
+                        section.querySelectorAll('label.btn').forEach(function (label) {
+                            const input = label.querySelector('input[name="driver_mode"]');
+                            label.classList.toggle('active', input && input.checked);
+                        });
+
+                        existingPanel.classList.toggle('d-none', !useExisting);
+                        newPanel.classList.toggle('d-none', useExisting);
+
+                        setPanelEnabled(existingPanel, useExisting);
+                        setPanelEnabled(newPanel, !useExisting);
+
+                        if (driverSelect && window.jQuery && jQuery.fn.select2) {
+                            jQuery(driverSelect).prop('disabled', !useExisting).trigger('change.select2');
                         }
-                        el.disabled = !enabled;
-                    });
-                }
+                    }
 
-                function refreshDriverMode() {
-                    const checked = section.querySelector('input[name="driver_mode"]:checked');
-                    const mode = checked ? checked.value : 'new';
-                    const useExisting = mode === 'existing';
+                    section.querySelectorAll('input[name="driver_mode"]').forEach(function (input) {
+                        input.addEventListener('change', refreshDriverMode);
+                        input.addEventListener('click', refreshDriverMode);
+                    });
 
                     section.querySelectorAll('label.btn').forEach(function (label) {
-                        const input = label.querySelector('input[name="driver_mode"]');
-                        label.classList.toggle('active', input && input.checked);
+                        label.addEventListener('click', function () {
+                            window.setTimeout(refreshDriverMode, 0);
+                        });
                     });
 
-                    existingPanel.classList.toggle('d-none', !useExisting);
-                    newPanel.classList.toggle('d-none', useExisting);
-
-                    setPanelEnabled(existingPanel, useExisting);
-                    setPanelEnabled(newPanel, !useExisting);
-
-                    if (driverSelect && window.jQuery && jQuery.fn.select2) {
-                        jQuery(driverSelect).prop('disabled', !useExisting).trigger('change.select2');
-                    }
+                    refreshDriverMode();
                 }
 
-                section.querySelectorAll('input[name="driver_mode"]').forEach(function (input) {
-                    input.addEventListener('change', refreshDriverMode);
-                    input.addEventListener('click', refreshDriverMode);
-                });
-
-                section.querySelectorAll('label.btn').forEach(function (label) {
-                    label.addEventListener('click', function () {
-                        window.setTimeout(refreshDriverMode, 0);
-                    });
-                });
-
-                refreshDriverMode();
-            }
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initReservationDriverModeToggle);
-            } else {
-                initReservationDriverModeToggle();
-            }
-        })();
-    </script>
-@endpush
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initReservationDriverModeToggle);
+                } else {
+                    initReservationDriverModeToggle();
+                }
+            })();
+        </script>
+    @endpush
+@endif
