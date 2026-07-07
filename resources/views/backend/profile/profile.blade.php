@@ -19,9 +19,9 @@
                     </div>
                     <div class="card-content">
                         <div class="card-body">
-                            <form action="{{ url(route('change-password', auth()->user()->id)) }}" method="POST" enctype="multipart/form-data">
+                            <form action="{{ route('change-password') }}" method="POST" enctype="multipart/form-data">
                                 @csrf
-                                @method('POST')
+                                @method('PUT')
                                 @include($dir . '_form_change_pass')
                             </form>
                         </div><!-- /.card-body -->

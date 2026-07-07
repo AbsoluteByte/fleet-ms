@@ -213,7 +213,7 @@ class ClientDocumentsEmailTest extends TestCase
         $this->assertContains('Driving licence summary', $payload['missingDocuments']);
     }
 
-    public function test_send_client_documents_route_sends_email_to_driver(): void
+    public function test_send_client_documents_route_sends_email_to_recipient(): void
     {
         Mail::fake();
         $agreement = $this->createAgreement(false, null);
@@ -222,8 +222,23 @@ class ClientDocumentsEmailTest extends TestCase
 
         $response->assertRedirect();
         Mail::assertSent(AgreementClientDocumentsMail::class, function (AgreementClientDocumentsMail $mail) {
-            return $mail->hasTo('docs-driver@example.com')
+            return $mail->hasTo('jawad@samoretraders.com')
                 && count($mail->attachmentsData) > 0;
+        });
+    }
+
+    public function test_send_client_documents_succeeds_without_driver_email(): void
+    {
+        Mail::fake();
+        $this->driver->update(['email' => null]);
+        $agreement = $this->createAgreement(false, null);
+
+        $response = $this->post(route('agreements.send-client-documents', $agreement));
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+        Mail::assertSent(AgreementClientDocumentsMail::class, function (AgreementClientDocumentsMail $mail) {
+            return $mail->hasTo('jawad@samoretraders.com');
         });
     }
 
@@ -246,7 +261,7 @@ class ClientDocumentsEmailTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('DEV MODE');
-        $response->assertSee('docs-driver@example.com');
+        $response->assertSee('jawad@samoretraders.com');
         $response->assertSee('Client Documents');
         $response->assertSee('Attached Documents');
     }

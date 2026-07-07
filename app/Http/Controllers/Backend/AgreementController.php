@@ -36,6 +36,8 @@ class AgreementController extends Controller
 {
     private const DISCOUNT_ALLOWED_EMAIL = 'jawad@samoretraders.com';
 
+    private const CLIENT_DOCUMENTS_RECIPIENT_EMAIL = 'jawad@samoretraders.com';
+
     protected $url = 'agreements.';
 
     protected $dir = 'backend.agreements.';
@@ -1400,10 +1402,6 @@ class AgreementController extends Controller
 
         $agreement->loadMissing(['driver', 'car', 'company', 'car.company']);
 
-        if (! $agreement->driver?->email) {
-            return redirect()->back()->with('error', 'Driver email is missing. Cannot send client documents.');
-        }
-
         $service = app(AgreementClientDocumentsService::class);
         $generatedTempFiles = [];
 
@@ -1411,7 +1409,7 @@ class AgreementController extends Controller
             $payload = $service->collectForAgreement($agreement);
             $generatedTempFiles = $payload['generatedTempFiles'];
 
-            Mail::to($agreement->driver->email)->send(new AgreementClientDocumentsMail(
+            Mail::to(self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL)->send(new AgreementClientDocumentsMail(
                 $agreement,
                 $payload['attachments'],
                 $payload['attachedLabels'],
@@ -1421,7 +1419,7 @@ class AgreementController extends Controller
             $sentCount = count($payload['attachments']);
             $missingCount = count($payload['missingDocuments']);
 
-            $message = "Client documents email sent to {$agreement->driver->email}. Attached: {$sentCount}.";
+            $message = 'Client documents email sent to '.self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL.". Attached: {$sentCount}.";
             if ($missingCount > 0) {
                 $message .= " Missing listed in email: {$missingCount}.";
             }
@@ -1472,7 +1470,7 @@ class AgreementController extends Controller
 
             return view('backend.agreements.client-documents-email-preview', [
                 'agreement' => $agreement,
-                'recipient' => $agreement->driver?->email,
+                'recipient' => self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL,
                 'subject' => $subject,
                 'attachments' => $payload['attachments'],
                 'attachedLabels' => $payload['attachedLabels'],

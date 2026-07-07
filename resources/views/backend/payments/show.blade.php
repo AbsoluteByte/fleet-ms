@@ -7,7 +7,7 @@
 
     <div class="row">
         <div class="col-12">
-            @include('alerts')
+            
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div>
@@ -24,6 +24,7 @@
                     </div>
                 </div>
                 <div class="card-body" style="margin-top: 85px;">
+                @include('alerts')
                     <div class="row">
                         <div class="col-md-3 mb-1">
                             <div class="payment-summary-card border-danger">

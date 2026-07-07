@@ -32,7 +32,7 @@
             </a>
             <form action="{{ route('agreements.send-client-documents', $agreement) }}" method="POST" class="d-inline">
                 @csrf
-                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Send client documents to {{ $agreement->driver->email ?? 'driver email' }}?')">
+                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Send client documents to jawad@samoretraders.com?')">
                     <i class="fa fa-envelope me-2"></i>
                     Send Client Documents
                 </button>
