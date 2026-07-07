@@ -162,7 +162,8 @@ class PhvlWorkflow
 
     public static function statusBtnClass(string $field, string $current, ?string $value = null): string
     {
-        if ($field === self::FIELD_APPLIED_DATE && $value !== null && $value !== '') {
+        if (in_array($field, [self::FIELD_APPLIED_DATE, self::FIELD_APPOINTMENT_AT], true)
+            && $value !== null && $value !== '') {
             return 'btn-outline-success';
         }
 

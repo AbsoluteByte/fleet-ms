@@ -196,13 +196,57 @@
         .phvl-dt-scroll {
             width: 100%;
             clear: both;
-            overflow-x: auto;
-            overflow-y: visible;
+            max-height: calc(100vh - 280px);
+            overflow: auto;
             -webkit-overflow-scrolling: touch;
+        }
+
+        .phvl-dt-scroll thead th {
+            position: sticky !important;
+            top: 0;
+            z-index: 3;
+            background: #fff;
+            box-shadow: 0 1px 0 #ebe9f1;
+        }
+
+        .phvl-dt-scroll-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            clear: both;
+            margin-bottom: 0.35rem;
+        }
+
+        .phvl-dt-scroll-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2rem;
+            height: 2rem;
+            border: 1px solid #d8d6de;
+            border-radius: 0.25rem;
+            color: #6e6b7b;
+            background: #fff;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .phvl-dt-scroll-btn:hover:not(:disabled),
+        .phvl-dt-scroll-btn:focus:not(:disabled) {
+            border-color: #7367f0;
+            color: #7367f0;
+            outline: none;
+        }
+
+        .phvl-dt-scroll-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
         }
 
         .phvl-dt-scroll::-webkit-scrollbar {
             height: 8px;
+            width: 8px;
         }
 
         .phvl-dt-scroll::-webkit-scrollbar-thumb {
@@ -551,6 +595,12 @@
                     var $wrapper = $('#phvlTable_wrapper');
                     if (! $wrapper.find('.phvl-dt-scroll').length) {
                         var $top = $('<div class="phvl-dt-top"></div>');
+                        var $scrollControls = $(
+                            '<div class="phvl-dt-scroll-controls mt-1">' +
+                            '  <button type="button" class="phvl-dt-scroll-btn" id="phvlScrollLeft" title="Scroll table left" aria-label="Scroll table left"><i class="fa fa-chevron-left"></i></button>' +
+                            '  <button type="button" class="phvl-dt-scroll-btn" id="phvlScrollRight" title="Scroll table right" aria-label="Scroll table right"><i class="fa fa-chevron-right"></i></button>' +
+                            '</div>'
+                        );
                         var $scroll = $('<div class="phvl-dt-scroll"></div>');
                         var $bottom = $('<div class="phvl-dt-bottom"></div>');
 
@@ -560,7 +610,7 @@
                         $wrapper.find('.dataTables_paginate').appendTo($bottom);
                         $wrapper.find('table.dataTable').appendTo($scroll);
 
-                        $wrapper.empty().append($top).append($scroll).append($bottom);
+                        $wrapper.empty().append($top).append($scrollControls).append($scroll).append($bottom);
                     }
 
                     if (! document.getElementById('phvlFilterOpen')) {
@@ -568,8 +618,63 @@
                             '<button type="button" class="cars-filter-button" id="phvlFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
                         );
                     }
+
+                    initPhvlTableScrollControls();
+                },
+                drawCallback: function () {
+                    updatePhvlTableScrollControls();
                 }
             });
+
+            function initPhvlTableScrollControls() {
+                var scrollEl = document.querySelector('.phvl-dt-scroll');
+                var leftBtn = document.getElementById('phvlScrollLeft');
+                var rightBtn = document.getElementById('phvlScrollRight');
+
+                if (!scrollEl || !leftBtn || !rightBtn) {
+                    return;
+                }
+
+                if (leftBtn.dataset.bound === '1') {
+                    updatePhvlTableScrollControls();
+                    return;
+                }
+
+                leftBtn.dataset.bound = '1';
+                rightBtn.dataset.bound = '1';
+
+                leftBtn.addEventListener('click', function () {
+                    var step = Math.max(300, Math.floor(scrollEl.clientWidth * 0.8));
+                    scrollEl.scrollLeft = Math.max(0, scrollEl.scrollLeft - step);
+                    updatePhvlTableScrollControls();
+                });
+
+                rightBtn.addEventListener('click', function () {
+                    var step = Math.max(300, Math.floor(scrollEl.clientWidth * 0.8));
+                    scrollEl.scrollLeft = Math.min(scrollEl.scrollWidth - scrollEl.clientWidth, scrollEl.scrollLeft + step);
+                    updatePhvlTableScrollControls();
+                });
+
+                scrollEl.addEventListener('scroll', updatePhvlTableScrollControls);
+                window.addEventListener('resize', updatePhvlTableScrollControls);
+                updatePhvlTableScrollControls();
+            }
+
+            function updatePhvlTableScrollControls() {
+                var scrollEl = document.querySelector('.phvl-dt-scroll');
+                var leftBtn = document.getElementById('phvlScrollLeft');
+                var rightBtn = document.getElementById('phvlScrollRight');
+
+                if (!scrollEl || !leftBtn || !rightBtn) {
+                    return;
+                }
+
+                var maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+                var canScroll = maxScroll > 1;
+
+                leftBtn.disabled = !canScroll || scrollEl.scrollLeft <= 0;
+                rightBtn.disabled = !canScroll || scrollEl.scrollLeft >= maxScroll - 1;
+            }
 
             document.getElementById('phvl-type-filter').addEventListener('change', function () { table.ajax.reload(); });
 
