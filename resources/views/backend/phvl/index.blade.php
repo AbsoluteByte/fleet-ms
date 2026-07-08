@@ -298,6 +298,15 @@
                                 <option value="renewal">Renewal</option>
                             </select>
                         </div>
+                        <div class="btn-group ml-auto">
+                            <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" id="phvlExportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                <i class="fa fa-download mr-50"></i> Export
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-right" aria-labelledby="phvlExportDropdown">
+                                <button type="button" class="dropdown-item" id="phvlExportCsv">Export CSV</button>
+                                <button type="button" class="dropdown-item" id="phvlExportPdf">Export PDF</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-body px-1 pt-1 pb-0 phvl-card-body">
                         @include('alerts')
@@ -511,6 +520,8 @@
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/pdfmake.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
     <script>
         (function () {
             var csrfToken = document.querySelector('meta[name="csrf-token"]');
@@ -946,6 +957,203 @@
                     table.ajax.reload(null, false);
                 }).catch(function (err) { alert(err.message || 'Could not save PHV'); });
             });
+
+            // ==================== Export CSV / PDF ====================
+            var phvlExportHeaders = [
+                'Make & Model',
+                'Car Registration',
+                'Company Name',
+                'Council',
+                'Expiry Detail',
+                'MOT Status',
+                'MOT Date',
+                'Days Since MOT',
+                'Application Status',
+                'PHVL applied date',
+                'Appointment Confirmation',
+                'Appointment Date & Time',
+                'PHVL Status'
+            ];
+            var phvlExportFilenamePrefix = 'phvl-management';
+            var phvlExportTitle = 'PHVL Management';
+
+            function phvlExportFilename(extension) {
+                return phvlExportFilenamePrefix + '-' + new Date().toISOString().slice(0, 10) + extension;
+            }
+
+            function buildPhvlExportMeta() {
+                var lines = [];
+                var typeFilter = document.getElementById('phvl-type-filter');
+                var typeLabel = typeFilter && typeFilter.options[typeFilter.selectedIndex]
+                    ? typeFilter.options[typeFilter.selectedIndex].text
+                    : 'All';
+
+                lines.push('Show: ' + typeLabel);
+
+                var appointmentFrom = document.getElementById('phvlFilterAppointmentFrom').value;
+                var appointmentTo = document.getElementById('phvlFilterAppointmentTo').value;
+                if (appointmentFrom || appointmentTo) {
+                    lines.push('Appointment: ' + (appointmentFrom || '—') + ' to ' + (appointmentTo || '—'));
+                }
+
+                var searchValue = (table.search() || '').trim();
+                if (searchValue) {
+                    lines.push('Search: ' + searchValue);
+                }
+
+                if (lines.length === 0) {
+                    lines.push('Filters: None');
+                }
+
+                return {
+                    title: phvlExportTitle,
+                    lines: lines
+                };
+            }
+
+            function csvEscape(value) {
+                var str = String(value == null ? '' : value).replace(/"/g, '""').trim();
+                return /[",\n\r]/.test(str) ? '"' + str + '"' : str;
+            }
+
+            function downloadCsv(filename, lines) {
+                var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                var url = URL.createObjectURL(blob);
+                var link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            function collectPhvlExportRows() {
+                var rows = [];
+                table.rows({ search: 'applied', order: 'applied' }).every(function () {
+                    var node = this.node();
+                    if (!node) {
+                        return;
+                    }
+
+                    var cells = node.querySelectorAll('td');
+                    if (cells.length < 13) {
+                        return;
+                    }
+
+                    var row = [];
+                    for (var i = 0; i < 13; i++) {
+                        row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
+                    }
+
+                    rows.push(row);
+                });
+
+                return rows;
+            }
+
+            function exportPhvlCsv() {
+                var exportMeta = buildPhvlExportMeta();
+                var bodyRows = collectPhvlExportRows();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                var lines = [csvEscape(exportMeta.title)];
+                exportMeta.lines.forEach(function (line) {
+                    lines.push(csvEscape(line));
+                });
+                lines.push('');
+                lines.push(phvlExportHeaders.map(csvEscape).join(','));
+                bodyRows.forEach(function (row) {
+                    lines.push(row.map(csvEscape).join(','));
+                });
+
+                downloadCsv(phvlExportFilename('.csv'), lines);
+            }
+
+            function exportPhvlPdf() {
+                var exportMeta = buildPhvlExportMeta();
+                var bodyRows = collectPhvlExportRows();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                if (typeof pdfMake === 'undefined') {
+                    alert('PDF export is not available. Please refresh the page and try again.');
+                    return;
+                }
+
+                var tableBody = [
+                    phvlExportHeaders.map(function (header) {
+                        return { text: header, style: 'tableHeader' };
+                    })
+                ];
+
+                bodyRows.forEach(function (row) {
+                    tableBody.push(row.map(function (cell) {
+                        return { text: cell, style: 'tableCell' };
+                    }));
+                });
+
+                var doc = {
+                    pageSize: 'A4',
+                    pageOrientation: 'landscape',
+                    pageMargins: [24, 48, 24, 32],
+                    content: [
+                        {
+                            text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                            style: 'title',
+                            margin: [0, 0, 0, 4]
+                        },
+                        ...exportMeta.lines.map(function (line) {
+                            return {
+                                text: line,
+                                style: 'subtitle',
+                                margin: [0, 0, 0, 2]
+                            };
+                        }),
+                        {
+                            text: '',
+                            margin: [0, 0, 0, 8]
+                        },
+                        {
+                            table: {
+                                headerRows: 1,
+                                widths: phvlExportHeaders.map(function () { return '*'; }),
+                                body: tableBody
+                            },
+                            layout: 'lightHorizontalLines'
+                        }
+                    ],
+                    styles: {
+                        title: { fontSize: 14, bold: true },
+                        subtitle: { fontSize: 9, color: '#5e5873' },
+                        tableHeader: { fontSize: 7, bold: true, fillColor: '#f3f2f7' },
+                        tableCell: { fontSize: 6 }
+                    },
+                    defaultStyle: { fontSize: 8 },
+                    footer: function (currentPage, pageCount) {
+                        return {
+                            text: 'Page ' + currentPage + ' of ' + pageCount,
+                            alignment: 'center',
+                            fontSize: 8,
+                            color: '#5e5873',
+                            margin: [0, 8, 0, 0]
+                        };
+                    }
+                };
+
+                pdfMake.createPdf(doc).download(phvlExportFilename('.pdf'));
+            }
+
+            $('#phvlExportCsv').on('click', exportPhvlCsv);
+            $('#phvlExportPdf').on('click', exportPhvlPdf);
         })();
     </script>
 @endsection
