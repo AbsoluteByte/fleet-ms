@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Car;
+use App\Models\CarPhvlProgress;
 use App\Models\Company;
 use App\Models\Tenant;
 use App\Models\User;
@@ -97,6 +98,65 @@ class PhvlManagementFleetStatusTest extends TestCase
         $response->assertForbidden();
     }
 
+    public function test_phvl_data_filters_by_mot_status(): void
+    {
+        $motDoneCar = $this->createCar('MOTDONE', Car::FLEET_STATUS_PREPARATION_FOR_PHVL);
+        $motPendingCar = $this->createCar('MOTPEND', Car::FLEET_STATUS_PREPARATION_FOR_PHVL);
+
+        $this->createProgress($motDoneCar, ['mot_status' => 'done']);
+        $this->createProgress($motPendingCar, ['mot_status' => 'pending']);
+
+        $response = $this->getJson(route('phvl.data', [
+            'type' => 'all',
+            'mot_status' => 'done',
+        ]));
+
+        $response->assertOk();
+
+        $registrations = collect($response->json('data'))->pluck('registration')->all();
+
+        $this->assertContains('MOTDONE', $registrations);
+        $this->assertNotContains('MOTPEND', $registrations);
+        $this->assertNotContains('ELIG001', $registrations);
+    }
+
+    public function test_phvl_data_filters_by_application_status(): void
+    {
+        $appliedCar = $this->createCar('APPAPPL', Car::FLEET_STATUS_PREPARATION_FOR_PHVL);
+        $pendingCar = $this->createCar('APPPEND', Car::FLEET_STATUS_PREPARATION_FOR_PHVL);
+
+        $this->createProgress($appliedCar, ['application_status' => 'applied']);
+        $this->createProgress($pendingCar, ['application_status' => 'pending']);
+
+        $response = $this->getJson(route('phvl.data', [
+            'type' => 'all',
+            'application_status' => 'applied',
+        ]));
+
+        $response->assertOk();
+
+        $registrations = collect($response->json('data'))->pluck('registration')->all();
+
+        $this->assertContains('APPAPPL', $registrations);
+        $this->assertNotContains('APPPEND', $registrations);
+        $this->assertNotContains('ELIG001', $registrations);
+    }
+
+    public function test_phvl_data_treats_missing_progress_as_pending_for_status_filters(): void
+    {
+        $response = $this->getJson(route('phvl.data', [
+            'type' => 'all',
+            'mot_status' => 'pending',
+            'application_status' => 'pending',
+        ]));
+
+        $response->assertOk();
+
+        $registrations = collect($response->json('data'))->pluck('registration')->all();
+
+        $this->assertContains('ELIG001', $registrations);
+    }
+
     private function createCar(string $registration, string $fleetStatus): Car
     {
         return Car::create([
@@ -108,5 +168,19 @@ class PhvlManagementFleetStatusTest extends TestCase
             'createdBy' => $this->user->id,
             'updatedBy' => $this->user->id,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createProgress(Car $car, array $overrides = []): CarPhvlProgress
+    {
+        return CarPhvlProgress::query()->create(array_merge([
+            'tenant_id' => $this->tenant->id,
+            'car_id' => $car->id,
+            'mot_status' => 'pending',
+            'application_status' => 'pending',
+            'appointment_confirmation' => 'pending',
+        ], $overrides));
     }
 }

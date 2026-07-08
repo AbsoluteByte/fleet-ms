@@ -219,8 +219,17 @@
 
     {{-- Fleet Notifications DataTable --}}
     <div class="card">
-        <div class="card-header">
-            <h4 class="card-title">Fleet Notifications</h4>
+        <div class="card-header d-flex align-items-center">
+            <h4 class="card-title mb-0">Fleet Notifications</h4>
+            <div class="btn-group ml-auto">
+                <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" id="fleetExportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i class="fa fa-download mr-50"></i> Export
+                </button>
+                <div class="dropdown-menu dropdown-menu-right" aria-labelledby="fleetExportDropdown">
+                    <button type="button" class="dropdown-item" id="fleetExportCsv">Export CSV</button>
+                    <button type="button" class="dropdown-item" id="fleetExportPdf">Export PDF</button>
+                </div>
+            </div>
         </div>
         <div class="card-content">
             <div class="card-body">
@@ -283,6 +292,8 @@
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/pdfmake.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
     <script>
         let notificationsTable;
         let currentFilter = '';
@@ -438,5 +449,188 @@
                 positionClass: 'toast-top-right'
             });
         }
+
+        const fleetExportHeaders = [
+            'Type',
+            'Title',
+            'Message',
+            'Vehicle / Driver',
+            'Last Car',
+            'Expiry Status'
+        ];
+        const fleetExportFilenamePrefix = 'fleet-notifications';
+        const fleetExportTitle = 'Fleet Notifications';
+        const fleetTypeLabels = {
+            insurance_applied: 'Insurance Applied',
+            insurance_expiry: 'Insurance',
+            phv_expiry: 'PHVL',
+            mot_expiry: 'MOT',
+            road_tax_expiry: 'Road Tax',
+            road_tax_missing: 'Road Tax Missing',
+            driver_license_expiry: 'Driver License',
+            phd_license_expiry: 'PHD License'
+        };
+        const fleetFilterLabels = {
+            '': 'All Fleet',
+            insurance_applied: 'Insurance Applied',
+            insurance_expiry: 'Insurance',
+            phv_expiry: 'PHVL',
+            mot_expiry: 'MOT',
+            road_tax_expiry: 'Road Tax',
+            driver_license_expiry: 'Driver License',
+            phd_license_expiry: 'PHD License'
+        };
+
+        function fleetExportFilename(extension) {
+            return fleetExportFilenamePrefix + '-' + new Date().toISOString().slice(0, 10) + extension;
+        }
+
+        function fleetFormatVehicleDriver(row) {
+            const parts = [];
+            if (row.vehicle) {
+                parts.push(row.vehicle);
+            }
+            if (row.driver) {
+                parts.push(row.driver);
+            }
+            return parts.length ? parts.join(' / ') : '—';
+        }
+
+        function fleetFormatExpiryStatus(row) {
+            if (row.type === 'insurance_applied' || row.type === 'road_tax_missing') {
+                return '—';
+            }
+            return row.time_ago || '—';
+        }
+
+        function buildFleetExportMeta() {
+            const lines = [];
+            lines.push('Filter: ' + (fleetFilterLabels[currentFilter] || 'All Fleet'));
+            const searchValue = (notificationsTable.search() || '').trim();
+            if (searchValue) {
+                lines.push('Search: ' + searchValue);
+            }
+            return { title: fleetExportTitle, lines: lines };
+        }
+
+        function csvEscape(value) {
+            const str = String(value ?? '').replace(/"/g, '""').trim();
+            return /[",\n\r]/.test(str) ? '"' + str + '"' : str;
+        }
+
+        function downloadCsv(filename, lines) {
+            const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function collectFleetExportRows() {
+            const rows = [];
+            notificationsTable.rows({ search: 'applied', order: 'applied' }).every(function () {
+                const row = this.data();
+                rows.push([
+                    fleetTypeLabels[row.type] || row.type || '—',
+                    row.title || '—',
+                    row.simple_message || '—',
+                    fleetFormatVehicleDriver(row),
+                    row.last_car_registration || '—',
+                    fleetFormatExpiryStatus(row)
+                ]);
+            });
+            return rows;
+        }
+
+        function exportFleetCsv() {
+            const exportMeta = buildFleetExportMeta();
+            const bodyRows = collectFleetExportRows();
+            if (bodyRows.length === 0) {
+                alert('No records to export. Adjust your search or filters and try again.');
+                return;
+            }
+            const lines = [csvEscape(exportMeta.title)];
+            exportMeta.lines.forEach(function (line) {
+                lines.push(csvEscape(line));
+            });
+            lines.push('');
+            lines.push(fleetExportHeaders.map(csvEscape).join(','));
+            bodyRows.forEach(function (row) {
+                lines.push(row.map(csvEscape).join(','));
+            });
+            downloadCsv(fleetExportFilename('.csv'), lines);
+        }
+
+        function exportFleetPdf() {
+            const exportMeta = buildFleetExportMeta();
+            const bodyRows = collectFleetExportRows();
+            if (bodyRows.length === 0) {
+                alert('No records to export. Adjust your search or filters and try again.');
+                return;
+            }
+            if (typeof pdfMake === 'undefined') {
+                alert('PDF export is not available. Please refresh the page and try again.');
+                return;
+            }
+            const tableBody = [
+                fleetExportHeaders.map(function (header) {
+                    return { text: header, style: 'tableHeader' };
+                })
+            ];
+            bodyRows.forEach(function (row) {
+                tableBody.push(row.map(function (cell) {
+                    return { text: cell, style: 'tableCell' };
+                }));
+            });
+            const doc = {
+                pageSize: 'A4',
+                pageOrientation: 'portrait',
+                pageMargins: [24, 48, 24, 32],
+                content: [
+                    {
+                        text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                        style: 'title',
+                        margin: [0, 0, 0, 4]
+                    },
+                    ...exportMeta.lines.map(function (line) {
+                        return { text: line, style: 'subtitle', margin: [0, 0, 0, 2] };
+                    }),
+                    { text: '', margin: [0, 0, 0, 8] },
+                    {
+                        table: {
+                            headerRows: 1,
+                            widths: fleetExportHeaders.map(function () { return '*'; }),
+                            body: tableBody
+                        },
+                        layout: 'lightHorizontalLines'
+                    }
+                ],
+                styles: {
+                    title: { fontSize: 14, bold: true },
+                    subtitle: { fontSize: 9, color: '#5e5873' },
+                    tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
+                    tableCell: { fontSize: 7 }
+                },
+                defaultStyle: { fontSize: 8 },
+                footer: function (currentPage, pageCount) {
+                    return {
+                        text: 'Page ' + currentPage + ' of ' + pageCount,
+                        alignment: 'center',
+                        fontSize: 8,
+                        color: '#5e5873',
+                        margin: [0, 8, 0, 0]
+                    };
+                }
+            };
+            pdfMake.createPdf(doc).download(fleetExportFilename('.pdf'));
+        }
+
+        $('#fleetExportCsv').on('click', exportFleetCsv);
+        $('#fleetExportPdf').on('click', exportFleetPdf);
     </script>
 @endsection

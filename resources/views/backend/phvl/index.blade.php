@@ -346,6 +346,22 @@
         </div>
         <div class="cars-filter-panel__body">
             <div class="form-group">
+                <label for="phvlFilterMotStatus">MOT Status</label>
+                <select id="phvlFilterMotStatus" class="form-control">
+                    <option value="">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="done">Done</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="phvlFilterApplicationStatus">Application Status</label>
+                <select id="phvlFilterApplicationStatus" class="form-control">
+                    <option value="">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="applied">Applied</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label>PHVL Appointment</label>
                 <label class="small text-muted mb-25 d-block" for="phvlFilterAppointmentFrom">From</label>
                 <input type="date" id="phvlFilterAppointmentFrom" class="form-control mb-1">
@@ -565,6 +581,8 @@
                         d.type = document.getElementById('phvl-type-filter').value;
                         d.appointment_from = document.getElementById('phvlFilterAppointmentFrom').value;
                         d.appointment_to = document.getElementById('phvlFilterAppointmentTo').value;
+                        d.mot_status = document.getElementById('phvlFilterMotStatus').value;
+                        d.application_status = document.getElementById('phvlFilterApplicationStatus').value;
                     }
                 },
                 columns: [
@@ -708,6 +726,8 @@
             });
 
             $('#phvlFilterReset').on('click', function () {
+                document.getElementById('phvlFilterMotStatus').value = '';
+                document.getElementById('phvlFilterApplicationStatus').value = '';
                 document.getElementById('phvlFilterAppointmentFrom').value = '';
                 document.getElementById('phvlFilterAppointmentTo').value = '';
                 table.ajax.reload();
@@ -989,6 +1009,16 @@
                     : 'All';
 
                 lines.push('Show: ' + typeLabel);
+
+                var motStatusFilter = document.getElementById('phvlFilterMotStatus');
+                if (motStatusFilter && motStatusFilter.value) {
+                    lines.push('MOT status: ' + motStatusFilter.options[motStatusFilter.selectedIndex].text);
+                }
+
+                var applicationStatusFilter = document.getElementById('phvlFilterApplicationStatus');
+                if (applicationStatusFilter && applicationStatusFilter.value) {
+                    lines.push('Application status: ' + applicationStatusFilter.options[applicationStatusFilter.selectedIndex].text);
+                }
 
                 var appointmentFrom = document.getElementById('phvlFilterAppointmentFrom').value;
                 var appointmentTo = document.getElementById('phvlFilterAppointmentTo').value;

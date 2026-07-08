@@ -53,10 +53,18 @@ class PhvlController extends Controller
 
         $appointmentFrom = $request->query('appointment_from');
         $appointmentTo = $request->query('appointment_to');
+        $motStatus = $request->query('mot_status');
+        $applicationStatus = $request->query('application_status');
         if ($appointmentFrom || $appointmentTo) {
             $request->validate([
                 'appointment_from' => 'nullable|date',
                 'appointment_to' => 'nullable|date',
+            ]);
+        }
+        if ($motStatus || $applicationStatus) {
+            $request->validate([
+                'mot_status' => 'nullable|in:pending,done',
+                'application_status' => 'nullable|in:pending,applied',
             ]);
         }
 
@@ -93,6 +101,16 @@ class PhvlController extends Controller
                 if ($appointmentTo && $appt->gt(Carbon::parse($appointmentTo)->endOfDay())) {
                     continue;
                 }
+            }
+
+            $progressMot = $car->phvlProgress?->mot_status ?? 'pending';
+            $progressApplication = $car->phvlProgress?->application_status ?? 'pending';
+
+            if ($motStatus && $progressMot !== $motStatus) {
+                continue;
+            }
+            if ($applicationStatus && $progressApplication !== $applicationStatus) {
+                continue;
             }
 
             $rows[] = $this->formatRow($car);
