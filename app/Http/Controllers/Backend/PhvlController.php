@@ -55,16 +55,18 @@ class PhvlController extends Controller
         $appointmentTo = $request->query('appointment_to');
         $motStatus = $request->query('mot_status');
         $applicationStatus = $request->query('application_status');
+        $appointmentConfirmation = $request->query('appointment_confirmation');
         if ($appointmentFrom || $appointmentTo) {
             $request->validate([
                 'appointment_from' => 'nullable|date',
                 'appointment_to' => 'nullable|date',
             ]);
         }
-        if ($motStatus || $applicationStatus) {
+        if ($motStatus || $applicationStatus || $appointmentConfirmation) {
             $request->validate([
                 'mot_status' => 'nullable|in:pending,done',
                 'application_status' => 'nullable|in:pending,applied',
+                'appointment_confirmation' => 'nullable|in:pending,additional_documents,approved',
             ]);
         }
 
@@ -110,6 +112,15 @@ class PhvlController extends Controller
                 continue;
             }
             if ($applicationStatus && $progressApplication !== $applicationStatus) {
+                continue;
+            }
+
+            $progressAppointmentConfirmation = $car->phvlProgress?->appointment_confirmation ?? 'pending';
+            if ($progressAppointmentConfirmation === 'confirmed') {
+                $progressAppointmentConfirmation = 'approved';
+            }
+
+            if ($appointmentConfirmation && $progressAppointmentConfirmation !== $appointmentConfirmation) {
                 continue;
             }
 

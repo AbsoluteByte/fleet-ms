@@ -157,6 +157,46 @@ class PhvlManagementFleetStatusTest extends TestCase
         $this->assertContains('ELIG001', $registrations);
     }
 
+    public function test_phvl_data_filters_by_appointment_confirmation(): void
+    {
+        $approvedCar = $this->createCar('APPTAPPR', Car::FLEET_STATUS_PREPARATION_FOR_PHVL);
+        $pendingCar = $this->createCar('APPTPEND', Car::FLEET_STATUS_PREPARATION_FOR_PHVL);
+
+        $this->createProgress($approvedCar, ['appointment_confirmation' => 'approved']);
+        $this->createProgress($pendingCar, ['appointment_confirmation' => 'pending']);
+
+        $response = $this->getJson(route('phvl.data', [
+            'type' => 'all',
+            'appointment_confirmation' => 'approved',
+        ]));
+
+        $response->assertOk();
+
+        $registrations = collect($response->json('data'))->pluck('registration')->all();
+
+        $this->assertContains('APPTAPPR', $registrations);
+        $this->assertNotContains('APPTPEND', $registrations);
+        $this->assertNotContains('ELIG001', $registrations);
+    }
+
+    public function test_phvl_data_treats_legacy_confirmed_as_approved_for_appointment_confirmation_filter(): void
+    {
+        $confirmedCar = $this->createCar('APPTCONF', Car::FLEET_STATUS_PREPARATION_FOR_PHVL);
+
+        $this->createProgress($confirmedCar, ['appointment_confirmation' => 'confirmed']);
+
+        $response = $this->getJson(route('phvl.data', [
+            'type' => 'all',
+            'appointment_confirmation' => 'approved',
+        ]));
+
+        $response->assertOk();
+
+        $registrations = collect($response->json('data'))->pluck('registration')->all();
+
+        $this->assertContains('APPTCONF', $registrations);
+    }
+
     private function createCar(string $registration, string $fleetStatus): Car
     {
         return Car::create([

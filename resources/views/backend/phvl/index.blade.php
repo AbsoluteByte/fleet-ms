@@ -362,6 +362,15 @@
                 </select>
             </div>
             <div class="form-group">
+                <label for="phvlFilterAppointmentConfirmation">Appointment Confirmation</label>
+                <select id="phvlFilterAppointmentConfirmation" class="form-control">
+                    <option value="">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="additional_documents">Additional Documents required</option>
+                    <option value="approved">Approved</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label>PHVL Appointment</label>
                 <label class="small text-muted mb-25 d-block" for="phvlFilterAppointmentFrom">From</label>
                 <input type="date" id="phvlFilterAppointmentFrom" class="form-control mb-1">
@@ -583,6 +592,7 @@
                         d.appointment_to = document.getElementById('phvlFilterAppointmentTo').value;
                         d.mot_status = document.getElementById('phvlFilterMotStatus').value;
                         d.application_status = document.getElementById('phvlFilterApplicationStatus').value;
+                        d.appointment_confirmation = document.getElementById('phvlFilterAppointmentConfirmation').value;
                     }
                 },
                 columns: [
@@ -728,6 +738,7 @@
             $('#phvlFilterReset').on('click', function () {
                 document.getElementById('phvlFilterMotStatus').value = '';
                 document.getElementById('phvlFilterApplicationStatus').value = '';
+                document.getElementById('phvlFilterAppointmentConfirmation').value = '';
                 document.getElementById('phvlFilterAppointmentFrom').value = '';
                 document.getElementById('phvlFilterAppointmentTo').value = '';
                 table.ajax.reload();
@@ -1018,6 +1029,11 @@
                 var applicationStatusFilter = document.getElementById('phvlFilterApplicationStatus');
                 if (applicationStatusFilter && applicationStatusFilter.value) {
                     lines.push('Application status: ' + applicationStatusFilter.options[applicationStatusFilter.selectedIndex].text);
+                }
+
+                var appointmentConfirmationFilter = document.getElementById('phvlFilterAppointmentConfirmation');
+                if (appointmentConfirmationFilter && appointmentConfirmationFilter.value) {
+                    lines.push('Appointment confirmation: ' + appointmentConfirmationFilter.options[appointmentConfirmationFilter.selectedIndex].text);
                 }
 
                 var appointmentFrom = document.getElementById('phvlFilterAppointmentFrom').value;
