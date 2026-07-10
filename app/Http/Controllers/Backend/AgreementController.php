@@ -19,6 +19,7 @@ use App\Services\AgreementClientDocumentsService;
 use App\Services\AgreementPdfService;
 use App\Services\CarFleetComplianceService;
 use App\Services\DriverPersistenceService;
+use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
 // Add this
 use Carbon\Carbon;
@@ -1087,6 +1088,8 @@ class AgreementController extends Controller
     private function prepareAgreementPaymentData(array $validated, Request $request, bool $isReplacementVehicle = false): array
     {
         $paymentData = [];
+        $tenant = Auth::user()->currentTenant();
+        $dailyFinancialSheetService = app(DailyFinancialSheetService::class);
 
         if ($isReplacementVehicle && $request->boolean('add_payment')) {
             throw ValidationException::withMessages([
@@ -1104,6 +1107,14 @@ class AgreementController extends Controller
                     throw ValidationException::withMessages([
                         "agreement_payments.{$index}.bank_account_id" => 'Bank account is required for bank transfer payments.',
                     ]);
+                }
+
+                if ($tenant && ! empty($paymentRow['payment_date'])) {
+                    $dailyFinancialSheetService->ensureDateNotApproved(
+                        $tenant->id,
+                        $paymentRow['payment_date'],
+                        "agreement_payments.{$index}.payment_date"
+                    );
                 }
 
                 $paymentData[] = [

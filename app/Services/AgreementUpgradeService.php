@@ -241,7 +241,7 @@ class AgreementUpgradeService
                 $old->id,
                 $new->id
             ),
-        ], true);
+        ], true, [], true);
     }
 
     private function releaseCar(Agreement $agreement): void

@@ -277,6 +277,20 @@
                         <span class="menu-title">Penalties</span>
                     </a>
                 </li>
+                <li class="nav-item {{ Request::is('admin/daily-financial-sheet*') ? 'active' : '' }}">
+                    <a href="{{ route('daily-financial-sheet.index') }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                             stroke-linejoin="round" class="tabler-icon tabler-icon-report-money">
+                            <path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2"></path>
+                            <path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z"></path>
+                            <path d="M14 11h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5"></path>
+                            <path d="M12 17v1"></path>
+                            <path d="M12 10v1"></path>
+                        </svg>
+                        <span class="menu-title">Daily Financial Sheet</span>
+                    </a>
+                </li>
                 <li class="nav-item {{ Request::is('admin/expenses/*') ? 'active' : '' }} {{ Request::is('admin/expenses') ? 'active' : '' }}">
                     <a href="{{ route('expenses.index') }}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"

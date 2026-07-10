@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Payment extends Model
 {
     use HasFactory;
+
+    public const POSTING_STATUS_PENDING = 'pending';
+
+    public const POSTING_STATUS_POSTED = 'posted';
 
     protected $fillable = [
         'payment_no',
@@ -17,11 +22,20 @@ class Payment extends Model
         'payment_date',
         'amount',
         'notes',
+        'posting_status',
+        'created_by',
+        'auto_allocate',
+        'allocation_source_id',
+        'allocation_invoice_types',
+        'pending_manual_allocations',
     ];
 
     protected $casts = [
         'payment_date' => 'date',
         'amount' => 'decimal:2',
+        'auto_allocate' => 'boolean',
+        'allocation_invoice_types' => 'array',
+        'pending_manual_allocations' => 'array',
     ];
 
     protected static function booted()
@@ -46,6 +60,36 @@ class Payment extends Model
     public function allocations()
     {
         return $this->hasMany(PaymentAllocation::class);
+    }
+
+    public function sourceAgreement()
+    {
+        return $this->belongsTo(Agreement::class, 'allocation_source_id');
+    }
+
+    public function createdByUser()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function scopePosted(Builder $query): Builder
+    {
+        return $query->where('posting_status', self::POSTING_STATUS_POSTED);
+    }
+
+    public function scopePending(Builder $query): Builder
+    {
+        return $query->where('posting_status', self::POSTING_STATUS_PENDING);
+    }
+
+    public function isPending(): bool
+    {
+        return $this->posting_status === self::POSTING_STATUS_PENDING;
+    }
+
+    public function isPosted(): bool
+    {
+        return $this->posting_status === self::POSTING_STATUS_POSTED;
     }
 
     public function getAllocatedAmountAttribute()

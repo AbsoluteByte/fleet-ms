@@ -185,6 +185,12 @@ trait SetupAgreementChangeCarDatabase
             $table->decimal('balance_amount', 12, 2)->default(0);
             $table->string('status')->default('pending');
             $table->text('notes')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->boolean('auto_allocate')->default(true);
+            $table->unsignedBigInteger('allocation_source_id')->nullable();
+            $table->json('allocation_invoice_types')->nullable();
+            $table->json('pending_manual_allocations')->nullable();
             $table->timestamps();
         });
 
@@ -197,6 +203,12 @@ trait SetupAgreementChangeCarDatabase
             $table->date('payment_date')->nullable();
             $table->decimal('amount', 12, 2)->default(0);
             $table->text('notes')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->boolean('auto_allocate')->default(true);
+            $table->unsignedBigInteger('allocation_source_id')->nullable();
+            $table->json('allocation_invoice_types')->nullable();
+            $table->json('pending_manual_allocations')->nullable();
             $table->timestamps();
         });
 

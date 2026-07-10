@@ -46,11 +46,16 @@
                         </div>
                         <div class="col-md-3 mb-1">
                             <div class="payment-summary-card border-primary">
-                                <span>Total Paid</span>
+                                <span>Total Paid (Posted)</span>
                                 <strong>£{{ number_format($summary['total_paid'], 2) }}</strong>
                             </div>
                         </div>
                     </div>
+                    @if(($summary['total_pending'] ?? 0) > 0)
+                        <div class="alert alert-info mt-1">
+                            £{{ number_format($summary['total_pending'], 2) }} pending daily financial sheet approval.
+                        </div>
+                    @endif
 
                     <div class="alert {{ $summary['total_due'] > 0 ? 'alert-warning' : ($creditAmount > 0 ? 'alert-success' : 'alert-info') }} mb-0">
                         @if($summary['total_due'] > 0)
@@ -120,7 +125,12 @@
                                     <tbody>
                                     @forelse($payments as $payment)
                                         <tr>
-                                            <td><strong>{{ $payment->payment_no }}</strong></td>
+                                            <td>
+                                                <strong>{{ $payment->payment_no }}</strong>
+                                                @if($payment->isPending())
+                                                    <span class="badge badge-warning ml-50">Pending approval</span>
+                                                @endif
+                                            </td>
                                             <td>{{ optional($payment->payment_date)->format('d M Y') }}</td>
                                             <td>
                                                 {{ $payment->payment_method }}

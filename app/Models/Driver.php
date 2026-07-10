@@ -230,13 +230,13 @@ class Driver extends Model
 
     public function getTotalPaidAttribute()
     {
-        return (float) $this->payments()->sum('amount');
+        return (float) $this->payments()->posted()->sum('amount');
     }
 
     public function getTotalAllocatedAttribute()
     {
         return (float) PaymentAllocation::whereHas('payment', function ($query) {
-            $query->where('driver_id', $this->id);
+            $query->where('driver_id', $this->id)->posted();
         })->sum('allocated_amount');
     }
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\Driver;
 use App\Models\Payment;
+use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -117,7 +118,7 @@ class PaymentController extends Controller
         return view($this->dir.'create', compact('model', 'drivers', 'selectedDriver', 'openInvoices', 'bankAccounts'));
     }
 
-    public function store(Request $request, PaymentAllocationService $paymentAllocationService)
+    public function store(Request $request, PaymentAllocationService $paymentAllocationService, DailyFinancialSheetService $dailyFinancialSheetService)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -148,6 +149,8 @@ class PaymentController extends Controller
         $driver = Driver::where('tenant_id', $tenant->id)->findOrFail($validated['driver_id']);
         $autoManageInvoices = $request->boolean('auto_manage_invoices', true);
 
+        $dailyFinancialSheetService->ensureDateNotApproved($tenant->id, $validated['payment_date']);
+
         $payment = $paymentAllocationService->createPayment(
             $driver,
             [
@@ -164,7 +167,7 @@ class PaymentController extends Controller
         );
 
         return redirect()->route('payments.driver', $payment->driver_id)
-            ->with('success', 'Payment added successfully.');
+            ->with('success', 'Payment recorded. It will apply to invoices after daily financial sheet approval.');
     }
 
     public function show(Payment $payment)
@@ -235,10 +238,13 @@ class PaymentController extends Controller
 
     private function driverSummary(Driver $driver): array
     {
+        $postedPayments = $driver->payments()->posted();
+
         return [
             'total_invoiced' => (float) $driver->invoices()->sum('total_amount'),
-            'total_paid' => (float) $driver->payments()->sum('amount'),
-            'total_allocated' => (float) $driver->payments()
+            'total_paid' => (float) $postedPayments->sum('amount'),
+            'total_pending' => (float) $driver->payments()->pending()->sum('amount'),
+            'total_allocated' => (float) $postedPayments
                 ->join('payment_allocations', 'payments.id', '=', 'payment_allocations.payment_id')
                 ->sum('payment_allocations.allocated_amount'),
             'total_due' => (float) $driver->activeInvoices()->sum('balance_amount'),

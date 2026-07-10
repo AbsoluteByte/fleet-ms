@@ -91,6 +91,7 @@ class PaymentBankAccountTest extends TestCase
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('daily_financial_sheets');
         Schema::dropIfExists('payments');
         Schema::dropIfExists('bank_accounts');
         Schema::dropIfExists('drivers');
@@ -222,6 +223,12 @@ class PaymentBankAccountTest extends TestCase
             $table->date('payment_date')->nullable();
             $table->decimal('amount', 12, 2)->default(0);
             $table->text('notes')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->boolean('auto_allocate')->default(true);
+            $table->unsignedBigInteger('allocation_source_id')->nullable();
+            $table->json('allocation_invoice_types')->nullable();
+            $table->json('pending_manual_allocations')->nullable();
             $table->timestamps();
         });
 
@@ -234,6 +241,21 @@ class PaymentBankAccountTest extends TestCase
             $table->decimal('total_amount', 12, 2)->default(0);
             $table->date('invoice_date')->nullable();
             $table->date('due_date')->nullable();
+            $table->timestamps();
+        });
+
+
+        Schema::create('daily_financial_sheets', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->date('sheet_date');
+            $table->string('status', 20)->default('open');
+            $table->decimal('cash_in', 12, 2)->nullable();
+            $table->decimal('cash_out', 12, 2)->nullable();
+            $table->json('bank_in_json')->nullable();
+            $table->text('approval_notes')->nullable();
+            $table->foreignId('approved_by')->nullable();
+            $table->timestamp('approved_at')->nullable();
             $table->timestamps();
         });
 

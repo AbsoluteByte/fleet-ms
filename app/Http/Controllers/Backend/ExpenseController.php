@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Expense;
 use App\Models\Car;
+use App\Services\DailyFinancialSheetService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -50,7 +51,7 @@ class ExpenseController extends Controller
     }
 
 
-    public function store(Request $request)
+    public function store(Request $request, DailyFinancialSheetService $dailyFinancialSheetService)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -84,12 +85,15 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-        // ✅ Add tenant_id automatically
+        $dailyFinancialSheetService->ensureExpenseDateNotApproved($tenant->id, $validated['date']);
+
         $validated['tenant_id'] = $tenant->id;
+        $validated['posting_status'] = Expense::POSTING_STATUS_PENDING;
+        $validated['created_by'] = Auth::id();
         Expense::create($validated);
 
         return redirect()->route('expenses.index')
-            ->with('success', 'Expense created successfully.');
+            ->with('success', 'Expense recorded. It will appear on the daily financial sheet until approval.');
     }
 
     public function show(Expense $expense)
@@ -120,7 +124,7 @@ class ExpenseController extends Controller
         return view($this->dir . 'edit', compact('model', 'cars'));
     }
 
-    public function update(Request $request, Expense $expense)
+    public function update(Request $request, Expense $expense, DailyFinancialSheetService $dailyFinancialSheetService)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -161,7 +165,8 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-        // ✅ Ensure tenant_id stays the same
+        $dailyFinancialSheetService->ensureExpenseDateNotApproved($tenant->id, $validated['date']);
+
         $validated['tenant_id'] = $tenant->id;
         $expense->update($validated);
 
