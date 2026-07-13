@@ -156,6 +156,15 @@ class Agreement extends Model
         return strcasecmp((string) optional($this->status)->name, 'Replacement Vehicle') === 0;
     }
 
+    public function effectiveCloseDate(): ?Carbon
+    {
+        if ($this->closing_date) {
+            return $this->closing_date->copy();
+        }
+
+        return $this->end_date?->copy();
+    }
+
     public function previousVehicleRegistration(): ?string
     {
         if ($this->isReplacementVehicle()) {
