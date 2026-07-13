@@ -35,3 +35,4 @@
 <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/style.css') }}">
 <!-- END: Custom CSS-->--}}
 <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/custom.css') }}?v=20260626">
+<h1>test</h1>
