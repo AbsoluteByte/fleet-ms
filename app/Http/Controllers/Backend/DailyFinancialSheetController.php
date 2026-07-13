@@ -68,6 +68,7 @@ class DailyFinancialSheetController extends Controller
                 'cash_out' => (float) $sheet->cash_out,
                 'net_cash' => round((float) $sheet->cash_in - (float) $sheet->cash_out, 2),
                 'bank_in' => $sheet->bank_in_json ?? [],
+                'bank_out' => $sheet->bank_out_json ?? [],
             ]
             : $service->computeTotals($entries, pendingOnly: true);
         $canApprove = $this->canApprove() && ! $isApproved && $entries->where('posting_status', 'pending')->isNotEmpty();

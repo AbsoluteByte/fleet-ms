@@ -9,6 +9,7 @@ use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\Company;
+use App\Models\DepositRefund;
 use App\Models\Driver;
 use App\Models\Invoice;
 use App\Models\Status;
@@ -62,11 +63,13 @@ class AgreementController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status', 'parentAgreement'])
+        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status', 'parentAgreement', 'depositRefund'])
             ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
             ->get();
 
-        return view($this->dir.'index', compact('agreements'));
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+
+        return view($this->dir.'index', compact('agreements', 'bankAccounts'));
     }
 
     public function create(Request $request)
@@ -242,7 +245,7 @@ class AgreementController extends Controller
         $agreement->load([
             'company', 'driver', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
             'status', 'insuranceProvider', 'terminationRecordedBy', 'parentAgreement.car', 'parentAgreement.driver',
-            'upgradedFromAgreement.car', 'upgradedToAgreement.car',
+            'upgradedFromAgreement.car', 'upgradedToAgreement.car', 'depositRefund',
             'collections' => function ($query) {
                 $query->orderBy('due_date');
             },
@@ -254,8 +257,71 @@ class AgreementController extends Controller
         $upgradeService = app(AgreementUpgradeService::class);
         $canUpgradeCar = $upgradeService->canUpgrade($agreement);
         $upgradePreview = $canUpgradeCar ? $upgradeService->upgradePreview($agreement) : null;
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view($this->dir.'show', compact('agreement', 'canUpgradeCar', 'upgradePreview'));
+        return view($this->dir.'show', compact('agreement', 'canUpgradeCar', 'upgradePreview', 'bankAccounts'));
+    }
+
+    public function refundDeposit(Request $request, Agreement $agreement, DailyFinancialSheetService $dailyFinancialSheetService)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this agreement');
+        }
+
+        $agreement->load(['status', 'depositRefund', 'driver']);
+
+        if (! $agreement->isClosedForDepositRefund()) {
+            throw ValidationException::withMessages([
+                'agreement' => 'Deposit can only be refunded for expired or terminated agreements.',
+            ]);
+        }
+
+        if ((float) $agreement->deposit_amount <= 0) {
+            throw ValidationException::withMessages([
+                'agreement' => 'This agreement has no deposit to refund.',
+            ]);
+        }
+
+        if ($agreement->depositRefund) {
+            throw ValidationException::withMessages([
+                'agreement' => $agreement->depositRefund->isPending()
+                    ? 'A deposit refund is already pending daily financial sheet approval.'
+                    : 'Deposit has already been refunded for this agreement.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'payment_method' => 'required|string|max:255',
+            'bank_account_id' => [
+                'nullable',
+                'required_if:payment_method,Bank Transfer',
+                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
+            'refund_date' => 'required|date',
+            'notes' => 'nullable|string|max:5000',
+        ]);
+
+        $dailyFinancialSheetService->ensureDateNotApproved($tenant->id, $validated['refund_date'], 'refund_date');
+
+        DepositRefund::query()->create([
+            'tenant_id' => $tenant->id,
+            'agreement_id' => $agreement->id,
+            'driver_id' => $agreement->driver_id,
+            'amount' => round((float) $agreement->deposit_amount, 2),
+            'payment_method' => $validated['payment_method'],
+            'bank_account_id' => ($validated['payment_method'] ?? '') === 'Bank Transfer'
+                ? ($validated['bank_account_id'] ?? null)
+                : null,
+            'refund_date' => $validated['refund_date'],
+            'posting_status' => DepositRefund::POSTING_STATUS_PENDING,
+            'created_by' => Auth::id(),
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return redirect()->back()
+            ->with('success', 'Deposit refund recorded. It will appear on the daily financial sheet until approval.');
     }
 
     public function upgradeCars(Agreement $agreement)

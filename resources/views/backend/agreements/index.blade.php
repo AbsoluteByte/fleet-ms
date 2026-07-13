@@ -91,6 +91,40 @@
                                                        class="btn btn-sm btn-outline-warning">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
+                                                    @php
+                                                        $refundStatus = $agreement->depositRefundStatus();
+                                                        $showRefundBtn = $agreement->isClosedForDepositRefund() && (float) $agreement->deposit_amount > 0;
+                                                    @endphp
+                                                    @if($showRefundBtn)
+                                                        @if($refundStatus === 'pending')
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-secondary"
+                                                                    disabled
+                                                                    style="opacity: .45;"
+                                                                    title="Deposit refund pending daily financial sheet approval">
+                                                                <i class="fa fa-undo"></i>
+                                                            </button>
+                                                        @elseif($refundStatus === 'posted')
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-secondary"
+                                                                    disabled
+                                                                    style="opacity: .45;"
+                                                                    title="Deposit already refunded">
+                                                                <i class="fa fa-undo"></i>
+                                                            </button>
+                                                        @else
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-success"
+                                                                    data-toggle="modal"
+                                                                    data-target="#refundDepositModal"
+                                                                    data-refund-deposit-btn
+                                                                    data-action="{{ route('agreements.refund-deposit', $agreement) }}"
+                                                                    data-amount="{{ number_format((float) $agreement->deposit_amount, 2, '.', '') }}"
+                                                                    title="Refund Deposit">
+                                                                <i class="fa fa-undo"></i>
+                                                            </button>
+                                                        @endif
+                                                    @endif
                                                     <a href="{{ route('agreements.pdf', $agreement) }}"
                                                        class="btn btn-sm btn-outline-danger" target="_blank"
                                                        title="Generate PDF">
@@ -127,6 +161,8 @@
             </div>
         </div>
     </section>
+
+    @include('backend.agreements.partials.refund-deposit-modal', ['bankAccounts' => $bankAccounts ?? collect()])
 @endsection
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">

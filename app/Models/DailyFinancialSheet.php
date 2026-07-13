@@ -18,6 +18,7 @@ class DailyFinancialSheet extends Model
         'cash_in',
         'cash_out',
         'bank_in_json',
+        'bank_out_json',
         'approval_notes',
         'approved_by',
         'approved_at',
@@ -28,6 +29,7 @@ class DailyFinancialSheet extends Model
         'cash_in' => 'decimal:2',
         'cash_out' => 'decimal:2',
         'bank_in_json' => 'array',
+        'bank_out_json' => 'array',
         'approved_at' => 'datetime',
     ];
 

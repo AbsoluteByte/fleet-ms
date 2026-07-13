@@ -84,6 +84,43 @@ class Agreement extends Model
         return $this->belongsTo(Status::class);
     }
 
+    public function depositRefund()
+    {
+        return $this->hasOne(DepositRefund::class);
+    }
+
+    public function isClosedForDepositRefund(): bool
+    {
+        $name = strtolower((string) optional($this->status)->name);
+
+        return in_array($name, ['expired', 'terminated'], true);
+    }
+
+    public function canRequestDepositRefund(): bool
+    {
+        return $this->isClosedForDepositRefund()
+            && (float) $this->deposit_amount > 0
+            && ! $this->depositRefund()->exists();
+    }
+
+    /**
+     * @return null|'pending'|'posted'
+     */
+    public function depositRefundStatus(): ?string
+    {
+        $refund = $this->relationLoaded('depositRefund')
+            ? $this->depositRefund
+            : $this->depositRefund()->first();
+
+        if (! $refund) {
+            return null;
+        }
+
+        return $refund->isPosted()
+            ? DepositRefund::POSTING_STATUS_POSTED
+            : DepositRefund::POSTING_STATUS_PENDING;
+    }
+
     public function parentAgreement()
     {
         return $this->belongsTo(self::class, 'parent_agreement_id');

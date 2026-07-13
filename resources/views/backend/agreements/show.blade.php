@@ -49,6 +49,35 @@
                     Change Car
                 </button>
             @endif
+            @php
+                $refundStatus = $agreement->depositRefundStatus();
+                $showRefundBtn = $agreement->isClosedForDepositRefund() && (float) $agreement->deposit_amount > 0;
+            @endphp
+            @if($showRefundBtn)
+                @if($refundStatus === 'pending')
+                    <button type="button" class="btn btn-outline-secondary" disabled style="opacity: .45;"
+                            title="Deposit refund pending daily financial sheet approval">
+                        <i class="fa fa-undo me-2"></i>
+                        Refund Deposit
+                    </button>
+                @elseif($refundStatus === 'posted')
+                    <button type="button" class="btn btn-outline-secondary" disabled style="opacity: .45;"
+                            title="Deposit already refunded">
+                        <i class="fa fa-undo me-2"></i>
+                        Refund Deposit
+                    </button>
+                @else
+                    <button type="button" class="btn btn-outline-success"
+                            data-toggle="modal"
+                            data-target="#refundDepositModal"
+                            data-refund-deposit-btn
+                            data-action="{{ route('agreements.refund-deposit', $agreement) }}"
+                            data-amount="{{ number_format((float) $agreement->deposit_amount, 2, '.', '') }}">
+                        <i class="fa fa-undo me-2"></i>
+                        Refund Deposit
+                    </button>
+                @endif
+            @endif
             <a href="{{ route('agreements.edit', $agreement) }}" class="btn btn-warning">
                 <i class="fa fa-edit me-2"></i>
                 Edit
@@ -667,6 +696,8 @@
             </div>
         </div>
     </div>
+
+    @include('backend.agreements.partials.refund-deposit-modal', ['bankAccounts' => $bankAccounts ?? collect()])
 @endsection
 
 @section('js')

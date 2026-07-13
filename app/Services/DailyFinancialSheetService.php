@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DailyFinancialSheet;
+use App\Models\DepositRefund;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -61,8 +62,15 @@ class DailyFinancialSheetService
             ->pluck('date')
             ->map(fn ($date) => Carbon::parse($date)->toDateString());
 
+        $refundDates = DepositRefund::query()
+            ->pending()
+            ->where('tenant_id', $tenantId)
+            ->pluck('refund_date')
+            ->map(fn ($date) => Carbon::parse($date)->toDateString());
+
         return $paymentDates
             ->merge($expenseDates)
+            ->merge($refundDates)
             ->unique()
             ->sort()
             ->values()
@@ -102,15 +110,23 @@ class DailyFinancialSheetService
             ->get()
             ->map(fn (Expense $expense) => $this->formatExpenseEntry($expense));
 
-        return $payments
+        $refunds = DepositRefund::query()
+            ->with(['driver', 'bankAccount', 'createdByUser', 'agreement.car'])
+            ->where('tenant_id', $tenantId)
+            ->whereDate('refund_date', $date)
+            ->get()
+            ->map(fn (DepositRefund $refund) => $this->formatDepositRefundEntry($refund));
+
+        return collect($payments)
             ->merge($expenses)
+            ->merge($refunds)
             ->sortBy('sort_at')
             ->values();
     }
 
     /**
      * @param  Collection<int, array<string, mixed>>  $entries
-     * @return array{cash_in: float, cash_out: float, net_cash: float, bank_in: array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>}
+     * @return array{cash_in: float, cash_out: float, net_cash: float, bank_in: array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>, bank_out: array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>}
      */
     public function computeTotals(Collection $entries, bool $pendingOnly = false): array
     {
@@ -125,6 +141,7 @@ class DailyFinancialSheetService
 
         $cashOut = round((float) $filtered
             ->where('direction', 'out')
+            ->where('payment_method', 'Cash')
             ->sum('amount'), 2);
 
         $bankIn = [];
@@ -141,11 +158,26 @@ class DailyFinancialSheetService
             $bankIn[$key]['total'] = round($bankIn[$key]['total'] + (float) $entry['amount'], 2);
         }
 
+        $bankOut = [];
+        foreach ($filtered->where('direction', 'out')->where('payment_method', 'Bank Transfer') as $entry) {
+            $key = (string) ($entry['bank_account_id'] ?? 'unknown');
+            if (! isset($bankOut[$key])) {
+                $bankOut[$key] = [
+                    'bank_account_id' => $entry['bank_account_id'],
+                    'bank_name' => $entry['bank_name'] ?? 'Bank',
+                    'account_number' => $entry['account_number'] ?? '',
+                    'total' => 0.0,
+                ];
+            }
+            $bankOut[$key]['total'] = round($bankOut[$key]['total'] + (float) $entry['amount'], 2);
+        }
+
         return [
             'cash_in' => $cashIn,
             'cash_out' => $cashOut,
             'net_cash' => round($cashIn - $cashOut, 2),
             'bank_in' => array_values($bankIn),
+            'bank_out' => array_values($bankOut),
         ];
     }
 
@@ -186,6 +218,12 @@ class DailyFinancialSheetService
                 ->whereDate('date', $date)
                 ->update(['posting_status' => Expense::POSTING_STATUS_POSTED]);
 
+            DepositRefund::query()
+                ->pending()
+                ->where('tenant_id', $tenantId)
+                ->whereDate('refund_date', $date)
+                ->update(['posting_status' => DepositRefund::POSTING_STATUS_POSTED]);
+
             return DailyFinancialSheet::query()->updateOrCreate(
                 [
                     'tenant_id' => $tenantId,
@@ -196,6 +234,7 @@ class DailyFinancialSheetService
                     'cash_in' => $totals['cash_in'],
                     'cash_out' => $totals['cash_out'],
                     'bank_in_json' => $totals['bank_in'],
+                    'bank_out_json' => $totals['bank_out'],
                     'approval_notes' => $notes,
                     'approved_by' => $approvedByUserId,
                     'approved_at' => now(),
@@ -344,6 +383,33 @@ class DailyFinancialSheetService
             'account_number' => null,
             'amount' => (float) $expense->amount,
             'posting_status' => $expense->posting_status,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatDepositRefundEntry(DepositRefund $refund): array
+    {
+        $driverName = trim(($refund->driver->first_name ?? '').' '.($refund->driver->last_name ?? ''));
+        $registration = $refund->agreement?->car?->registration;
+
+        return [
+            'id' => 'deposit-refund-'.$refund->id,
+            'sort_at' => $refund->created_at?->timestamp ?? 0,
+            'direction' => 'out',
+            'employee' => $refund->createdByUser?->name ?? '—',
+            'description' => trim($driverName.' — Deposit refund'),
+            'category' => 'Deposit refund',
+            'car_registration' => $registration,
+            'agreement_id' => $refund->agreement_id,
+            'agreement_url' => route('agreements.show', $refund->agreement_id),
+            'payment_method' => $refund->payment_method,
+            'bank_account_id' => $refund->bank_account_id,
+            'bank_name' => $refund->bankAccount?->bank_name,
+            'account_number' => $refund->bankAccount?->account_number,
+            'amount' => (float) $refund->amount,
+            'posting_status' => $refund->posting_status,
         ];
     }
 }

@@ -84,6 +84,7 @@ class DailyFinancialSheetTest extends TestCase
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('deposit_refunds');
         Schema::dropIfExists('agreements');
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
@@ -592,6 +593,21 @@ class DailyFinancialSheetTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('deposit_refunds', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->foreignId('agreement_id')->unique();
+            $table->foreignId('driver_id');
+            $table->decimal('amount', 12, 2);
+            $table->string('payment_method');
+            $table->foreignId('bank_account_id')->nullable();
+            $table->date('refund_date');
+            $table->string('posting_status', 20)->default('pending');
+            $table->foreignId('created_by')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('daily_financial_sheets', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');
@@ -600,6 +616,7 @@ class DailyFinancialSheetTest extends TestCase
             $table->decimal('cash_in', 12, 2)->nullable();
             $table->decimal('cash_out', 12, 2)->nullable();
             $table->json('bank_in_json')->nullable();
+            $table->json('bank_out_json')->nullable();
             $table->text('approval_notes')->nullable();
             $table->foreignId('approved_by')->nullable();
             $table->timestamp('approved_at')->nullable();

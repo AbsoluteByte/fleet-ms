@@ -139,6 +139,8 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::post('drivers/{driver}/resend-invitation', [App\Http\Controllers\Backend\DriverController::class, 'resendInvitation'])->name('drivers.resend-invitation');
 
     Route::resource('agreements', App\Http\Controllers\Backend\AgreementController::class);
+    Route::post('agreements/{agreement}/refund-deposit', [App\Http\Controllers\Backend\AgreementController::class, 'refundDeposit'])
+        ->name('agreements.refund-deposit');
     Route::get('agreements/{agreement}/pdf', [App\Http\Controllers\Backend\AgreementController::class, 'generatePDF'])->name('agreements.pdf');
     Route::get('agreements/{agreement}/pdf/preview', [App\Http\Controllers\Backend\AgreementController::class, 'previewPDF'])->name('agreements.pdf.preview');
     Route::get('agreements/{agreement}/permission-letter', [App\Http\Controllers\Backend\AgreementController::class, 'permissionLetterPDF'])->name('agreements.permission-letter');

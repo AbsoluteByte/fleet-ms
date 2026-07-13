@@ -49,9 +49,20 @@
 
                     @if(!empty($totals['bank_in']))
                         <div class="mb-2">
-                            <h6>Bank breakdown</h6>
+                            <h6>Bank In breakdown</h6>
                             <ul class="mb-0">
                                 @foreach($totals['bank_in'] as $bankRow)
+                                    <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    @if(!empty($totals['bank_out'] ?? []))
+                        <div class="mb-2">
+                            <h6>Bank Out breakdown</h6>
+                            <ul class="mb-0">
+                                @foreach($totals['bank_out'] as $bankRow)
                                     <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>
                                 @endforeach
                             </ul>
