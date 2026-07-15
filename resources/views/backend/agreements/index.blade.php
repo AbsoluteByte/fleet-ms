@@ -42,6 +42,17 @@
                                             $noticeIso = optional($agreement->termination_notice_date)->format('Y-m-d') ?? '';
                                             $closedOnIso = optional($agreement->effectiveCloseDate())->format('Y-m-d') ?? '';
                                             $statusName = (string) optional($agreement->status)->name;
+                                            // Filter labels match the action button:
+                                            // refunded = refund already recorded (grey button)
+                                            // pending  = eligible to refund, not recorded yet (green button)
+                                            $filterRefundStatus = $agreement->depositRefund
+                                                ? 'refunded'
+                                                : (
+                                                    $agreement->isClosedForDepositRefund()
+                                                    && (float) $agreement->deposit_amount > 0
+                                                        ? 'pending'
+                                                        : ''
+                                                );
                                         @endphp
                                         <tr
                                             data-start-date="{{ $startIso }}"
@@ -50,6 +61,7 @@
                                             data-notice-date="{{ $noticeIso }}"
                                             data-closed-on="{{ $closedOnIso }}"
                                             data-status="{{ $statusName }}"
+                                            data-refund-status="{{ $filterRefundStatus }}"
                                         >
                                             <td>{{ $agreement->company->name  }}</td>
                                             <td>
@@ -224,7 +236,16 @@
                         <input type="date" id="agreementsClosedTo" class="form-control agreements-date-filter" data-range="closed" data-bound="to">
                     </div>
                 </div>
-                <small class="text-muted">Expired/Terminated only; uses closing date, else end date.</small>
+                <small class="text-muted">Expired/Terminated only; uses closing date, else end date. If only From is set, To defaults to today.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="agreementsFilterRefundStatus">Refund status</label>
+                <select id="agreementsFilterRefundStatus" class="form-control agreements-advanced-filter" data-filter-key="refundStatus">
+                    <option value="">All</option>
+                    <option value="refunded">Refunded</option>
+                    <option value="pending">Refund Pending</option>
+                </select>
             </div>
 
             <div class="form-group">
@@ -362,6 +383,7 @@
                 closed: { from: '', to: '' },
                 notice: { from: '', to: '' },
                 due: { from: '', to: '' },
+                refundStatus: '',
             };
 
             const dataTable = $('#dataTable').DataTable({
@@ -380,6 +402,17 @@
                 if (parts.length !== 3) return null;
                 const date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
                 return isNaN(date.getTime()) ? null : date;
+            }
+
+            function todayYmd() {
+                const d = new Date();
+                return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            }
+
+            function closedRangeTo(range) {
+                if (range.to) return range.to;
+                if (range.from) return todayYmd();
+                return '';
             }
 
             function dateInRange(iso, fromStr, toStr) {
@@ -420,39 +453,55 @@
                 filters.notice.to = document.getElementById('agreementsNoticeTo').value;
                 filters.due.from = document.getElementById('agreementsDueFrom').value;
                 filters.due.to = document.getElementById('agreementsDueTo').value;
+                filters.refundStatus = document.getElementById('agreementsFilterRefundStatus').value;
             }
 
             function passesFilters(row) {
-                if (filters.status && row.dataset.status !== filters.status) {
+                if (!row) {
+                    return true;
+                }
+
+                var status = row.getAttribute('data-status') || '';
+                var startDate = row.getAttribute('data-start-date') || '';
+                var closedOn = row.getAttribute('data-closed-on') || '';
+                var noticeDate = row.getAttribute('data-notice-date') || '';
+                var endDate = row.getAttribute('data-end-date') || '';
+                var refundStatus = row.getAttribute('data-refund-status') || '';
+
+                if (filters.status && status !== filters.status) {
                     return false;
                 }
 
-                if (!passesDateRange(row.dataset.startDate || '', filters.rented)) {
+                if (!passesDateRange(startDate, filters.rented)) {
                     return false;
                 }
 
                 if (isRangeActive(filters.closed)) {
-                    if (!isClosedStatus(row.dataset.status)) {
+                    if (!isClosedStatus(status)) {
                         return false;
                     }
-                    if (!passesDateRange(row.dataset.closedOn || '', filters.closed)) {
+                    if (!dateInRange(closedOn, filters.closed.from, closedRangeTo(filters.closed))) {
                         return false;
                     }
                 }
 
-                if (filters.hasNotice && !(row.dataset.noticeDate || '')) {
+                if (filters.refundStatus && refundStatus !== filters.refundStatus) {
+                    return false;
+                }
+
+                if (filters.hasNotice && !noticeDate) {
                     return false;
                 }
 
                 if (isRangeActive(filters.notice)) {
-                    if (!passesDateRange(row.dataset.noticeDate || '', filters.notice)) {
+                    if (!passesDateRange(noticeDate, filters.notice)) {
                         return false;
                     }
                 }
 
                 if (isRangeActive(filters.due)) {
-                    const endMatch = dateInRange(row.dataset.endDate || '', filters.due.from, filters.due.to);
-                    const noticeMatch = dateInRange(row.dataset.noticeDate || '', filters.due.from, filters.due.to);
+                    var endMatch = dateInRange(endDate, filters.due.from, filters.due.to);
+                    var noticeMatch = dateInRange(noticeDate, filters.due.from, filters.due.to);
                     if (!endMatch && !noticeMatch) {
                         return false;
                     }
@@ -461,15 +510,13 @@
                 return true;
             }
 
-            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-                if (settings.nTable.id !== 'dataTable') {
+            $.fn.dataTable.ext.search.push(function (settings, searchData, dataIndex) {
+                if (!settings.nTable || settings.nTable.id !== 'dataTable') {
                     return true;
                 }
 
-                const row = dataTable.row(dataIndex).node();
-                if (!row) {
-                    return true;
-                }
+                var aoData = settings.aoData[dataIndex];
+                var row = aoData ? aoData.nTr : null;
 
                 return passesFilters(row);
             });
@@ -487,7 +534,7 @@
                 setFilterPanelOpen(false);
             });
 
-            $('#agreementsFilterStatus, #agreementsHasNotice').on('change', function () {
+            $('#agreementsFilterStatus, #agreementsHasNotice, #agreementsFilterRefundStatus').on('change', function () {
                 syncFiltersFromForm();
                 dataTable.draw();
             });
@@ -499,6 +546,7 @@
 
             $('#agreementsFilterReset').on('click', function () {
                 $('#agreementsFilterStatus').val('');
+                $('#agreementsFilterRefundStatus').val('');
                 $('#agreementsHasNotice').prop('checked', false);
                 $('#agreementsRentedFrom, #agreementsRentedTo, #agreementsClosedFrom, #agreementsClosedTo, #agreementsNoticeFrom, #agreementsNoticeTo, #agreementsDueFrom, #agreementsDueTo').val('');
                 syncFiltersFromForm();

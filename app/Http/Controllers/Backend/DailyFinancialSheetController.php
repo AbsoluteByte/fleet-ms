@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class DailyFinancialSheetController extends Controller
 {
@@ -62,6 +63,10 @@ class DailyFinancialSheetController extends Controller
         $sheet = $service->sheetForDate($tenant->id, $sheetDate);
         $entries = $service->entriesForDate($tenant->id, $sheetDate);
         $isApproved = $sheet?->isApproved() ?? false;
+        $hasPending = $entries->where('posting_status', 'pending')->isNotEmpty();
+        $pendingTotals = $hasPending
+            ? $service->computeTotals($entries, pendingOnly: true)
+            : null;
         $totals = $isApproved && $sheet
             ? [
                 'cash_in' => (float) $sheet->cash_in,
@@ -71,9 +76,18 @@ class DailyFinancialSheetController extends Controller
                 'bank_out' => $sheet->bank_out_json ?? [],
             ]
             : $service->computeTotals($entries, pendingOnly: true);
-        $canApprove = $this->canApprove() && ! $isApproved && $entries->where('posting_status', 'pending')->isNotEmpty();
+        $canApprove = $this->canApprove() && $hasPending;
 
-        return view($this->dir.'show', compact('sheetDate', 'sheet', 'entries', 'totals', 'isApproved', 'canApprove'));
+        return view($this->dir.'show', compact(
+            'sheetDate',
+            'sheet',
+            'entries',
+            'totals',
+            'pendingTotals',
+            'isApproved',
+            'hasPending',
+            'canApprove'
+        ));
     }
 
     public function approve(Request $request, string $date, DailyFinancialSheetService $service)
@@ -89,19 +103,41 @@ class DailyFinancialSheetController extends Controller
 
         $validated = $request->validate([
             'approval_notes' => 'nullable|string|max:5000',
+            'entry_ids' => 'nullable|array',
+            'entry_ids.*' => [
+                'string',
+                'regex:/^(payment|expense|deposit-refund)-\d+$/',
+            ],
+            'approve_mode' => ['nullable', Rule::in(['all', 'selected'])],
         ]);
 
         $sheetDate = Carbon::parse($date)->toDateString();
+        $alreadyHadSheet = $service->isDateApproved($tenant->id, $sheetDate);
+
+        $entryIds = null;
+        if (($validated['approve_mode'] ?? 'all') === 'selected') {
+            $entryIds = $validated['entry_ids'] ?? [];
+            if ($entryIds === []) {
+                return redirect()->route('daily-financial-sheet.show', $sheetDate)
+                    ->withErrors(['entry_ids' => 'Select at least one pending entry to approve.'])
+                    ->withInput();
+            }
+        }
 
         $service->approveSheet(
             $tenant->id,
             $sheetDate,
             (int) Auth::id(),
-            $validated['approval_notes'] ?? null
+            $validated['approval_notes'] ?? null,
+            $entryIds
         );
 
+        $message = $alreadyHadSheet
+            ? 'Selected entries approved and merged into the daily financial sheet.'
+            : 'Daily financial sheet approved. Payments have been posted to invoices.';
+
         return redirect()->route('daily-financial-sheet.show', $sheetDate)
-            ->with('success', 'Daily financial sheet approved. Payments have been posted to invoices.');
+            ->with('success', $message);
     }
 
     private function canApprove(): bool

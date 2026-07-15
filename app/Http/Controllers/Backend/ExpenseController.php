@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Expense;
 use App\Models\Car;
-use App\Services\DailyFinancialSheetService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -34,7 +33,7 @@ class ExpenseController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $expenses = Expense::where('tenant_id', $tenant->id)->with('car')->latest()->paginate(10);
+        $expenses = Expense::where('tenant_id', $tenant->id)->carLinked()->with('car')->latest()->paginate(10);
         return view($this->dir . 'index', compact('expenses'));
     }
 
@@ -51,7 +50,7 @@ class ExpenseController extends Controller
     }
 
 
-    public function store(Request $request, DailyFinancialSheetService $dailyFinancialSheetService)
+    public function store(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -85,8 +84,6 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-        $dailyFinancialSheetService->ensureExpenseDateNotApproved($tenant->id, $validated['date']);
-
         $validated['tenant_id'] = $tenant->id;
         $validated['posting_status'] = Expense::POSTING_STATUS_PENDING;
         $validated['created_by'] = Auth::id();
@@ -124,7 +121,7 @@ class ExpenseController extends Controller
         return view($this->dir . 'edit', compact('model', 'cars'));
     }
 
-    public function update(Request $request, Expense $expense, DailyFinancialSheetService $dailyFinancialSheetService)
+    public function update(Request $request, Expense $expense)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -165,8 +162,6 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-        $dailyFinancialSheetService->ensureExpenseDateNotApproved($tenant->id, $validated['date']);
-
         $validated['tenant_id'] = $tenant->id;
         $expense->update($validated);
 

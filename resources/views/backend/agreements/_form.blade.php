@@ -1409,9 +1409,29 @@
             updateAgreementPaymentLimits();
         }
 
+        @php
+            $agreementBankAccountsForJs = ($bankAccounts ?? collect())->map(function ($account) {
+                return [
+                    'id' => $account->id,
+                    'bank_name' => $account->bank_name,
+                    'account_number' => $account->account_number,
+                ];
+            })->values();
+
+            $defaultCardBankAccountIdForJs = ($bankAccounts ?? collect())
+                ->firstWhere('account_number', \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER);
+            $defaultCardBankAccountIdForJs = $defaultCardBankAccountIdForJs
+                ? $defaultCardBankAccountIdForJs->id
+                : null;
+        @endphp
         const agreementPaymentMethods = @json($agreementPaymentMethods);
-        const agreementBankAccounts = @json(($bankAccounts ?? collect())->map(fn ($account) => ['id' => $account->id, 'bank_name' => $account->bank_name])->values());
+        const agreementBankAccounts = @json($agreementBankAccountsForJs);
+        const defaultCardBankAccountId = @json($defaultCardBankAccountIdForJs);
         const defaultAgreementPaymentDate = @json(now()->toDateString());
+
+        function requiresBankAccount(method) {
+            return method === 'Bank Transfer' || method === 'Card Payment';
+        }
 
         function money(value) {
             return '£' + Number(value || 0).toFixed(2);
@@ -1480,17 +1500,19 @@
             const methodSelect = row.querySelector('[data-payment-method]');
             const bankField = row.querySelector('[data-bank-account-field]');
             const bankSelect = row.querySelector('[data-bank-account-select]');
-            const isBankTransfer = methodSelect && methodSelect.value === 'Bank Transfer';
+            const needsBank = methodSelect && requiresBankAccount(methodSelect.value);
 
             if (bankField) {
-                bankField.classList.toggle('d-none', !isBankTransfer);
+                bankField.classList.toggle('d-none', !needsBank);
             }
 
             if (bankSelect) {
-                bankSelect.required = isBankTransfer && agreementBankAccounts.length > 0;
+                bankSelect.required = needsBank && agreementBankAccounts.length > 0;
 
-                if (!isBankTransfer) {
+                if (!needsBank) {
                     bankSelect.value = '';
+                } else if (methodSelect.value === 'Card Payment' && !bankSelect.value && defaultCardBankAccountId) {
+                    bankSelect.value = String(defaultCardBankAccountId);
                 }
             }
         }

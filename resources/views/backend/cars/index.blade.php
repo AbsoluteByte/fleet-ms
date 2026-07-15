@@ -61,6 +61,7 @@
                                         <th>PHV Council</th>
                                         <th>Insurance Status</th>
                                         <th>Actions</th>
+                                        <th>VIN</th>
                                     </tr>
                                     </thead>
                                     <tbody>
@@ -113,6 +114,10 @@
                                             data-road-tax-missing="{{ $roadTaxExpiryIso === '' ? '1' : '0' }}"
                                             data-phv-expiry="{{ $phvExpiryIso }}"
                                             data-phv-missing="{{ $phvExpiryIso === '' ? '1' : '0' }}"
+                                            data-tracker-installed="{{ $car->tracker_installed ? '1' : '0' }}"
+                                            data-tracker-status="{{ $car->tracker_installed ? ($car->tracker_status ?? '') : '' }}"
+                                            data-dashcam-installed="{{ $car->dashcam_installed ? '1' : '0' }}"
+                                            data-dashcam-status="{{ $car->dashcam_installed ? ($car->dashcam_status ?? '') : '' }}"
                                         >
                                             <td>
                                                 <strong>{{ $car->registration ?: '—' }}</strong>
@@ -173,10 +178,11 @@
                                                     </form>
                                                 </div>
                                             </td>
+                                            <td>{{ $car->vin }}</td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted py-4">
+                                            <td colspan="9" class="text-center text-muted py-4">
                                                 <i class="fa fa-car fa-3x mb-3"></i>
                                                 <br>
                                                 No cars found. <a href="{{ route('cars.create') }}">Add your first car</a>
@@ -275,6 +281,42 @@
                     @foreach($filterColors as $color)
                         <option value="{{ $color }}">{{ $color }}</option>
                     @endforeach
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTrackerInstalled">Tracker</label>
+                <select id="carsFilterTrackerInstalled" class="form-control cars-advanced-filter" data-filter-key="trackerInstalled">
+                    <option value="">All</option>
+                    <option value="1">Installed</option>
+                    <option value="0">Uninstalled</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTrackerStatus">Tracker status</label>
+                <select id="carsFilterTrackerStatus" class="form-control cars-advanced-filter" data-filter-key="trackerStatus">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterDashcamInstalled">Dashcam</label>
+                <select id="carsFilterDashcamInstalled" class="form-control cars-advanced-filter" data-filter-key="dashcamInstalled">
+                    <option value="">All</option>
+                    <option value="1">Installed</option>
+                    <option value="0">Uninstalled</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterDashcamStatus">Dashcam status</label>
+                <select id="carsFilterDashcamStatus" class="form-control cars-advanced-filter" data-filter-key="dashcamStatus">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
                 </select>
             </div>
 
@@ -644,7 +686,11 @@
                 carStatus: '',
                 model: '',
                 color: '',
-                logBook: ''
+                logBook: '',
+                trackerInstalled: '',
+                trackerStatus: '',
+                dashcamInstalled: '',
+                dashcamStatus: ''
             };
             const expiryFilters = {
                 mot: { from: '', to: '', includeMissing: false },
@@ -676,6 +722,9 @@
             const dataTable = $('#dataTable').DataTable({
                 processing: true,
                 responsive: true,
+                columnDefs: [
+                    { targets: -1, visible: false, searchable: true }
+                ],
             });
 
             const $filter = $('#dataTable_filter');
@@ -773,12 +822,34 @@
                     && (!advancedFilters.carStatus || row.dataset.fleetStatus === advancedFilters.carStatus)
                     && (!advancedFilters.model || row.dataset.model === advancedFilters.model)
                     && (!advancedFilters.color || row.dataset.color === advancedFilters.color)
+                    && passesAccessoryFilters(row)
                     && passesLogBookFilter(row)
                     && passesQuickFilter(row)
                     && passesExpiryFilter(row, expiryFilters.mot, 'motExpiry', 'motMissing')
                     && passesExpiryFilter(row, expiryFilters.roadTax, 'roadTaxExpiry', 'roadTaxMissing')
                     && passesExpiryFilter(row, expiryFilters.phv, 'phvExpiry', 'phvMissing');
             });
+
+            function passesAccessoryFilters(row) {
+                if (advancedFilters.trackerInstalled !== ''
+                    && row.dataset.trackerInstalled !== advancedFilters.trackerInstalled) {
+                    return false;
+                }
+                if (advancedFilters.trackerStatus
+                    && row.dataset.trackerStatus !== advancedFilters.trackerStatus) {
+                    return false;
+                }
+                if (advancedFilters.dashcamInstalled !== ''
+                    && row.dataset.dashcamInstalled !== advancedFilters.dashcamInstalled) {
+                    return false;
+                }
+                if (advancedFilters.dashcamStatus
+                    && row.dataset.dashcamStatus !== advancedFilters.dashcamStatus) {
+                    return false;
+                }
+
+                return true;
+            }
 
             function passesLogBookFilter(row) {
                 if (advancedFilters.logBook !== 'awaiting') {
@@ -990,6 +1061,22 @@
 
                 if (advancedFilters.color) {
                     lines.push('Color: ' + advancedFilters.color);
+                }
+
+                if (advancedFilters.trackerInstalled !== '') {
+                    lines.push('Tracker: ' + (advancedFilters.trackerInstalled === '1' ? 'Installed' : 'Uninstalled'));
+                }
+
+                if (advancedFilters.trackerStatus) {
+                    lines.push('Tracker status: ' + (advancedFilters.trackerStatus === 'active' ? 'Active' : 'Inactive'));
+                }
+
+                if (advancedFilters.dashcamInstalled !== '') {
+                    lines.push('Dashcam: ' + (advancedFilters.dashcamInstalled === '1' ? 'Installed' : 'Uninstalled'));
+                }
+
+                if (advancedFilters.dashcamStatus) {
+                    lines.push('Dashcam status: ' + (advancedFilters.dashcamStatus === 'active' ? 'Active' : 'Inactive'));
                 }
 
                 [

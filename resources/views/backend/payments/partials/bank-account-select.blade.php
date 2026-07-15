@@ -21,6 +21,7 @@
             <option value="">Select Bank Account</option>
             @foreach($bankAccounts as $account)
                 <option value="{{ $account->id }}"
+                    data-account-number="{{ $account->account_number }}"
                     {{ (string) ($selectedValue ?? '') === (string) $account->id ? 'selected' : '' }}>
                     {{ $account->bank_name }}
                 </option>

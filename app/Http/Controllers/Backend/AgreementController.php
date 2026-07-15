@@ -12,6 +12,7 @@ use App\Models\Company;
 use App\Models\DepositRefund;
 use App\Models\Driver;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Services\AgreementInvoiceService;
@@ -20,7 +21,6 @@ use App\Services\AgreementClientDocumentsService;
 use App\Services\AgreementPdfService;
 use App\Services\CarFleetComplianceService;
 use App\Services\DriverPersistenceService;
-use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
 // Add this
 use Carbon\Carbon;
@@ -262,8 +262,11 @@ class AgreementController extends Controller
         return view($this->dir.'show', compact('agreement', 'canUpgradeCar', 'upgradePreview', 'bankAccounts'));
     }
 
-    public function refundDeposit(Request $request, Agreement $agreement, DailyFinancialSheetService $dailyFinancialSheetService)
-    {
+    public function refundDeposit(
+        Request $request,
+        Agreement $agreement,
+        PaymentAllocationService $paymentAllocationService
+    ) {
         $tenant = Auth::user()->currentTenant();
 
         if (! $tenant || $agreement->tenant_id !== $tenant->id) {
@@ -278,7 +281,9 @@ class AgreementController extends Controller
             ]);
         }
 
-        if ((float) $agreement->deposit_amount <= 0) {
+        $depositAmount = round((float) $agreement->deposit_amount, 2);
+
+        if ($depositAmount <= 0) {
             throw ValidationException::withMessages([
                 'agreement' => 'This agreement has no deposit to refund.',
             ]);
@@ -293,32 +298,74 @@ class AgreementController extends Controller
         }
 
         $validated = $request->validate([
+            'amount' => 'required|numeric|min:0.01|lte:'.$depositAmount,
             'payment_method' => 'required|string|max:255',
             'bank_account_id' => [
                 'nullable',
-                'required_if:payment_method,Bank Transfer',
+                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
                 Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
             ],
             'refund_date' => 'required|date',
             'notes' => 'nullable|string|max:5000',
         ]);
 
-        $dailyFinancialSheetService->ensureDateNotApproved($tenant->id, $validated['refund_date'], 'refund_date');
+        $refundAmount = round((float) $validated['amount'], 2);
+        $paymentMethod = $validated['payment_method'];
+        $bankAccountId = Payment::bankAccountIdForMethod(
+            $paymentMethod,
+            $validated['bank_account_id'] ?? null
+        );
 
-        DepositRefund::query()->create([
-            'tenant_id' => $tenant->id,
-            'agreement_id' => $agreement->id,
-            'driver_id' => $agreement->driver_id,
-            'amount' => round((float) $agreement->deposit_amount, 2),
-            'payment_method' => $validated['payment_method'],
-            'bank_account_id' => ($validated['payment_method'] ?? '') === 'Bank Transfer'
-                ? ($validated['bank_account_id'] ?? null)
-                : null,
-            'refund_date' => $validated['refund_date'],
-            'posting_status' => DepositRefund::POSTING_STATUS_PENDING,
-            'created_by' => Auth::id(),
-            'notes' => $validated['notes'] ?? null,
-        ]);
+        DB::transaction(function () use (
+            $agreement,
+            $tenant,
+            $refundAmount,
+            $paymentMethod,
+            $bankAccountId,
+            $validated,
+            $paymentAllocationService
+        ) {
+            $isDriverCredit = $paymentMethod === 'Driver Credit';
+
+            DepositRefund::query()->create([
+                'tenant_id' => $tenant->id,
+                'agreement_id' => $agreement->id,
+                'driver_id' => $agreement->driver_id,
+                'amount' => $refundAmount,
+                'payment_method' => $paymentMethod,
+                'bank_account_id' => $bankAccountId,
+                'refund_date' => $validated['refund_date'],
+                // Driver Credit posts immediately (matching the credit payment); cash/bank wait for DFS.
+                'posting_status' => $isDriverCredit
+                    ? DepositRefund::POSTING_STATUS_POSTED
+                    : DepositRefund::POSTING_STATUS_PENDING,
+                'created_by' => Auth::id(),
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            if ($isDriverCredit && $agreement->driver) {
+                $notes = trim((string) ($validated['notes'] ?? ''));
+                $creditNotes = sprintf(
+                    'Deposit credit from agreement #%d retained for future invoices.',
+                    $agreement->id
+                );
+                if ($notes !== '') {
+                    $creditNotes .= ' '.$notes;
+                }
+
+                $paymentAllocationService->createPayment($agreement->driver, [
+                    'payment_method' => 'Driver Credit',
+                    'payment_date' => $validated['refund_date'],
+                    'amount' => $refundAmount,
+                    'notes' => $creditNotes,
+                ], true, [], true);
+            }
+        });
+
+        if ($paymentMethod === 'Driver Credit') {
+            return redirect()->back()
+                ->with('success', 'Deposit credited to the driver account and marked as refunded.');
+        }
 
         return redirect()->back()
             ->with('success', 'Deposit refund recorded. It will appear on the daily financial sheet until approval.');
@@ -1155,7 +1202,6 @@ class AgreementController extends Controller
     {
         $paymentData = [];
         $tenant = Auth::user()->currentTenant();
-        $dailyFinancialSheetService = app(DailyFinancialSheetService::class);
 
         if ($isReplacementVehicle && $request->boolean('add_payment')) {
             throw ValidationException::withMessages([
@@ -1169,25 +1215,19 @@ class AgreementController extends Controller
                     continue;
                 }
 
-                if (($paymentRow['payment_method'] ?? '') === 'Bank Transfer' && empty($paymentRow['bank_account_id'])) {
+                $rowMethod = $paymentRow['payment_method'] ?? '';
+                if (Payment::requiresBankAccount($rowMethod) && empty($paymentRow['bank_account_id'])) {
                     throw ValidationException::withMessages([
-                        "agreement_payments.{$index}.bank_account_id" => 'Bank account is required for bank transfer payments.',
+                        "agreement_payments.{$index}.bank_account_id" => 'Bank account is required for bank transfer and card payments.',
                     ]);
-                }
-
-                if ($tenant && ! empty($paymentRow['payment_date'])) {
-                    $dailyFinancialSheetService->ensureDateNotApproved(
-                        $tenant->id,
-                        $paymentRow['payment_date'],
-                        "agreement_payments.{$index}.payment_date"
-                    );
                 }
 
                 $paymentData[] = [
                     'payment_method' => $paymentRow['payment_method'] ?? null,
-                    'bank_account_id' => ($paymentRow['payment_method'] ?? '') === 'Bank Transfer'
-                        ? ($paymentRow['bank_account_id'] ?? null)
-                        : null,
+                    'bank_account_id' => Payment::bankAccountIdForMethod(
+                        $rowMethod,
+                        $paymentRow['bank_account_id'] ?? null
+                    ),
                     'payment_date' => $paymentRow['payment_date'] ?? null,
                     'amount' => round((float) $paymentRow['amount'], 2),
                     'notes' => $paymentRow['notes'] ?? null,

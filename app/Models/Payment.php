@@ -14,6 +14,23 @@ class Payment extends Model
 
     public const POSTING_STATUS_POSTED = 'posted';
 
+    /** @var list<string> */
+    public const METHODS_REQUIRING_BANK_ACCOUNT = ['Bank Transfer', 'Card Payment'];
+
+    public static function requiresBankAccount(?string $paymentMethod): bool
+    {
+        return in_array($paymentMethod, self::METHODS_REQUIRING_BANK_ACCOUNT, true);
+    }
+
+    public static function bankAccountIdForMethod(?string $paymentMethod, mixed $bankAccountId): ?int
+    {
+        if (! self::requiresBankAccount($paymentMethod) || $bankAccountId === null || $bankAccountId === '') {
+            return null;
+        }
+
+        return (int) $bankAccountId;
+    }
+
     protected $fillable = [
         'payment_no',
         'driver_id',

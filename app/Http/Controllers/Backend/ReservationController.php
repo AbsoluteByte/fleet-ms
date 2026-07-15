@@ -8,6 +8,7 @@ use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\Driver;
+use App\Models\Payment;
 use App\Services\DriverPersistenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -317,7 +318,7 @@ class ReservationController extends Controller
             ],
             'bank_account_id' => [
                 'nullable',
-                Rule::requiredIf(fn () => $request->input('payment_method') === 'Bank Transfer'
+                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))
                     && (float) $request->input('amount_paid', 0) > 0),
                 Rule::exists('bank_accounts', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
             ],
@@ -439,9 +440,10 @@ class ReservationController extends Controller
 
         return [
             'payment_method' => $paymentMethod,
-            'bank_account_id' => $paymentMethod === 'Bank Transfer'
-                ? ($validated['bank_account_id'] ?? null)
-                : null,
+            'bank_account_id' => Payment::bankAccountIdForMethod(
+                $paymentMethod,
+                $validated['bank_account_id'] ?? null
+            ),
         ];
     }
 

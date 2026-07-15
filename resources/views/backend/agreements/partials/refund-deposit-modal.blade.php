@@ -1,8 +1,11 @@
 @php
     $bankAccounts = $bankAccounts ?? collect();
+    $defaultCardBankAccountId = $defaultCardBankAccountId
+        ?? $bankAccounts->firstWhere('account_number', \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER)?->id;
 @endphp
 
-<div class="modal fade" id="refundDepositModal" tabindex="-1" role="dialog" aria-labelledby="refundDepositModalLabel" aria-hidden="true">
+<div class="modal fade" id="refundDepositModal" tabindex="-1" role="dialog" aria-labelledby="refundDepositModalLabel" aria-hidden="true"
+     data-default-card-bank-id="{{ $defaultCardBankAccountId ?? '' }}">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <form method="POST" id="refundDepositForm" action="">
@@ -15,9 +18,10 @@
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Amount</label>
-                        <input type="text" class="form-control" id="refundDepositAmountDisplay" value="" readonly>
-                        <input type="hidden" name="amount" id="refundDepositAmount" value="">
+                        <label for="refundDepositAmount">Amount <span class="text-danger">*</span></label>
+                        <input type="number" name="amount" id="refundDepositAmount" class="form-control"
+                               min="0.01" step="0.01" required value="{{ old('amount') }}">
+                        <small class="text-muted">Full deposit prefilled — you can reduce for deductions.</small>
                     </div>
                     <div class="form-group">
                         <label for="refund_date">Refund Date <span class="text-danger">*</span></label>
@@ -33,6 +37,7 @@
                             <option value="Cheque" {{ old('payment_method') === 'Cheque' ? 'selected' : '' }}>Cheque</option>
                             <option value="Card Payment" {{ old('payment_method') === 'Card Payment' ? 'selected' : '' }}>Card Payment</option>
                             <option value="Direct Debit" {{ old('payment_method') === 'Direct Debit' ? 'selected' : '' }}>Direct Debit</option>
+                            <option value="Driver Credit" {{ old('payment_method') === 'Driver Credit' ? 'selected' : '' }}>Add to driver account</option>
                         </select>
                     </div>
                     @include('backend.payments.partials.bank-account-select', [
@@ -68,20 +73,36 @@
 
         var form = document.getElementById('refundDepositForm');
         var methodSelect = document.getElementById('refund_payment_method');
-        var amountDisplay = document.getElementById('refundDepositAmountDisplay');
         var amountInput = document.getElementById('refundDepositAmount');
         var bankField = modal.querySelector('[data-bank-account-field]');
         var bankSelect = modal.querySelector('[data-bank-account-select]');
+        var defaultCardBankId = modal.getAttribute('data-default-card-bank-id') || '';
+        var hasBankAccounts = !!(bankSelect && bankSelect.options.length > 1);
+
+        function requiresBankAccount(method) {
+            return method === 'Bank Transfer' || method === 'Card Payment';
+        }
+
+        function applyDefaultCardBank() {
+            if (!bankSelect || !defaultCardBankId) {
+                return;
+            }
+            if (methodSelect && methodSelect.value === 'Card Payment' && !bankSelect.value) {
+                bankSelect.value = defaultCardBankId;
+            }
+        }
 
         function toggleBankAccount() {
-            var isBank = methodSelect && methodSelect.value === 'Bank Transfer';
+            var needsBank = methodSelect && requiresBankAccount(methodSelect.value);
             if (bankField) {
-                bankField.classList.toggle('d-none', !isBank);
+                bankField.classList.toggle('d-none', !needsBank);
             }
             if (bankSelect) {
-                bankSelect.required = !!isBank;
-                if (!isBank) {
+                bankSelect.required = !!needsBank && hasBankAccounts;
+                if (!needsBank) {
                     bankSelect.value = '';
+                } else {
+                    applyDefaultCardBank();
                 }
             }
         }
@@ -98,8 +119,8 @@
                 }
                 form.action = btn.getAttribute('data-action');
                 var amount = btn.getAttribute('data-amount') || '0';
-                amountInput.value = amount;
-                amountDisplay.value = '£' + parseFloat(amount).toFixed(2);
+                amountInput.value = parseFloat(amount).toFixed(2);
+                amountInput.max = parseFloat(amount).toFixed(2);
             });
         });
     });

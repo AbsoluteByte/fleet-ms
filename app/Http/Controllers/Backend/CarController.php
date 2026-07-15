@@ -133,6 +133,12 @@ class CarController extends Controller
             'logbook_notes' => 'nullable|string',
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'tracker_installed' => 'nullable|boolean',
+            'tracker_status' => 'nullable|in:active,inactive',
+            'tracker_notes' => 'nullable|string',
+            'dashcam_installed' => 'nullable|boolean',
+            'dashcam_status' => 'nullable|in:active,inactive',
+            'dashcam_notes' => 'nullable|string',
             'available_from_date' => 'nullable|date',
             'reserve_car' => 'nullable|boolean',
             'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
@@ -213,6 +219,7 @@ class CarController extends Controller
                 $carData = $this->carMassAssignmentFromValidated($validated, $request, null);
                 $carData = $this->mergeV5DocumentCarData($request, $carData, null);
                 $carData = $this->mergeLogBookCarData($request, $carData, null);
+                $carData = $this->mergeAccessoriesCarData($request, $carData);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['createdBy'] = Auth::id();
                 $car = Car::create($carData);
@@ -442,6 +449,12 @@ class CarController extends Controller
             'logbook_notes' => 'nullable|string',
             'old_log_book' => 'nullable|array',
             'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'tracker_installed' => 'nullable|boolean',
+            'tracker_status' => 'nullable|in:active,inactive',
+            'tracker_notes' => 'nullable|string',
+            'dashcam_installed' => 'nullable|boolean',
+            'dashcam_status' => 'nullable|in:active,inactive',
+            'dashcam_notes' => 'nullable|string',
             'available_from_date' => 'nullable|date',
             'reserve_car' => 'nullable|boolean',
             'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
@@ -555,6 +568,7 @@ class CarController extends Controller
                 $carData = $this->carMassAssignmentFromValidated($validated, $request, $car);
                 $carData = $this->mergeV5DocumentCarData($request, $carData, $car);
                 $carData = $this->mergeLogBookCarData($request, $carData, $car);
+                $carData = $this->mergeAccessoriesCarData($request, $carData);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['updatedBy'] = Auth::id();
                 $car->update($carData);
@@ -1393,6 +1407,36 @@ class CarController extends Controller
             'fleet_status' => 'reserved',
             'available_from_date' => $reservationData['available_from_date'],
         ]);
+    }
+
+    /**
+     * Tracker / dashcam installed flags; clear status and notes when uninstalled.
+     */
+    private function mergeAccessoriesCarData(Request $request, array $carData): array
+    {
+        foreach (['tracker', 'dashcam'] as $accessory) {
+            $installedKey = $accessory.'_installed';
+            $statusKey = $accessory.'_status';
+            $notesKey = $accessory.'_notes';
+
+            $isInstalled = $request->boolean($installedKey);
+            $carData[$installedKey] = $isInstalled;
+
+            if (! $isInstalled) {
+                $carData[$statusKey] = null;
+                $carData[$notesKey] = null;
+
+                continue;
+            }
+
+            $status = $request->input($statusKey);
+            $carData[$statusKey] = in_array($status, ['active', 'inactive'], true) ? $status : 'active';
+
+            $notes = trim((string) $request->input($notesKey, ''));
+            $carData[$notesKey] = $notes === '' ? null : $notes;
+        }
+
+        return $carData;
     }
 
     /**

@@ -134,7 +134,7 @@
                                             <td>{{ optional($payment->payment_date)->format('d M Y') }}</td>
                                             <td>
                                                 {{ $payment->payment_method }}
-                                                @if($payment->payment_method === 'Bank Transfer' && $payment->bankAccount)
+                                                @if(\App\Models\Payment::requiresBankAccount($payment->payment_method) && $payment->bankAccount)
                                                     <div class="text-muted small">{{ $payment->bankAccount->bank_name }}</div>
                                                 @endif
                                             </td>

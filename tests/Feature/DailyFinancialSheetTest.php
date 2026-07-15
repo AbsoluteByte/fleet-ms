@@ -331,7 +331,7 @@ class DailyFinancialSheetTest extends TestCase
         $response->assertSee('£75.00');
     }
 
-    public function test_cannot_add_payment_for_already_approved_date(): void
+    public function test_can_add_payment_after_date_already_approved(): void
     {
         $date = now()->toDateString();
 
@@ -339,7 +339,7 @@ class DailyFinancialSheetTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'sheet_date' => $date,
             'status' => DailyFinancialSheet::STATUS_APPROVED,
-            'cash_in' => 0,
+            'cash_in' => 100,
             'cash_out' => 0,
             'approved_by' => $this->approver->id,
             'approved_at' => now(),
@@ -348,18 +348,83 @@ class DailyFinancialSheetTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->from(route('payments.create'))
-            ->post(route('payments.store'), [
-                'driver_id' => $this->driver->id,
-                'payment_method' => 'Cash',
-                'payment_date' => $date,
-                'amount' => 50,
-                'auto_manage_invoices' => 1,
-            ]);
+        $response = $this->post(route('payments.store'), [
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 50,
+            'auto_manage_invoices' => 1,
+        ]);
 
-        $response->assertRedirect(route('payments.create'));
-        $response->assertSessionHasErrors('payment_date');
-        $this->assertDatabaseCount('payments', 0);
+        $response->assertRedirect(route('payments.driver', $this->driver->id));
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertSame(Payment::POSTING_STATUS_PENDING, Payment::query()->first()->posting_status);
+    }
+
+    public function test_second_approve_merges_totals_into_existing_sheet(): void
+    {
+        $date = now()->toDateString();
+        $this->createInvoice(100);
+        $this->createPendingPayment($date, 100);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date));
+
+        $sheet = DailyFinancialSheet::query()->first();
+        $this->assertEquals(100, (float) $sheet->cash_in);
+
+        $this->createInvoice(40);
+        $this->createPendingPayment($date, 40);
+
+        $response = $this->post(route('daily-financial-sheet.approve', $date), [
+            'approval_notes' => 'Second batch.',
+        ]);
+
+        $response->assertRedirect(route('daily-financial-sheet.show', $date));
+        $this->assertDatabaseCount('daily_financial_sheets', 1);
+
+        $sheet->refresh();
+        $this->assertEquals(140, (float) $sheet->cash_in);
+        $this->assertStringContainsString('Second batch.', (string) $sheet->approval_notes);
+        $this->assertSame(2, Payment::query()->where('posting_status', Payment::POSTING_STATUS_POSTED)->count());
+    }
+
+    public function test_can_approve_selected_pending_payment_only(): void
+    {
+        $date = now()->toDateString();
+        $this->createInvoice(60);
+        $this->createInvoice(40);
+        $first = $this->createPendingPayment($date, 60);
+        $second = $this->createPendingPayment($date, 40);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $response = $this->post(route('daily-financial-sheet.approve', $date), [
+            'approve_mode' => 'selected',
+            'entry_ids' => ['payment-'.$first->id],
+        ]);
+
+        $response->assertRedirect(route('daily-financial-sheet.show', $date));
+
+        $first->refresh();
+        $second->refresh();
+        $this->assertSame(Payment::POSTING_STATUS_POSTED, $first->posting_status);
+        $this->assertSame(Payment::POSTING_STATUS_PENDING, $second->posting_status);
+
+        $sheet = DailyFinancialSheet::query()->first();
+        $this->assertEquals(60, (float) $sheet->cash_in);
+
+        $this->post(route('daily-financial-sheet.approve', $date), [
+            'approve_mode' => 'selected',
+            'entry_ids' => ['payment-'.$second->id],
+        ]);
+
+        $second->refresh();
+        $sheet->refresh();
+        $this->assertSame(Payment::POSTING_STATUS_POSTED, $second->posting_status);
+        $this->assertEquals(100, (float) $sheet->cash_in);
     }
 
     public function test_posted_payment_allocates_to_invoice_on_approval(): void
@@ -582,12 +647,16 @@ class DailyFinancialSheetTest extends TestCase
         Schema::create('expenses', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');
-            $table->foreignId('car_id');
+            $table->foreignId('car_id')->nullable();
             $table->string('type');
+            $table->string('title')->nullable();
             $table->date('date');
             $table->text('description');
             $table->decimal('amount', 12, 2)->default(0);
+            $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
             $table->string('document')->nullable();
+            $table->text('notes')->nullable();
             $table->string('posting_status', 20)->default('pending');
             $table->foreignId('created_by')->nullable();
             $table->timestamps();

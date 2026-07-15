@@ -189,6 +189,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('daily-financial-sheet/{date}', [App\Http\Controllers\Backend\DailyFinancialSheetController::class, 'show'])->name('daily-financial-sheet.show')->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
     Route::post('daily-financial-sheet/{date}/approve', [App\Http\Controllers\Backend\DailyFinancialSheetController::class, 'approve'])->name('daily-financial-sheet.approve')->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
 
+    Route::get('daily-expenses', [App\Http\Controllers\Backend\DailyExpenseController::class, 'index'])->name('daily-expenses.index');
+    Route::get('daily-expenses/create', [App\Http\Controllers\Backend\DailyExpenseController::class, 'create'])->name('daily-expenses.create');
+    Route::post('daily-expenses', [App\Http\Controllers\Backend\DailyExpenseController::class, 'store'])->name('daily-expenses.store');
+
     Route::resource('expenses', App\Http\Controllers\Backend\ExpenseController::class);
 
     // Insurance Policies

@@ -26,7 +26,7 @@
                             <strong>Payment Method</strong>
                             <p>{{ $payment->payment_method }}</p>
                         </div>
-                        @if($payment->payment_method === 'Bank Transfer' && $payment->bankAccount)
+                        @if(\App\Models\Payment::requiresBankAccount($payment->payment_method) && $payment->bankAccount)
                         <div class="col-md-4 mb-2">
                             <strong>Bank Account</strong>
                             <p>{{ $payment->bankAccount->bank_name }}</p>

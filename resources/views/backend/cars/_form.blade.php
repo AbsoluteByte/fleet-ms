@@ -462,6 +462,215 @@
     $motHiddenStartIndex = $motMainCount;
 @endphp
 
+{{-- Accessories Section --}}
+@php
+    $trackerInstalled = (bool) old(
+        'tracker_installed',
+        (isset($model) && $model->id) ? ($model->tracker_installed ?? false) : false
+    );
+    $trackerStatus = old(
+        'tracker_status',
+        (isset($model) && $model->id) ? ($model->tracker_status ?? 'active') : 'active'
+    );
+    if (! in_array($trackerStatus, ['active', 'inactive'], true)) {
+        $trackerStatus = 'active';
+    }
+    $trackerNotes = old(
+        'tracker_notes',
+        (isset($model) && $model->id) ? ($model->tracker_notes ?? '') : ''
+    );
+    $dashcamInstalled = (bool) old(
+        'dashcam_installed',
+        (isset($model) && $model->id) ? ($model->dashcam_installed ?? false) : false
+    );
+    $dashcamStatus = old(
+        'dashcam_status',
+        (isset($model) && $model->id) ? ($model->dashcam_status ?? 'active') : 'active'
+    );
+    if (! in_array($dashcamStatus, ['active', 'inactive'], true)) {
+        $dashcamStatus = 'active';
+    }
+    $dashcamNotes = old(
+        'dashcam_notes',
+        (isset($model) && $model->id) ? ($model->dashcam_notes ?? '') : ''
+    );
+@endphp
+<style>
+    .car-accessory-card {
+        border: 1px solid #ebe9f1;
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        height: 100%;
+        background: #fff;
+    }
+    .car-accessory-card__title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #5e5873;
+    }
+    .car-accessory-toggle {
+        display: inline-flex;
+        width: 100%;
+        border-radius: 0.428rem;
+        overflow: hidden;
+        border: 1px solid #7367f0;
+        margin-bottom: 0.75rem;
+    }
+    .car-accessory-toggle__btn {
+        flex: 1 1 50%;
+        border: 0;
+        border-radius: 0 !important;
+        background: #fff;
+        color: #7367f0;
+        font-weight: 500;
+        font-size: 0.875rem;
+        padding: 0.65rem 0.75rem;
+        line-height: 1.2;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .car-accessory-toggle__btn + .car-accessory-toggle__btn {
+        border-left: 1px solid #7367f0;
+    }
+    .car-accessory-toggle__btn:hover {
+        background: rgba(115, 103, 240, 0.08);
+        color: #7367f0;
+    }
+    .car-accessory-toggle__btn.is-active {
+        background: #7367f0;
+        color: #fff;
+        box-shadow: none;
+    }
+    .car-accessory-toggle--status {
+        border-color: #28c76f;
+    }
+    .car-accessory-toggle--status .car-accessory-toggle__btn {
+        color: #28c76f;
+    }
+    .car-accessory-toggle--status .car-accessory-toggle__btn + .car-accessory-toggle__btn {
+        border-left-color: #28c76f;
+    }
+    .car-accessory-toggle--status .car-accessory-toggle__btn:hover {
+        background: rgba(40, 199, 111, 0.08);
+        color: #28c76f;
+    }
+    .car-accessory-toggle--status .car-accessory-toggle__btn.is-active {
+        background: #28c76f;
+        color: #fff;
+    }
+    .car-accessory-toggle--status .car-accessory-toggle__btn[data-value="inactive"].is-active {
+        background: #ea5455;
+        border-color: #ea5455;
+        color: #fff;
+    }
+    .car-accessory-toggle--status.car-accessory-toggle--inactive-selected {
+        border-color: #ea5455;
+    }
+    .car-accessory-toggle--status.car-accessory-toggle--inactive-selected .car-accessory-toggle__btn {
+        color: #ea5455;
+    }
+    .car-accessory-toggle--status.car-accessory-toggle--inactive-selected .car-accessory-toggle__btn + .car-accessory-toggle__btn {
+        border-left-color: #ea5455;
+    }
+    .car-accessory-toggle--status.car-accessory-toggle--inactive-selected .car-accessory-toggle__btn:hover {
+        background: rgba(234, 84, 85, 0.08);
+        color: #ea5455;
+    }
+    .car-accessory-toggle--status.car-accessory-toggle--inactive-selected .car-accessory-toggle__btn[data-value="active"].is-active {
+        background: #28c76f;
+        color: #fff;
+    }
+    .car-accessory-field-label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #6e6b7b;
+        margin-bottom: 0.4rem;
+    }
+</style>
+<div class="row mt-1">
+    <div class="col-12">
+        <h5 class="mb-1">
+            <i class="fa fa-microchip"></i> Accessories
+        </h5>
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-2 mb-md-0">
+                        <div class="car-accessory-card">
+                            <div class="car-accessory-card__title">
+                                <i class="fa fa-map-marker-alt text-primary mr-50"></i> Tracker
+                            </div>
+                            <input type="hidden" name="tracker_installed" id="tracker_installed" value="{{ $trackerInstalled ? '1' : '0' }}">
+                            <span class="car-accessory-field-label">Install status</span>
+                            <div class="car-accessory-toggle" role="group" aria-label="Tracker install status" data-accessory-toggle="tracker_installed">
+                                <button type="button" class="car-accessory-toggle__btn {{ ! $trackerInstalled ? 'is-active' : '' }}" data-value="0">Uninstalled</button>
+                                <button type="button" class="car-accessory-toggle__btn {{ $trackerInstalled ? 'is-active' : '' }}" data-value="1">Installed</button>
+                            </div>
+                            <div id="tracker-details" style="display: {{ $trackerInstalled ? 'block' : 'none' }};">
+                                <input type="hidden" name="tracker_status" id="tracker_status" value="{{ $trackerStatus }}">
+                                <span class="car-accessory-field-label">Status</span>
+                                <div class="car-accessory-toggle car-accessory-toggle--status {{ $trackerStatus === 'inactive' ? 'car-accessory-toggle--inactive-selected' : '' }}"
+                                     role="group" aria-label="Tracker status" data-accessory-toggle="tracker_status">
+                                    <button type="button" class="car-accessory-toggle__btn {{ $trackerStatus === 'inactive' ? 'is-active' : '' }}" data-value="inactive">Inactive</button>
+                                    <button type="button" class="car-accessory-toggle__btn {{ $trackerStatus === 'active' ? 'is-active' : '' }}" data-value="active">Active</button>
+                                </div>
+                                @error('tracker_status')
+                                <div class="text-danger small mb-1">{{ $message }}</div>
+                                @enderror
+                                <div class="form-group mb-0">
+                                    <label for="tracker_notes">Notes</label>
+                                    <textarea name="tracker_notes" id="tracker_notes" rows="3"
+                                              class="form-control @error('tracker_notes') is-invalid @enderror"
+                                              placeholder="Optional">{{ $trackerNotes }}</textarea>
+                                    @error('tracker_notes')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="car-accessory-card">
+                            <div class="car-accessory-card__title">
+                                <i class="fa fa-video text-primary mr-50"></i> Dashcam
+                            </div>
+                            <input type="hidden" name="dashcam_installed" id="dashcam_installed" value="{{ $dashcamInstalled ? '1' : '0' }}">
+                            <span class="car-accessory-field-label">Install status</span>
+                            <div class="car-accessory-toggle" role="group" aria-label="Dashcam install status" data-accessory-toggle="dashcam_installed">
+                                <button type="button" class="car-accessory-toggle__btn {{ ! $dashcamInstalled ? 'is-active' : '' }}" data-value="0">Uninstalled</button>
+                                <button type="button" class="car-accessory-toggle__btn {{ $dashcamInstalled ? 'is-active' : '' }}" data-value="1">Installed</button>
+                            </div>
+                            <div id="dashcam-details" style="display: {{ $dashcamInstalled ? 'block' : 'none' }};">
+                                <input type="hidden" name="dashcam_status" id="dashcam_status" value="{{ $dashcamStatus }}">
+                                <span class="car-accessory-field-label">Status</span>
+                                <div class="car-accessory-toggle car-accessory-toggle--status {{ $dashcamStatus === 'inactive' ? 'car-accessory-toggle--inactive-selected' : '' }}"
+                                     role="group" aria-label="Dashcam status" data-accessory-toggle="dashcam_status">
+                                    <button type="button" class="car-accessory-toggle__btn {{ $dashcamStatus === 'inactive' ? 'is-active' : '' }}" data-value="inactive">Inactive</button>
+                                    <button type="button" class="car-accessory-toggle__btn {{ $dashcamStatus === 'active' ? 'is-active' : '' }}" data-value="active">Active</button>
+                                </div>
+                                @error('dashcam_status')
+                                <div class="text-danger small mb-1">{{ $message }}</div>
+                                @enderror
+                                <div class="form-group mb-0">
+                                    <label for="dashcam_notes">Notes</label>
+                                    <textarea name="dashcam_notes" id="dashcam_notes" rows="3"
+                                              class="form-control @error('dashcam_notes') is-invalid @enderror"
+                                              placeholder="Optional">{{ $dashcamNotes }}</textarea>
+                                    @error('dashcam_notes')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {{-- MOT Information Section --}}
 <div class="row mt-1">
     <div class="col-12">
@@ -2429,6 +2638,43 @@
             }
         }
 
+        function syncAccessoryInstalled(prefix) {
+            const input = document.getElementById(prefix + '_installed');
+            const details = document.getElementById(prefix + '-details');
+            if (!input || !details) {
+                return;
+            }
+            details.style.display = input.value === '1' ? 'block' : 'none';
+        }
+
+        function bindAccessoryToggles() {
+            document.querySelectorAll('[data-accessory-toggle]').forEach(function (group) {
+                const inputId = group.getAttribute('data-accessory-toggle');
+                const input = document.getElementById(inputId);
+                if (!input) {
+                    return;
+                }
+
+                group.querySelectorAll('.car-accessory-toggle__btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const value = btn.getAttribute('data-value');
+                        input.value = value;
+                        group.querySelectorAll('.car-accessory-toggle__btn').forEach(function (sibling) {
+                            sibling.classList.toggle('is-active', sibling === btn);
+                        });
+
+                        if (group.classList.contains('car-accessory-toggle--status')) {
+                            group.classList.toggle('car-accessory-toggle--inactive-selected', value === 'inactive');
+                        }
+
+                        if (inputId === 'tracker_installed' || inputId === 'dashcam_installed') {
+                            syncAccessoryInstalled(inputId.replace('_installed', ''));
+                        }
+                    });
+                });
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             filterInsuranceProviders();
             toggleInsuranceSection();
@@ -2438,6 +2684,9 @@
             togglePhvStatusFields();
             bindPhvExpiryStatusAutomation(document);
             preventEnterFormSubmit();
+            bindAccessoryToggles();
+            syncAccessoryInstalled('tracker');
+            syncAccessoryInstalled('dashcam');
             (function defaultEmptyAppliedDate() {
                 if (shouldHideLogBookForV5()) return;
                 const dateInput = document.getElementById('log_book_applied_date');

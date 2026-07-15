@@ -104,6 +104,8 @@ class DepositRefundTest extends TestCase
     {
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
+        Schema::dropIfExists('payment_allocations');
+        Schema::dropIfExists('invoices');
         Schema::dropIfExists('deposit_refunds');
         Schema::dropIfExists('daily_financial_sheets');
         Schema::dropIfExists('agreements');
@@ -116,6 +118,8 @@ class DepositRefundTest extends TestCase
         Schema::dropIfExists('tenant_user');
         Schema::dropIfExists('users');
         Schema::dropIfExists('tenants');
+        Schema::dropIfExists('payments');
+        Schema::dropIfExists('expenses');
 
         parent::tearDown();
     }
@@ -130,6 +134,7 @@ class DepositRefundTest extends TestCase
 
         $response = $this->from(route('agreements.show', $agreement))
             ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 500,
                 'payment_method' => 'Cash',
                 'refund_date' => $date,
                 'notes' => 'Full deposit return',
@@ -165,6 +170,7 @@ class DepositRefundTest extends TestCase
 
         $response = $this->from(route('agreements.show', $agreement))
             ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 500,
                 'payment_method' => 'Cash',
                 'refund_date' => now()->toDateString(),
             ]);
@@ -195,6 +201,7 @@ class DepositRefundTest extends TestCase
 
         $response = $this->from(route('agreements.show', $agreement))
             ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 400,
                 'payment_method' => 'Cash',
                 'refund_date' => $date,
             ]);
@@ -213,6 +220,7 @@ class DepositRefundTest extends TestCase
 
         $response = $this->from(route('agreements.show', $agreement))
             ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 300,
                 'payment_method' => 'Bank Transfer',
                 'refund_date' => now()->toDateString(),
             ]);
@@ -288,7 +296,7 @@ class DepositRefundTest extends TestCase
         );
     }
 
-    public function test_cannot_refund_on_already_approved_sheet_date(): void
+    public function test_can_refund_on_already_approved_sheet_date(): void
     {
         $agreement = $this->createClosedAgreement(150);
         $date = now()->toDateString();
@@ -308,13 +316,18 @@ class DepositRefundTest extends TestCase
 
         $response = $this->from(route('agreements.show', $agreement))
             ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 150,
                 'payment_method' => 'Cash',
                 'refund_date' => $date,
             ]);
 
         $response->assertRedirect(route('agreements.show', $agreement));
-        $response->assertSessionHasErrors('refund_date');
-        $this->assertDatabaseCount('deposit_refunds', 0);
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('deposit_refunds', 1);
+        $this->assertSame(
+            DepositRefund::POSTING_STATUS_PENDING,
+            DepositRefund::query()->first()->posting_status
+        );
     }
 
     public function test_bank_transfer_refund_appears_in_bank_out_totals(): void
@@ -341,6 +354,131 @@ class DepositRefundTest extends TestCase
         $this->assertEquals(0, $totals['cash_out']);
         $this->assertCount(1, $totals['bank_out']);
         $this->assertEquals(180, $totals['bank_out'][0]['total']);
+    }
+
+    public function test_partial_refund_amount_is_stored(): void
+    {
+        $agreement = $this->createClosedAgreement(500);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->from(route('agreements.show', $agreement))
+            ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 350,
+                'payment_method' => 'Cash',
+                'refund_date' => now()->toDateString(),
+                'notes' => 'Car wash deducted',
+            ]);
+
+        $response->assertRedirect(route('agreements.show', $agreement));
+
+        $refund = DepositRefund::query()->first();
+        $this->assertNotNull($refund);
+        $this->assertEquals(350, (float) $refund->amount);
+    }
+
+    public function test_refund_amount_above_deposit_fails_validation(): void
+    {
+        $agreement = $this->createClosedAgreement(200);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->from(route('agreements.show', $agreement))
+            ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 250,
+                'payment_method' => 'Cash',
+                'refund_date' => now()->toDateString(),
+            ]);
+
+        $response->assertRedirect(route('agreements.show', $agreement));
+        $response->assertSessionHasErrors('amount');
+        $this->assertDatabaseCount('deposit_refunds', 0);
+    }
+
+    public function test_card_payment_requires_bank_account(): void
+    {
+        $agreement = $this->createClosedAgreement(300);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->from(route('agreements.show', $agreement))
+            ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 300,
+                'payment_method' => 'Card Payment',
+                'refund_date' => now()->toDateString(),
+            ]);
+
+        $response->assertRedirect(route('agreements.show', $agreement));
+        $response->assertSessionHasErrors('bank_account_id');
+        $this->assertDatabaseCount('deposit_refunds', 0);
+    }
+
+    public function test_driver_credit_creates_refund_and_posted_payment(): void
+    {
+        $agreement = $this->createClosedAgreement(400);
+        $date = now()->toDateString();
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->from(route('agreements.show', $agreement))
+            ->post(route('agreements.refund-deposit', $agreement), [
+                'amount' => 400,
+                'payment_method' => 'Driver Credit',
+                'refund_date' => $date,
+                'notes' => 'Keep for next agreement',
+            ]);
+
+        $response->assertRedirect(route('agreements.show', $agreement));
+
+        $refund = DepositRefund::query()->first();
+        $this->assertNotNull($refund);
+        $this->assertSame('Driver Credit', $refund->payment_method);
+        $this->assertEquals(400, (float) $refund->amount);
+        $this->assertSame(DepositRefund::POSTING_STATUS_POSTED, $refund->posting_status);
+
+        $payment = \App\Models\Payment::query()->first();
+        $this->assertNotNull($payment);
+        $this->assertSame('Driver Credit', $payment->payment_method);
+        $this->assertEquals(400, (float) $payment->amount);
+        $this->assertSame(\App\Models\Payment::POSTING_STATUS_POSTED, $payment->posting_status);
+        $this->assertEquals(400, (float) $payment->unallocated_amount);
+
+        $service = app(DailyFinancialSheetService::class);
+        $totals = $service->computeTotals($service->entriesForDate($this->tenant->id, $date), pendingOnly: false);
+        $this->assertEquals(0, $totals['cash_out']);
+        $this->assertEquals(0, $totals['cash_in']);
+        $this->assertCount(0, $totals['bank_out']);
+        $this->assertCount(0, $totals['bank_in']);
+    }
+
+    public function test_card_payment_refund_appears_in_bank_out_totals(): void
+    {
+        $agreement = $this->createClosedAgreement(175);
+        $date = now()->toDateString();
+
+        DepositRefund::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'agreement_id' => $agreement->id,
+            'driver_id' => $this->driver->id,
+            'amount' => 175,
+            'payment_method' => 'Card Payment',
+            'bank_account_id' => $this->bankAccount->id,
+            'refund_date' => $date,
+            'posting_status' => DepositRefund::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+        ]);
+
+        $service = app(DailyFinancialSheetService::class);
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $totals = $service->computeTotals($entries, pendingOnly: true);
+
+        $this->assertEquals(0, $totals['cash_out']);
+        $this->assertCount(1, $totals['bank_out']);
+        $this->assertEquals(175, $totals['bank_out'][0]['total']);
     }
 
     private function createClosedAgreement(float $deposit): Agreement
@@ -529,6 +667,28 @@ class DepositRefundTest extends TestCase
             $table->string('posting_status', 20)->default('pending');
             $table->foreignId('created_by')->nullable();
             $table->boolean('auto_allocate')->default(true);
+            $table->foreignId('allocation_source_id')->nullable();
+            $table->json('allocation_invoice_types')->nullable();
+            $table->json('pending_manual_allocations')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('invoices', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('driver_id')->nullable();
+            $table->foreignId('source_id')->nullable();
+            $table->string('invoice_type')->nullable();
+            $table->date('invoice_date')->nullable();
+            $table->date('due_date')->nullable();
+            $table->decimal('balance_amount', 12, 2)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('payment_allocations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('payment_id');
+            $table->foreignId('invoice_id');
+            $table->decimal('allocated_amount', 12, 2)->default(0);
             $table->timestamps();
         });
 

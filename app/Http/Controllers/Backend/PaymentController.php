@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\Driver;
 use App\Models\Payment;
-use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -118,7 +117,7 @@ class PaymentController extends Controller
         return view($this->dir.'create', compact('model', 'drivers', 'selectedDriver', 'openInvoices', 'bankAccounts'));
     }
 
-    public function store(Request $request, PaymentAllocationService $paymentAllocationService, DailyFinancialSheetService $dailyFinancialSheetService)
+    public function store(Request $request, PaymentAllocationService $paymentAllocationService)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -135,7 +134,7 @@ class PaymentController extends Controller
             'payment_method' => 'required|string|max:255',
             'bank_account_id' => [
                 'nullable',
-                'required_if:payment_method,Bank Transfer',
+                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
                 Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
             ],
             'payment_date' => 'required|date',
@@ -149,15 +148,14 @@ class PaymentController extends Controller
         $driver = Driver::where('tenant_id', $tenant->id)->findOrFail($validated['driver_id']);
         $autoManageInvoices = $request->boolean('auto_manage_invoices', true);
 
-        $dailyFinancialSheetService->ensureDateNotApproved($tenant->id, $validated['payment_date']);
-
         $payment = $paymentAllocationService->createPayment(
             $driver,
             [
                 'payment_method' => $validated['payment_method'],
-                'bank_account_id' => ($validated['payment_method'] ?? '') === 'Bank Transfer'
-                    ? ($validated['bank_account_id'] ?? null)
-                    : null,
+                'bank_account_id' => Payment::bankAccountIdForMethod(
+                    $validated['payment_method'],
+                    $validated['bank_account_id'] ?? null
+                ),
                 'payment_date' => $validated['payment_date'],
                 'amount' => $validated['amount'],
                 'notes' => $validated['notes'] ?? null,

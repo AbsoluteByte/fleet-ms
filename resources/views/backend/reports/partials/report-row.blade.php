@@ -23,6 +23,7 @@
         $isMissing = $car->report_mot_missing;
         $expiryAttr = 'data-mot-expiry';
         $missingAttr = 'data-mot-missing';
+        $motTestDateIso = optional(optional($car->report_latest_mot)->test_date)->format('Y-m-d') ?? '';
     }
 
     $statusClass = match ($status) {
@@ -36,6 +37,9 @@
     data-company="{{ $car->company->name ?? '' }}"
     {{ $expiryAttr }}="{{ $expiryIso }}"
     {{ $missingAttr }}="{{ $isMissing ? '1' : '0' }}"
+    @if($reportType !== 'phvl')
+        data-mot-test-date="{{ $motTestDateIso }}"
+    @endif
 >
     <td><strong>{{ $car->registration }}</strong></td>
     <td>{{ $car->company->name ?? '—' }}</td>

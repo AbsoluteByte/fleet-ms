@@ -27,24 +27,6 @@ class DailyFinancialSheetService
             ->exists();
     }
 
-    public function ensureDateNotApproved(int $tenantId, string $date, string $field = 'payment_date'): void
-    {
-        if ($this->isDateApproved($tenantId, $date)) {
-            throw ValidationException::withMessages([
-                $field => 'This date has already been approved on the daily financial sheet. Choose a different date.',
-            ]);
-        }
-    }
-
-    public function ensureExpenseDateNotApproved(int $tenantId, string $date): void
-    {
-        if ($this->isDateApproved($tenantId, $date)) {
-            throw ValidationException::withMessages([
-                'date' => 'This date has already been approved on the daily financial sheet. Choose a different date.',
-            ]);
-        }
-    }
-
     /**
      * @return list<string>
      */
@@ -104,7 +86,7 @@ class DailyFinancialSheetService
             ->map(fn (Payment $payment) => $this->formatPaymentEntry($payment));
 
         $expenses = Expense::query()
-            ->with(['car.carModel', 'createdByUser'])
+            ->with(['car.carModel', 'createdByUser', 'bankAccount'])
             ->where('tenant_id', $tenantId)
             ->whereDate('date', $date)
             ->get()
@@ -145,7 +127,7 @@ class DailyFinancialSheetService
             ->sum('amount'), 2);
 
         $bankIn = [];
-        foreach ($filtered->where('direction', 'in')->where('payment_method', 'Bank Transfer') as $entry) {
+        foreach ($filtered->where('direction', 'in')->filter(fn ($entry) => Payment::requiresBankAccount($entry['payment_method'] ?? null)) as $entry) {
             $key = (string) ($entry['bank_account_id'] ?? 'unknown');
             if (! isset($bankIn[$key])) {
                 $bankIn[$key] = [
@@ -159,7 +141,7 @@ class DailyFinancialSheetService
         }
 
         $bankOut = [];
-        foreach ($filtered->where('direction', 'out')->where('payment_method', 'Bank Transfer') as $entry) {
+        foreach ($filtered->where('direction', 'out')->filter(fn ($entry) => Payment::requiresBankAccount($entry['payment_method'] ?? null)) as $entry) {
             $key = (string) ($entry['bank_account_id'] ?? 'unknown');
             if (! isset($bankOut[$key])) {
                 $bankOut[$key] = [
@@ -181,16 +163,25 @@ class DailyFinancialSheetService
         ];
     }
 
-    public function approveSheet(int $tenantId, string $date, int $approvedByUserId, ?string $notes = null): DailyFinancialSheet
-    {
-        if ($this->isDateApproved($tenantId, $date)) {
-            throw ValidationException::withMessages([
-                'date' => 'This daily financial sheet has already been approved.',
-            ]);
-        }
-
+    /**
+     * Approve pending sheet entries for a date.
+     *
+     * When $entryIds is null or empty, all pending entries are approved.
+     * When a sheet already exists for the date, new totals are merged into it.
+     *
+     * @param  list<string>|null  $entryIds  Keys like payment-12, expense-3, deposit-refund-5
+     */
+    public function approveSheet(
+        int $tenantId,
+        string $date,
+        int $approvedByUserId,
+        ?string $notes = null,
+        ?array $entryIds = null
+    ): DailyFinancialSheet {
         $entries = $this->entriesForDate($tenantId, $date);
-        $pendingEntries = $entries->where('posting_status', Payment::POSTING_STATUS_PENDING);
+        $pendingEntries = $entries
+            ->where('posting_status', Payment::POSTING_STATUS_PENDING)
+            ->values();
 
         if ($pendingEntries->isEmpty()) {
             throw ValidationException::withMessages([
@@ -198,49 +189,218 @@ class DailyFinancialSheetService
             ]);
         }
 
-        $totals = $this->computeTotals($entries, pendingOnly: true);
+        $selectedIds = $this->normalizeSelectedEntryIds($entryIds);
+        if ($selectedIds !== []) {
+            $pendingEntries = $pendingEntries
+                ->filter(fn (array $entry) => in_array($entry['id'], $selectedIds, true))
+                ->values();
 
-        return DB::transaction(function () use ($tenantId, $date, $approvedByUserId, $notes, $totals) {
-            $pendingPayments = Payment::query()
-                ->pending()
-                ->whereDate('payment_date', $date)
-                ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenantId))
-                ->lockForUpdate()
-                ->get();
-
-            foreach ($pendingPayments as $payment) {
-                $this->paymentAllocationService->postPayment($payment);
+            if ($pendingEntries->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'entry_ids' => 'Select at least one pending entry to approve.',
+                ]);
             }
 
-            Expense::query()
-                ->pending()
-                ->where('tenant_id', $tenantId)
-                ->whereDate('date', $date)
-                ->update(['posting_status' => Expense::POSTING_STATUS_POSTED]);
+            $allPendingIds = $entries
+                ->where('posting_status', Payment::POSTING_STATUS_PENDING)
+                ->pluck('id')
+                ->all();
+            $invalidSelected = array_values(array_diff($selectedIds, $allPendingIds));
+            if ($invalidSelected !== []) {
+                throw ValidationException::withMessages([
+                    'entry_ids' => 'One or more selected entries are not pending for this date.',
+                ]);
+            }
+        }
 
-            DepositRefund::query()
-                ->pending()
-                ->where('tenant_id', $tenantId)
-                ->whereDate('refund_date', $date)
-                ->update(['posting_status' => DepositRefund::POSTING_STATUS_POSTED]);
+        $batchTotals = $this->computeTotals($pendingEntries, pendingOnly: false);
+        $paymentIds = $this->idsOfType($pendingEntries, 'payment');
+        $expenseIds = $this->idsOfType($pendingEntries, 'expense');
+        $refundIds = $this->idsOfType($pendingEntries, 'deposit-refund');
 
-            return DailyFinancialSheet::query()->updateOrCreate(
-                [
-                    'tenant_id' => $tenantId,
-                    'sheet_date' => $date,
-                ],
-                [
+        return DB::transaction(function () use (
+            $tenantId,
+            $date,
+            $approvedByUserId,
+            $notes,
+            $batchTotals,
+            $paymentIds,
+            $expenseIds,
+            $refundIds
+        ) {
+            if ($paymentIds !== []) {
+                $pendingPayments = Payment::query()
+                    ->pending()
+                    ->whereIn('id', $paymentIds)
+                    ->whereDate('payment_date', $date)
+                    ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenantId))
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($pendingPayments as $payment) {
+                    $this->paymentAllocationService->postPayment($payment);
+                }
+            }
+
+            if ($expenseIds !== []) {
+                Expense::query()
+                    ->pending()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('date', $date)
+                    ->whereIn('id', $expenseIds)
+                    ->update(['posting_status' => Expense::POSTING_STATUS_POSTED]);
+            }
+
+            if ($refundIds !== []) {
+                DepositRefund::query()
+                    ->pending()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('refund_date', $date)
+                    ->whereIn('id', $refundIds)
+                    ->update(['posting_status' => DepositRefund::POSTING_STATUS_POSTED]);
+            }
+
+            $existing = DailyFinancialSheet::query()
+                ->where('tenant_id', $tenantId)
+                ->whereDate('sheet_date', $date)
+                ->lockForUpdate()
+                ->first();
+
+            $cashIn = $batchTotals['cash_in'];
+            $cashOut = $batchTotals['cash_out'];
+            $bankIn = $batchTotals['bank_in'];
+            $bankOut = $batchTotals['bank_out'];
+            $mergedNotes = $this->mergeApprovalNotes($existing?->approval_notes, $notes);
+
+            if ($existing) {
+                $cashIn = $this->addMoney((float) $existing->cash_in, $batchTotals['cash_in']);
+                $cashOut = $this->addMoney((float) $existing->cash_out, $batchTotals['cash_out']);
+                $bankIn = $this->mergeBankTotals($existing->bank_in_json ?? [], $batchTotals['bank_in']);
+                $bankOut = $this->mergeBankTotals($existing->bank_out_json ?? [], $batchTotals['bank_out']);
+
+                $existing->fill([
                     'status' => DailyFinancialSheet::STATUS_APPROVED,
-                    'cash_in' => $totals['cash_in'],
-                    'cash_out' => $totals['cash_out'],
-                    'bank_in_json' => $totals['bank_in'],
-                    'bank_out_json' => $totals['bank_out'],
-                    'approval_notes' => $notes,
+                    'cash_in' => $cashIn,
+                    'cash_out' => $cashOut,
+                    'bank_in_json' => $bankIn,
+                    'bank_out_json' => $bankOut,
+                    'approval_notes' => $mergedNotes,
                     'approved_by' => $approvedByUserId,
                     'approved_at' => now(),
-                ]
-            );
+                ]);
+                $existing->save();
+
+                return $existing->refresh();
+            }
+
+            return DailyFinancialSheet::query()->create([
+                'tenant_id' => $tenantId,
+                'sheet_date' => $date,
+                'status' => DailyFinancialSheet::STATUS_APPROVED,
+                'cash_in' => $cashIn,
+                'cash_out' => $cashOut,
+                'bank_in_json' => $bankIn,
+                'bank_out_json' => $bankOut,
+                'approval_notes' => $mergedNotes,
+                'approved_by' => $approvedByUserId,
+                'approved_at' => now(),
+            ]);
         });
+    }
+
+    /**
+     * @param  list<string>|null  $entryIds
+     * @return list<string>
+     */
+    private function normalizeSelectedEntryIds(?array $entryIds): array
+    {
+        if ($entryIds === null || $entryIds === []) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($entryIds as $id) {
+            $id = trim((string) $id);
+            if ($id === '') {
+                continue;
+            }
+            if (! preg_match('/^(payment|expense|deposit-refund)-\d+$/', $id)) {
+                throw ValidationException::withMessages([
+                    'entry_ids' => 'Invalid entry selection.',
+                ]);
+            }
+            $normalized[] = $id;
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $entries
+     * @return list<int>
+     */
+    private function idsOfType(Collection $entries, string $type): array
+    {
+        $prefix = $type.'-';
+
+        return $entries
+            ->pluck('id')
+            ->filter(fn ($id) => is_string($id) && str_starts_with($id, $prefix))
+            ->map(fn (string $id) => (int) substr($id, strlen($prefix)))
+            ->filter(fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+    }
+
+    private function addMoney(float $left, float $right): float
+    {
+        return round($left + $right, 2);
+    }
+
+    /**
+     * @param  array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>  $existing
+     * @param  array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>  $incoming
+     * @return array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>
+     */
+    private function mergeBankTotals(array $existing, array $incoming): array
+    {
+        $merged = [];
+
+        foreach (array_merge($existing, $incoming) as $row) {
+            $key = (string) ($row['bank_account_id'] ?? 'unknown');
+            if (! isset($merged[$key])) {
+                $merged[$key] = [
+                    'bank_account_id' => $row['bank_account_id'] ?? null,
+                    'bank_name' => $row['bank_name'] ?? 'Bank',
+                    'account_number' => $row['account_number'] ?? '',
+                    'total' => 0.0,
+                ];
+            }
+            $merged[$key]['total'] = $this->addMoney(
+                (float) $merged[$key]['total'],
+                (float) ($row['total'] ?? 0)
+            );
+        }
+
+        return array_values($merged);
+    }
+
+    private function mergeApprovalNotes(?string $existing, ?string $incoming): ?string
+    {
+        $existing = trim((string) $existing);
+        $incoming = trim((string) $incoming);
+
+        if ($existing === '' && $incoming === '') {
+            return null;
+        }
+        if ($incoming === '') {
+            return $existing === '' ? null : $existing;
+        }
+        if ($existing === '') {
+            return $incoming;
+        }
+
+        return $existing."\n\n---\n".$incoming;
     }
 
     /**
@@ -365,22 +525,37 @@ class DailyFinancialSheetService
      */
     private function formatExpenseEntry(Expense $expense): array
     {
-        $carLabel = $expense->car
-            ? trim(($expense->car->registration ?? '').' '.($expense->car->carModel->name ?? ''))
-            : '—';
+        $isDaily = $expense->isDailyExpense();
+        $paymentMethod = $expense->payment_method ?: 'Cash';
+
+        if ($isDaily) {
+            $description = trim((string) ($expense->title ?: $expense->description));
+            if ($expense->notes) {
+                $description = trim($description.' — '.$expense->notes);
+            }
+            $category = 'Daily expense';
+            $carRegistration = null;
+        } else {
+            $carLabel = $expense->car
+                ? trim(($expense->car->registration ?? '').' '.($expense->car->carModel->name ?? ''))
+                : '—';
+            $description = trim($carLabel.' — '.$expense->description);
+            $category = $expense->type;
+            $carRegistration = $expense->car?->registration;
+        }
 
         return [
             'id' => 'expense-'.$expense->id,
             'sort_at' => $expense->created_at?->timestamp ?? 0,
             'direction' => 'out',
             'employee' => $expense->createdByUser?->name ?? '—',
-            'description' => trim($carLabel.' — '.$expense->description),
-            'category' => $expense->type,
-            'car_registration' => $expense->car?->registration,
-            'payment_method' => 'Cash',
-            'bank_account_id' => null,
-            'bank_name' => null,
-            'account_number' => null,
+            'description' => $description,
+            'category' => $category,
+            'car_registration' => $carRegistration,
+            'payment_method' => $paymentMethod,
+            'bank_account_id' => $expense->bank_account_id,
+            'bank_name' => $expense->bankAccount?->bank_name,
+            'account_number' => $expense->bankAccount?->account_number,
             'amount' => (float) $expense->amount,
             'posting_status' => $expense->posting_status,
         ];
