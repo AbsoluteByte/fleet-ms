@@ -66,6 +66,10 @@
                                             <td>{{ $agreement->company->name  }}</td>
                                             <td>
                                                 <strong>{{ $agreement->driver->full_name }}</strong>
+                                                @if($agreement->paying_company_name)
+                                                    <br>
+                                                    <span class="text-muted">Pays via: {{ $agreement->paying_company_name }}</span>
+                                                @endif
                                                 <br>
                                                 <span>Post Code: {{ $agreement->driver->post_code }}</span>
                                             </td>
@@ -117,57 +121,84 @@
                                             <td>
                                                 <div class="btn-group" role="group">
                                                     <a href="{{ route('agreements.show', $agreement) }}"
-                                                       class="btn btn-sm btn-outline-info">
+                                                       class="btn btn-sm btn-outline-info js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="View Agreement" aria-label="View Agreement">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
                                                     <a href="{{ route('agreements.edit', $agreement) }}"
-                                                       class="btn btn-sm btn-outline-warning">
+                                                       class="btn btn-sm btn-outline-warning js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="Edit Agreement" aria-label="Edit Agreement">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
                                                     @php
                                                         $refundStatus = $agreement->depositRefundStatus();
-                                                        $showRefundBtn = $agreement->isClosedForDepositRefund() && (float) $agreement->deposit_amount > 0;
+                                                        $showRefundBtn = $refundStatus !== null || $agreement->canRequestDepositRefund();
+                                                        $settlement = $agreement->deposit_settlement_preview ?? null;
                                                     @endphp
                                                     @if($showRefundBtn)
                                                         @if($refundStatus === 'pending')
-                                                            <button type="button"
-                                                                    class="btn btn-sm btn-outline-secondary"
-                                                                    disabled
-                                                                    style="opacity: .45;"
-                                                                    title="Deposit refund pending daily financial sheet approval">
-                                                                <i class="fa fa-undo"></i>
-                                                            </button>
+                                                            <span class="d-inline-flex js-action-tooltip"
+                                                                  data-toggle="tooltip" data-placement="top"
+                                                                  title="Deposit Refund Pending Daily Financial Sheet Approval"
+                                                                  tabindex="0">
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-outline-secondary"
+                                                                        disabled
+                                                                        style="opacity: .45;"
+                                                                        aria-label="Deposit Refund Pending Daily Financial Sheet Approval">
+                                                                    <i class="fa fa-undo"></i>
+                                                                </button>
+                                                            </span>
                                                         @elseif($refundStatus === 'posted')
-                                                            <button type="button"
-                                                                    class="btn btn-sm btn-outline-secondary"
-                                                                    disabled
-                                                                    style="opacity: .45;"
-                                                                    title="Deposit already refunded">
-                                                                <i class="fa fa-undo"></i>
-                                                            </button>
+                                                            <span class="d-inline-flex js-action-tooltip"
+                                                                  data-toggle="tooltip" data-placement="top"
+                                                                  title="Deposit Already Refunded"
+                                                                  tabindex="0">
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-outline-secondary"
+                                                                        disabled
+                                                                        style="opacity: .45;"
+                                                                        aria-label="Deposit Already Refunded">
+                                                                    <i class="fa fa-undo"></i>
+                                                                </button>
+                                                            </span>
                                                         @else
-                                                            <button type="button"
-                                                                    class="btn btn-sm btn-outline-success"
-                                                                    data-toggle="modal"
-                                                                    data-target="#refundDepositModal"
-                                                                    data-refund-deposit-btn
-                                                                    data-action="{{ route('agreements.refund-deposit', $agreement) }}"
-                                                                    data-amount="{{ number_format((float) $agreement->deposit_amount, 2, '.', '') }}"
-                                                                    title="Refund Deposit">
-                                                                <i class="fa fa-undo"></i>
-                                                            </button>
+                                                            <span class="d-inline-flex js-action-tooltip"
+                                                                  data-toggle="tooltip" data-placement="top"
+                                                                  title="Refund Deposit">
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-outline-success"
+                                                                        data-toggle="modal"
+                                                                        data-target="#refundDepositModal"
+                                                                        data-refund-deposit-btn
+                                                                        data-action="{{ route('agreements.refund-deposit', $agreement) }}"
+                                                                        data-amount="{{ number_format((float) ($settlement['refund_amount'] ?? 0), 2, '.', '') }}"
+                                                                        data-gross-deposit="{{ number_format((float) ($settlement['gross_deposit_amount'] ?? 0), 2, '.', '') }}"
+                                                                        data-deductions="{{ number_format((float) ($settlement['deductions_amount'] ?? 0), 2, '.', '') }}"
+                                                                        data-driver-outstanding="{{ number_format((float) ($settlement['driver_outstanding_amount'] ?? 0), 2, '.', '') }}"
+                                                                        data-debt-offset="{{ number_format((float) ($settlement['debt_offset_amount'] ?? 0), 2, '.', '') }}"
+                                                                        data-remaining-debt="{{ number_format((float) ($settlement['remaining_debt_amount'] ?? 0), 2, '.', '') }}"
+                                                                        aria-label="Refund Deposit">
+                                                                    <i class="fa fa-undo"></i>
+                                                                </button>
+                                                            </span>
                                                         @endif
                                                     @endif
                                                     <a href="{{ route('agreements.pdf', $agreement) }}"
-                                                       class="btn btn-sm btn-outline-danger" target="_blank"
-                                                       title="Generate PDF">
+                                                       class="btn btn-sm btn-outline-danger js-action-tooltip" target="_blank"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="Generate PDF" aria-label="Generate PDF">
                                                         <i class="fa fa-file-pdf-o"></i>
                                                     </a>
                                                     <form action="{{ route('agreements.destroy', $agreement) }}"
                                                           method="POST" style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger js-action-tooltip"
+                                                                data-toggle="tooltip" data-placement="top"
+                                                                title="Delete Agreement" aria-label="Delete Agreement"
                                                                 onclick="return confirm('Are you sure?')">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
@@ -386,10 +417,20 @@
                 refundStatus: '',
             };
 
+            function initializeActionTooltips() {
+                $('.js-action-tooltip').tooltip({ container: 'body' });
+            }
+
             const dataTable = $('#dataTable').DataTable({
                 processing: true,
                 responsive: true,
                 order: [],
+            });
+
+            initializeActionTooltips();
+            dataTable.on('draw.dt responsive-display.dt', function () {
+                $('.tooltip').remove();
+                initializeActionTooltips();
             });
 
             $('#dataTable_filter').append(

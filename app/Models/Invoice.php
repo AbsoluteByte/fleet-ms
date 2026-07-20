@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Invoice extends Model
 {
@@ -59,6 +60,23 @@ class Invoice extends Model
     public function paymentAllocations()
     {
         return $this->hasMany(PaymentAllocation::class);
+    }
+
+    public function creditTransactionLines()
+    {
+        return $this->hasMany(DriverCreditTransactionLine::class, 'target_invoice_id');
+    }
+
+    public function getReservedCreditAmountAttribute(): float
+    {
+        if (! Schema::hasTable('driver_credit_transaction_lines')) {
+            return 0.0;
+        }
+
+        return round((float) $this->creditTransactionLines()
+            ->where('status', DriverCreditTransactionLine::STATUS_RESERVED)
+            ->whereHas('transaction', fn ($query) => $query->pending())
+            ->sum('amount'), 2);
     }
 
     public function sourceAgreement()

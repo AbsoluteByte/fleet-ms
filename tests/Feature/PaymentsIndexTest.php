@@ -6,6 +6,8 @@ use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
+use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Models\User;
@@ -134,6 +136,53 @@ class PaymentsIndexTest extends TestCase
         $response->assertDontSee('none@example.com');
     }
 
+    public function test_payments_index_includes_advanced_filter_panel_and_row_filter_metadata(): void
+    {
+        $driver = $this->createDriver('Filter', 'Meta', 'filter@example.com');
+        $driver->update([
+            'payment_remind_at' => '2026-07-20 14:30:00',
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-15',
+            'amount' => 100,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->user->id,
+        ]);
+
+        Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-1001',
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-17',
+            'total_amount' => 200,
+            'paid_amount' => 0,
+            'balance_amount' => 200,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertSee('id="paymentsFilterPanel"', false);
+        $response->assertSee('id="paymentsFilterStatus"', false);
+        $response->assertSee('id="paymentsReminderFrom"', false);
+        $response->assertSee('id="paymentsLastPaymentFrom"', false);
+        $response->assertSee('id="paymentsLatestInvoiceFrom"', false);
+        $response->assertSee('Payment Due');
+        $response->assertSee('Last Payment');
+        $response->assertSee('10 Jul 2026');
+        $response->assertSee('15 Jul 2026');
+        $response->assertSee('data-driver-status="active"', false);
+        $response->assertSee('data-remind-at="2026-07-20T14:30:00', false);
+        $response->assertSee('data-last-payment-date="2026-07-15"', false);
+        $response->assertSee('data-latest-invoice-date="2026-07-10"', false);
+    }
+
     private function setUpHttpTestExtras(): void
     {
         Schema::table('tenants', function (Blueprint $table) {
@@ -160,6 +209,11 @@ class PaymentsIndexTest extends TestCase
             $table->string('model_type');
             $table->unsignedBigInteger('model_id');
         });
+
+        Schema::table('drivers', function (Blueprint $table) {
+            $table->boolean('is_active')->default(true);
+            $table->dateTime('payment_remind_at')->nullable();
+        });
     }
 
     private function createDriver(string $firstName, string $lastName, string $email): Driver
@@ -169,6 +223,7 @@ class PaymentsIndexTest extends TestCase
             'first_name' => $firstName,
             'last_name' => $lastName,
             'email' => $email,
+            'is_active' => true,
         ]);
     }
 

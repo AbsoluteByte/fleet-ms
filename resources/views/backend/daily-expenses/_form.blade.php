@@ -1,4 +1,9 @@
 @php
+    $selectedExpenseType = old(
+        'daily_expense_type',
+        $model->daily_expense_type ?? \App\Models\Expense::DAILY_TYPE_OFFICE
+    );
+    $selectedCarId = (string) old('car_id', $model->car_id ?? '');
     $selectedPaymentMethod = old('payment_method', $model->payment_method ?? '');
     $paymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
     $defaultCardBankAccountId = ($bankAccounts ?? collect())->firstWhere(
@@ -13,6 +18,47 @@
 @endphp
 
 <div class="row">
+    <div class="col-md-6 mb-2">
+        <div class="form-group">
+            <label for="daily_expense_type">Type <span class="text-danger">*</span></label>
+            <select name="daily_expense_type" id="daily_expense_type"
+                    class="form-control @error('daily_expense_type') is-invalid @enderror" required>
+                <option value="{{ \App\Models\Expense::DAILY_TYPE_OFFICE }}"
+                    {{ $selectedExpenseType === \App\Models\Expense::DAILY_TYPE_OFFICE ? 'selected' : '' }}>
+                    Office
+                </option>
+                <option value="{{ \App\Models\Expense::DAILY_TYPE_VEHICLE }}"
+                    {{ $selectedExpenseType === \App\Models\Expense::DAILY_TYPE_VEHICLE ? 'selected' : '' }}>
+                    Vehicle
+                </option>
+            </select>
+            @error('daily_expense_type')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-2 {{ $selectedExpenseType === \App\Models\Expense::DAILY_TYPE_VEHICLE ? '' : 'd-none' }}"
+         id="daily-expense-car-field">
+        <div class="form-group">
+            <label for="car_id">Car <span class="text-danger">*</span></label>
+            <select name="car_id" id="car_id"
+                    class="form-control select-search @error('car_id') is-invalid @enderror">
+                <option value="">Select Car</option>
+                @foreach($cars ?? collect() as $car)
+                    <option value="{{ $car->id }}" {{ $selectedCarId === (string) $car->id ? 'selected' : '' }}>
+                        {{ $car->registration ?: 'No registration' }}
+                        @if($car->carModel) — {{ $car->carModel->name }} @endif
+                        @if($car->company) ({{ $car->company->name }}) @endif
+                    </option>
+                @endforeach
+            </select>
+            @error('car_id')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
     <div class="col-md-6 mb-2">
         <div class="form-group">
             <label for="title">Expense Title <span class="text-danger">*</span></label>
@@ -62,7 +108,7 @@
         </div>
     </div>
 
-    <div class="col-md-6 mb-2">
+    <div class="col-md-6 mb-2 d-none" id="daily-expense-bank-column">
         @include('backend.payments.partials.bank-account-select', [
             'bankAccounts' => $bankAccounts ?? collect(),
             'selected' => $selectedBankAccountId,
@@ -120,10 +166,32 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const paymentMethodSelect = document.getElementById('payment_method');
+            const bankAccountColumn = document.getElementById('daily-expense-bank-column');
             const bankAccountField = document.querySelector('[data-bank-account-field]');
             const bankAccountSelect = document.querySelector('[data-bank-account-select]');
+            const expenseTypeSelect = document.getElementById('daily_expense_type');
+            const carField = document.getElementById('daily-expense-car-field');
+            const carSelect = document.getElementById('car_id');
             const defaultCardBankId = @json($defaultCardBankAccountId ?? null);
             const hasBankAccounts = @json(($bankAccounts ?? collect())->isNotEmpty());
+
+            function toggleCarField() {
+                if (!expenseTypeSelect || !carField || !carSelect) {
+                    return;
+                }
+
+                const isVehicle = expenseTypeSelect.value === @json(\App\Models\Expense::DAILY_TYPE_VEHICLE);
+                carField.classList.toggle('d-none', !isVehicle);
+                carSelect.required = isVehicle;
+
+                if (!isVehicle) {
+                    if (window.jQuery && window.jQuery.fn.select2 && window.jQuery(carSelect).hasClass('select2-hidden-accessible')) {
+                        window.jQuery(carSelect).val('').trigger('change');
+                    } else {
+                        carSelect.value = '';
+                    }
+                }
+            }
 
             function toggleBankAccountField() {
                 if (!paymentMethodSelect || !bankAccountField) {
@@ -132,6 +200,9 @@
 
                 const needsBank = paymentMethodSelect.value === 'Bank Transfer'
                     || paymentMethodSelect.value === 'Card Payment';
+                if (bankAccountColumn) {
+                    bankAccountColumn.classList.toggle('d-none', !needsBank);
+                }
                 bankAccountField.classList.toggle('d-none', !needsBank);
 
                 if (bankAccountSelect) {
@@ -148,6 +219,10 @@
             if (paymentMethodSelect) {
                 paymentMethodSelect.addEventListener('change', toggleBankAccountField);
                 toggleBankAccountField();
+            }
+            if (expenseTypeSelect) {
+                expenseTypeSelect.addEventListener('change', toggleCarField);
+                toggleCarField();
             }
         });
     </script>

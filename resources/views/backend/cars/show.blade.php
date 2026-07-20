@@ -195,8 +195,15 @@
                                             'status' => $car->dashcam_status === 'inactive' ? 'inactive' : 'active',
                                             'notes' => $car->dashcam_notes,
                                         ],
+                                        [
+                                            'title' => 'Tag',
+                                            'icon' => 'fa-tag',
+                                            'installed' => (bool) $car->tag_installed,
+                                            'status' => $car->tag_status === 'inactive' ? 'inactive' : 'active',
+                                            'notes' => $car->tag_notes,
+                                        ],
                                     ] as $accessory)
-                                        <div class="col-md-6 mb-2 mb-md-0">
+                                        <div class="col-lg-4 col-md-6 mb-2">
                                             <div class="car-accessory-view-card">
                                                 <div class="car-accessory-view-card__title">
                                                     <i class="fa {{ $accessory['icon'] }} text-primary mr-50"></i> {{ $accessory['title'] }}

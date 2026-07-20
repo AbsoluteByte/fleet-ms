@@ -329,7 +329,7 @@
                         }
                     }
                 ],
-                order: [[0, 'asc'], [4, 'asc']], // Priority first, then due date
+                order: [], // Preserve API order: latest invoice first
                 pageLength: 25,
                 language: {
                     search: "_INPUT_",

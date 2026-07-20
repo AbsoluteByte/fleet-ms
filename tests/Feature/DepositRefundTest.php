@@ -105,8 +105,11 @@ class DepositRefundTest extends TestCase
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
         Schema::dropIfExists('payment_allocations');
+        Schema::dropIfExists('driver_credit_transaction_lines');
+        Schema::dropIfExists('driver_credit_transactions');
         Schema::dropIfExists('invoices');
         Schema::dropIfExists('deposit_refunds');
+        Schema::dropIfExists('agreement_deductions');
         Schema::dropIfExists('daily_financial_sheets');
         Schema::dropIfExists('agreements');
         Schema::dropIfExists('statuses');
@@ -356,7 +359,7 @@ class DepositRefundTest extends TestCase
         $this->assertEquals(180, $totals['bank_out'][0]['total']);
     }
 
-    public function test_partial_refund_amount_is_stored(): void
+    public function test_submitted_refund_amount_cannot_reduce_server_calculated_amount(): void
     {
         $agreement = $this->createClosedAgreement(500);
 
@@ -375,10 +378,10 @@ class DepositRefundTest extends TestCase
 
         $refund = DepositRefund::query()->first();
         $this->assertNotNull($refund);
-        $this->assertEquals(350, (float) $refund->amount);
+        $this->assertEquals(500, (float) $refund->amount);
     }
 
-    public function test_refund_amount_above_deposit_fails_validation(): void
+    public function test_submitted_refund_amount_above_deposit_is_ignored(): void
     {
         $agreement = $this->createClosedAgreement(200);
 
@@ -393,8 +396,9 @@ class DepositRefundTest extends TestCase
             ]);
 
         $response->assertRedirect(route('agreements.show', $agreement));
-        $response->assertSessionHasErrors('amount');
-        $this->assertDatabaseCount('deposit_refunds', 0);
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('deposit_refunds', 1);
+        $this->assertEquals(200, (float) DepositRefund::query()->first()->amount);
     }
 
     public function test_card_payment_requires_bank_account(): void
@@ -416,7 +420,7 @@ class DepositRefundTest extends TestCase
         $this->assertDatabaseCount('deposit_refunds', 0);
     }
 
-    public function test_driver_credit_creates_refund_and_posted_payment(): void
+    public function test_driver_credit_creates_linked_pending_refund_and_payment(): void
     {
         $agreement = $this->createClosedAgreement(400);
         $date = now()->toDateString();
@@ -438,13 +442,14 @@ class DepositRefundTest extends TestCase
         $this->assertNotNull($refund);
         $this->assertSame('Driver Credit', $refund->payment_method);
         $this->assertEquals(400, (float) $refund->amount);
-        $this->assertSame(DepositRefund::POSTING_STATUS_POSTED, $refund->posting_status);
+        $this->assertSame(DepositRefund::POSTING_STATUS_PENDING, $refund->posting_status);
 
         $payment = \App\Models\Payment::query()->first();
         $this->assertNotNull($payment);
         $this->assertSame('Driver Credit', $payment->payment_method);
         $this->assertEquals(400, (float) $payment->amount);
-        $this->assertSame(\App\Models\Payment::POSTING_STATUS_POSTED, $payment->posting_status);
+        $this->assertSame(\App\Models\Payment::POSTING_STATUS_PENDING, $payment->posting_status);
+        $this->assertSame($payment->id, $refund->refund_credit_payment_id);
         $this->assertEquals(400, (float) $payment->unallocated_amount);
 
         $service = app(DailyFinancialSheetService::class);
@@ -453,6 +458,17 @@ class DepositRefundTest extends TestCase
         $this->assertEquals(0, $totals['cash_in']);
         $this->assertCount(0, $totals['bank_out']);
         $this->assertCount(0, $totals['bank_in']);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date), [
+            'approve_mode' => 'selected',
+            'entry_ids' => ['deposit-refund-'.$refund->id],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertTrue($refund->fresh()->isPosted());
+        $this->assertTrue($payment->fresh()->isPosted());
+        $this->assertEquals(400, (float) $payment->fresh()->unallocated_amount);
     }
 
     public function test_card_payment_refund_appears_in_bank_out_totals(): void
@@ -479,6 +495,247 @@ class DepositRefundTest extends TestCase
         $this->assertEquals(0, $totals['cash_out']);
         $this->assertCount(1, $totals['bank_out']);
         $this->assertEquals(175, $totals['bank_out'][0]['total']);
+    }
+
+    public function test_deductions_and_all_driver_debt_are_calculated_and_approved_atomically(): void
+    {
+        $agreement = $this->createClosedAgreement(500);
+        $agreement->deductions()->create([
+            'tenant_id' => $this->tenant->id,
+            'amount' => 50,
+            'notes' => 'Damage',
+            'sort_order' => 0,
+            'created_by' => $this->employee->id,
+        ]);
+        $oldestInvoiceId = $this->createInvoiceBalance(200, now()->subMonth()->toDateString());
+        $newestInvoiceId = $this->createInvoiceBalance(100, now()->subWeek()->toDateString());
+        $date = now()->toDateString();
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+        $this->post(route('agreements.refund-deposit', $agreement), [
+            'amount' => 1,
+            'payment_method' => 'Cash',
+            'refund_date' => $date,
+        ])->assertSessionHasNoErrors();
+
+        $refund = DepositRefund::query()->firstOrFail();
+        $this->assertEquals(500, (float) $refund->gross_deposit_amount);
+        $this->assertEquals(50, (float) $refund->deductions_amount);
+        $this->assertEquals(300, (float) $refund->debt_offset_amount);
+        $this->assertEquals(150, (float) $refund->amount);
+        $this->assertNotNull($refund->debt_payment_id);
+
+        $service = app(DailyFinancialSheetService::class);
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $this->assertTrue($entries->contains(fn ($entry) => $entry['category'] === 'Deposit applied to driver debt'));
+        $totals = $service->computeTotals($entries, pendingOnly: true);
+        $this->assertEquals(150, $totals['cash_out']);
+        $this->assertEquals(0, $totals['cash_in']);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date), [
+            'approve_mode' => 'selected',
+            'entry_ids' => ['payment-'.$refund->debt_payment_id],
+        ])->assertSessionHasNoErrors();
+
+        $refund->refresh();
+        $this->assertTrue($refund->isPosted());
+        $this->assertTrue($refund->debtPayment->fresh()->isPosted());
+        $this->assertEquals(0, (float) DB::table('invoices')->where('id', $oldestInvoiceId)->value('balance_amount'));
+        $this->assertEquals(0, (float) DB::table('invoices')->where('id', $newestInvoiceId)->value('balance_amount'));
+        $this->assertEquals(150, (float) DailyFinancialSheet::query()->firstOrFail()->cash_out);
+    }
+
+    public function test_zero_refund_settlement_is_still_approvable_without_payment_method(): void
+    {
+        $agreement = $this->createClosedAgreement(100);
+        $agreement->deductions()->create([
+            'tenant_id' => $this->tenant->id,
+            'amount' => 20,
+            'notes' => 'Cleaning',
+            'sort_order' => 0,
+        ]);
+        $this->createInvoiceBalance(100, now()->subMonth()->toDateString());
+        $date = now()->toDateString();
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+        $this->post(route('agreements.refund-deposit', $agreement), [
+            'amount' => 999,
+            'refund_date' => $date,
+        ])->assertSessionHasNoErrors();
+
+        $refund = DepositRefund::query()->firstOrFail();
+        $this->assertEquals(0, (float) $refund->amount);
+        $this->assertEquals(80, (float) $refund->debt_offset_amount);
+        $this->assertSame('No Refund Due', $refund->payment_method);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date))->assertSessionHasNoErrors();
+
+        $this->assertTrue($refund->fresh()->isPosted());
+        $sheet = DailyFinancialSheet::query()->firstOrFail();
+        $this->assertEquals(0, (float) $sheet->cash_in);
+        $this->assertEquals(0, (float) $sheet->cash_out);
+    }
+
+    public function test_upgraded_predecessor_cannot_request_its_transferred_deposit(): void
+    {
+        $agreement = $this->createClosedAgreement(300);
+        Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $this->car->id,
+            'status_id' => $this->activeStatus->id,
+            'upgraded_from_agreement_id' => $agreement->id,
+            'start_date' => now(),
+            'end_date' => now()->addYear(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'weekly',
+            'deposit_amount' => 300,
+        ]);
+
+        $this->assertFalse($agreement->canRequestDepositRefund());
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+        $this->post(route('agreements.refund-deposit', $agreement), [
+            'payment_method' => 'Cash',
+            'refund_date' => now()->toDateString(),
+        ])->assertSessionHasErrors('agreement');
+        $this->assertDatabaseCount('deposit_refunds', 0);
+    }
+
+    public function test_agreement_financial_totals_use_invoice_paid_and_balance_amounts(): void
+    {
+        $agreement = $this->createClosedAgreement(100);
+
+        DB::table('invoices')->insert([
+            [
+                'tenant_id' => $this->tenant->id,
+                'driver_id' => $this->driver->id,
+                'source_id' => $agreement->id,
+                'invoice_type' => 'agreement',
+                'invoice_date' => now()->subMonth()->toDateString(),
+                'due_date' => now()->subMonth()->toDateString(),
+                'total_amount' => 300,
+                'paid_amount' => 120,
+                'balance_amount' => 180,
+                'status' => 'partial',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'tenant_id' => $this->tenant->id,
+                'driver_id' => $this->driver->id,
+                'source_id' => $agreement->id,
+                'invoice_type' => 'agreement_deposit',
+                'invoice_date' => now()->subMonth()->toDateString(),
+                'due_date' => now()->subMonth()->toDateString(),
+                'total_amount' => 100,
+                'paid_amount' => 100,
+                'balance_amount' => 0,
+                'status' => 'paid',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->assertEquals(220, $agreement->total_paid);
+        $this->assertEquals(180, $agreement->total_outstanding);
+    }
+
+    public function test_agreement_invoice_section_filters_invoices_and_links_unpaid_rows_to_add_payment(): void
+    {
+        $agreement = $this->createClosedAgreement(100);
+        $otherAgreement = $this->createClosedAgreement(0);
+        $now = now();
+
+        DB::table('invoices')->insert([
+            [
+                'invoice_no' => 'INV-CURRENT-UNPAID',
+                'tenant_id' => $this->tenant->id,
+                'driver_id' => $this->driver->id,
+                'source_id' => $agreement->id,
+                'invoice_type' => 'agreement',
+                'invoice_date' => $now->toDateString(),
+                'due_date' => $now->toDateString(),
+                'total_amount' => 200,
+                'paid_amount' => 50,
+                'balance_amount' => 150,
+                'status' => 'partial',
+                'notes' => 'Current unpaid invoice',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'invoice_no' => 'INV-CURRENT-PAID',
+                'tenant_id' => $this->tenant->id,
+                'driver_id' => $this->driver->id,
+                'source_id' => $agreement->id,
+                'invoice_type' => 'agreement_deposit',
+                'invoice_date' => $now->toDateString(),
+                'due_date' => $now->toDateString(),
+                'total_amount' => 100,
+                'paid_amount' => 100,
+                'balance_amount' => 0,
+                'status' => 'paid',
+                'notes' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'invoice_no' => 'INV-OTHER-AGREEMENT',
+                'tenant_id' => $this->tenant->id,
+                'driver_id' => $this->driver->id,
+                'source_id' => $otherAgreement->id,
+                'invoice_type' => 'agreement',
+                'invoice_date' => $now->toDateString(),
+                'due_date' => $now->toDateString(),
+                'total_amount' => 50,
+                'paid_amount' => 0,
+                'balance_amount' => 50,
+                'status' => 'pending',
+                'notes' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+
+        $agreement->load('invoices');
+        $html = view('backend.agreements.partials.invoices', compact('agreement'))->render();
+
+        $this->assertStringContainsString('INV-CURRENT-UNPAID', $html);
+        $this->assertStringContainsString('INV-CURRENT-PAID', $html);
+        $this->assertStringNotContainsString('INV-OTHER-AGREEMENT', $html);
+        $this->assertStringContainsString('Partial', $html);
+        $this->assertStringContainsString('Paid', $html);
+        $this->assertStringContainsString(
+            route('payments.create', ['driver_id' => $agreement->driver_id]),
+            $html
+        );
+        $this->assertSame(1, substr_count($html, 'Add Payment'));
+    }
+
+    private function createInvoiceBalance(float $amount, string $invoiceDate): int
+    {
+        return (int) DB::table('invoices')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'driver_id' => $this->driver->id,
+            'invoice_type' => 'agreement',
+            'invoice_date' => $invoiceDate,
+            'due_date' => $invoiceDate,
+            'total_amount' => $amount,
+            'paid_amount' => 0,
+            'balance_amount' => $amount,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function createClosedAgreement(float $deposit): Agreement
@@ -616,6 +873,7 @@ class DepositRefundTest extends TestCase
             $table->foreignId('driver_id')->nullable();
             $table->foreignId('car_id')->nullable();
             $table->foreignId('status_id')->nullable();
+            $table->foreignId('upgraded_from_agreement_id')->nullable();
             $table->dateTime('start_date');
             $table->date('end_date');
             $table->dateTime('closing_date')->nullable();
@@ -625,12 +883,28 @@ class DepositRefundTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('agreement_deductions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->foreignId('agreement_id');
+            $table->decimal('amount', 12, 2);
+            $table->text('notes')->nullable();
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->foreignId('created_by')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('deposit_refunds', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');
             $table->foreignId('agreement_id')->unique();
             $table->foreignId('driver_id');
             $table->decimal('amount', 12, 2);
+            $table->decimal('gross_deposit_amount', 12, 2)->default(0);
+            $table->decimal('deductions_amount', 12, 2)->default(0);
+            $table->decimal('debt_offset_amount', 12, 2)->default(0);
+            $table->foreignId('debt_payment_id')->nullable();
+            $table->foreignId('refund_credit_payment_id')->nullable();
             $table->string('payment_method');
             $table->foreignId('bank_account_id')->nullable();
             $table->date('refund_date');
@@ -675,12 +949,18 @@ class DepositRefundTest extends TestCase
 
         Schema::create('invoices', function (Blueprint $table) {
             $table->id();
+            $table->string('invoice_no')->nullable();
+            $table->foreignId('tenant_id')->nullable();
             $table->foreignId('driver_id')->nullable();
             $table->foreignId('source_id')->nullable();
             $table->string('invoice_type')->nullable();
             $table->date('invoice_date')->nullable();
             $table->date('due_date')->nullable();
+            $table->decimal('total_amount', 12, 2)->default(0);
+            $table->decimal('paid_amount', 12, 2)->default(0);
             $table->decimal('balance_amount', 12, 2)->default(0);
+            $table->string('status')->default('pending');
+            $table->text('notes')->nullable();
             $table->timestamps();
         });
 
@@ -688,7 +968,35 @@ class DepositRefundTest extends TestCase
             $table->id();
             $table->foreignId('payment_id');
             $table->foreignId('invoice_id');
+            $table->foreignId('driver_credit_transaction_line_id')->nullable();
             $table->decimal('allocated_amount', 12, 2)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('driver_credit_transactions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->foreignId('driver_id');
+            $table->string('kind', 30);
+            $table->decimal('amount', 12, 2);
+            $table->date('request_date');
+            $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->foreignId('created_by')->nullable();
+            $table->foreignId('approved_by')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('driver_credit_transaction_lines', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('driver_credit_transaction_id');
+            $table->foreignId('source_payment_id');
+            $table->foreignId('target_invoice_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('status', 20)->default('reserved');
             $table->timestamps();
         });
 

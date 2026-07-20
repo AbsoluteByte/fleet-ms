@@ -130,7 +130,6 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('mot-test-date-import/report', [App\Http\Controllers\Backend\MotTestDateImportController::class, 'report'])->name('mot-test-date-import.report');
 
     Route::resource('reservations', App\Http\Controllers\Backend\ReservationController::class)->except(['show']);
-    Route::resource('vehicle-swaps', App\Http\Controllers\Backend\VehicleSwapController::class)->only(['index', 'create', 'store']);
     Route::delete('drivers/{driver}/documents/{document}', [App\Http\Controllers\Backend\DriverController::class, 'destroyDocument'])->name('drivers.documents.destroy');
     Route::get('drivers/{driver}/document-archives', [App\Http\Controllers\Backend\DriverController::class, 'documentArchives'])->name('drivers.document-archives');
     Route::resource('drivers', App\Http\Controllers\Backend\DriverController::class);
@@ -144,11 +143,6 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('agreements/{agreement}/pdf', [App\Http\Controllers\Backend\AgreementController::class, 'generatePDF'])->name('agreements.pdf');
     Route::get('agreements/{agreement}/pdf/preview', [App\Http\Controllers\Backend\AgreementController::class, 'previewPDF'])->name('agreements.pdf.preview');
     Route::get('agreements/{agreement}/permission-letter', [App\Http\Controllers\Backend\AgreementController::class, 'permissionLetterPDF'])->name('agreements.permission-letter');
-
-    Route::get('agreements/{agreement}/upgrade-cars', [App\Http\Controllers\Backend\AgreementController::class, 'upgradeCars'])
-        ->name('agreements.upgrade-cars');
-    Route::post('agreements/{agreement}/upgrade-car', [App\Http\Controllers\Backend\AgreementController::class, 'upgradeCar'])
-        ->name('agreements.upgrade-car');
 
     // Inside admin prefix group
     Route::post('agreements/{agreement}/send-esign', [App\Http\Controllers\Backend\AgreementController::class, 'sendForESignature'])
@@ -166,6 +160,16 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     // Settings
     Route::get('payments/drivers/{driver}', [App\Http\Controllers\Backend\PaymentController::class, 'driver'])->name('payments.driver');
+    Route::post('payments/drivers/{driver}/refund-credit', [App\Http\Controllers\Backend\PaymentController::class, 'refundCredit'])
+        ->name('payments.credit.refund');
+    Route::post('payments/drivers/{driver}/apply-credit', [App\Http\Controllers\Backend\PaymentController::class, 'applyCredit'])
+        ->name('payments.credit.apply');
+    Route::patch('payments/drivers/{driver}/follow-up', [App\Http\Controllers\Backend\PaymentController::class, 'updateDriverFollowUp'])
+        ->name('payments.follow-up.update');
+    Route::post('payments/drivers/{driver}/follow-up/dismiss', [App\Http\Controllers\Backend\PaymentController::class, 'dismissFollowUpReminder'])
+        ->name('payments.follow-up.dismiss');
+    Route::get('payments/follow-up-reminders/due', [App\Http\Controllers\Backend\PaymentController::class, 'dueFollowUpReminders'])
+        ->name('payments.follow-up.due');
     Route::patch('payments/{payment}/notes', [App\Http\Controllers\Backend\PaymentController::class, 'updateNotes'])->name('payments.notes.update');
     Route::resource('payments', App\Http\Controllers\Backend\PaymentController::class);
     Route::resource('payment-settings', App\Http\Controllers\Backend\PaymentSettingController::class)

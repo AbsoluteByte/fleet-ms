@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\BankAccount;
+use App\Models\Car;
 use App\Models\Company;
 use App\Models\DailyFinancialSheet;
 use App\Models\Expense;
@@ -10,6 +11,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\DailyFinancialSheetService;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Tests\TestCase;
@@ -24,6 +26,10 @@ class DailyExpenseTest extends TestCase
 
     private BankAccount $bankAccount;
 
+    private Company $company;
+
+    private Car $car;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -36,16 +42,29 @@ class DailyExpenseTest extends TestCase
             'status' => Tenant::STATUS_ACTIVE,
         ]);
 
-        $company = Company::query()->create([
+        $this->company = Company::query()->create([
             'tenant_id' => $this->tenant->id,
             'name' => 'Daily Expense Company',
         ]);
 
         $this->bankAccount = BankAccount::query()->create([
             'tenant_id' => $this->tenant->id,
-            'company_id' => $company->id,
+            'company_id' => $this->company->id,
             'bank_name' => 'Barclays',
             'account_number' => '12345678',
+        ]);
+        $carModelId = DB::table('car_models')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Daily Expense Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->car = Car::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'car_model_id' => $carModelId,
+            'registration' => 'DAILY-01',
+            'fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
         ]);
 
         $this->employee = User::factory()->create(['email' => 'daily-expense-employee@example.com']);
@@ -67,10 +86,13 @@ class DailyExpenseTest extends TestCase
     {
         Schema::dropIfExists('daily_financial_sheets');
         Schema::dropIfExists('expenses');
+        Schema::dropIfExists('driver_credit_transactions');
         Schema::dropIfExists('deposit_refunds');
         Schema::dropIfExists('payments');
         Schema::dropIfExists('drivers');
         Schema::dropIfExists('bank_accounts');
+        Schema::dropIfExists('cars');
+        Schema::dropIfExists('car_models');
         Schema::dropIfExists('companies');
         Schema::dropIfExists('tenant_user');
         Schema::dropIfExists('model_has_roles');
@@ -89,6 +111,8 @@ class DailyExpenseTest extends TestCase
         $this->employee->switchTenant($this->tenant->id);
 
         $response = $this->post(route('daily-expenses.store'), [
+            'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
+            'car_id' => $this->car->id,
             'title' => 'Office supplies',
             'amount' => 25.50,
             'payment_method' => 'Cash',
@@ -102,12 +126,127 @@ class DailyExpenseTest extends TestCase
         $this->assertNotNull($expense);
         $this->assertTrue($expense->isDailyExpense());
         $this->assertSame(Expense::TYPE_DAILY, $expense->type);
+        $this->assertSame(Expense::DAILY_TYPE_OFFICE, $expense->daily_expense_type);
+        $this->assertNull($expense->car_id);
         $this->assertSame('Office supplies', $expense->title);
         $this->assertSame('Office supplies', $expense->description);
         $this->assertSame('Cash', $expense->payment_method);
         $this->assertNull($expense->bank_account_id);
         $this->assertSame(Expense::POSTING_STATUS_PENDING, $expense->posting_status);
         $this->assertEquals(25.50, (float) $expense->amount);
+    }
+
+    public function test_vehicle_daily_expense_requires_car(): void
+    {
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->from(route('daily-expenses.create'))
+            ->post(route('daily-expenses.store'), [
+                'daily_expense_type' => Expense::DAILY_TYPE_VEHICLE,
+                'title' => 'Vehicle wash',
+                'amount' => 20,
+                'payment_method' => 'Cash',
+                'date' => now()->toDateString(),
+            ]);
+
+        $response->assertRedirect(route('daily-expenses.create'));
+        $response->assertSessionHasErrors('car_id');
+        $this->assertDatabaseCount('expenses', 0);
+    }
+
+    public function test_create_form_uses_searchable_car_select_and_balanced_hidden_bank_column(): void
+    {
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->get(route('daily-expenses.create'));
+
+        $response->assertOk();
+        $response->assertSee('class="form-control select-search', false);
+        $response->assertSee('id="daily-expense-bank-column"', false);
+        $response->assertSee('id="daily-expense-car-field"', false);
+    }
+
+    public function test_vehicle_daily_expense_stays_in_daily_menu_and_appears_on_dfs_with_car(): void
+    {
+        $date = now()->toDateString();
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->post(route('daily-expenses.store'), [
+            'daily_expense_type' => Expense::DAILY_TYPE_VEHICLE,
+            'car_id' => $this->car->id,
+            'title' => 'Vehicle wash',
+            'amount' => 20,
+            'payment_method' => 'Cash',
+            'date' => $date,
+        ]);
+
+        $response->assertRedirect(route('daily-expenses.index'));
+        $expense = Expense::query()->firstOrFail();
+        $this->assertTrue($expense->isDailyExpense());
+        $this->assertSame(Expense::DAILY_TYPE_VEHICLE, $expense->daily_expense_type);
+        $this->assertSame($this->car->id, $expense->car_id);
+        $this->assertSame(1, Expense::query()->daily()->count());
+        $this->assertSame(0, Expense::query()->carLinked()->count());
+
+        $index = $this->get(route('daily-expenses.index'));
+        $index->assertOk();
+        $index->assertSee('Vehicle wash');
+        $index->assertSee('DAILY-01');
+
+        $show = $this->get(route('daily-financial-sheet.show', $date));
+        $show->assertOk();
+        $show->assertSee('Daily expense — Vehicle');
+        $show->assertSee('DAILY-01');
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date))
+            ->assertRedirect(route('daily-financial-sheet.show', $date));
+        $this->assertSame(Expense::POSTING_STATUS_POSTED, $expense->fresh()->posting_status);
+    }
+
+    public function test_vehicle_daily_expense_rejects_car_from_another_tenant(): void
+    {
+        $otherTenant = Tenant::query()->create([
+            'company_name' => 'Other Tenant',
+            'status' => Tenant::STATUS_ACTIVE,
+        ]);
+        $otherCompany = Company::query()->create([
+            'tenant_id' => $otherTenant->id,
+            'name' => 'Other Company',
+        ]);
+        $otherModelId = DB::table('car_models')->insertGetId([
+            'tenant_id' => $otherTenant->id,
+            'name' => 'Other Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $otherCar = Car::query()->create([
+            'tenant_id' => $otherTenant->id,
+            'company_id' => $otherCompany->id,
+            'car_model_id' => $otherModelId,
+            'registration' => 'OTHER-01',
+            'fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
+        ]);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+        $response = $this->from(route('daily-expenses.create'))
+            ->post(route('daily-expenses.store'), [
+                'daily_expense_type' => Expense::DAILY_TYPE_VEHICLE,
+                'car_id' => $otherCar->id,
+                'title' => 'Invalid vehicle expense',
+                'amount' => 20,
+                'payment_method' => 'Cash',
+                'date' => now()->toDateString(),
+            ]);
+
+        $response->assertRedirect(route('daily-expenses.create'));
+        $response->assertSessionHasErrors('car_id');
+        $this->assertDatabaseCount('expenses', 0);
     }
 
     public function test_bank_transfer_requires_bank_account(): void
@@ -117,6 +256,7 @@ class DailyExpenseTest extends TestCase
 
         $response = $this->from(route('daily-expenses.create'))
             ->post(route('daily-expenses.store'), [
+                'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
                 'title' => 'Utilities',
                 'amount' => 100,
                 'payment_method' => 'Bank Transfer',
@@ -134,6 +274,7 @@ class DailyExpenseTest extends TestCase
         $this->employee->switchTenant($this->tenant->id);
 
         $response = $this->post(route('daily-expenses.store'), [
+            'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
             'title' => 'Utilities',
             'amount' => 100,
             'payment_method' => 'Bank Transfer',
@@ -155,6 +296,7 @@ class DailyExpenseTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
         $this->post(route('daily-expenses.store'), [
+            'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
             'title' => 'Parking fees',
             'amount' => 40,
             'payment_method' => 'Cash',
@@ -188,6 +330,7 @@ class DailyExpenseTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'car_id' => null,
             'type' => Expense::TYPE_DAILY,
+            'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
             'title' => 'Software subscription',
             'date' => $date,
             'description' => 'Software subscription',
@@ -261,6 +404,23 @@ class DailyExpenseTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('car_models', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('cars', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->foreignId('company_id');
+            $table->foreignId('car_model_id');
+            $table->string('registration')->nullable();
+            $table->string('fleet_status')->default(Car::FLEET_STATUS_AVAILABLE_FOR_RENT);
+            $table->timestamps();
+        });
+
         Schema::create('bank_accounts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');
@@ -305,11 +465,29 @@ class DailyExpenseTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('driver_credit_transactions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->foreignId('driver_id');
+            $table->string('kind', 30);
+            $table->decimal('amount', 12, 2);
+            $table->date('request_date');
+            $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->foreignId('created_by')->nullable();
+            $table->foreignId('approved_by')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('expenses', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');
             $table->foreignId('car_id')->nullable();
             $table->string('type');
+            $table->string('daily_expense_type', 20)->nullable();
             $table->string('title')->nullable();
             $table->date('date');
             $table->text('description');

@@ -18,6 +18,8 @@
                                     <thead>
                                     <tr>
                                         <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Vehicle</th>
                                         <th>Title</th>
                                         <th>Amount</th>
                                         <th>Method</th>
@@ -30,6 +32,21 @@
                                     @forelse($expenses as $expense)
                                         <tr>
                                             <td>{{ $expense->date?->format('d M Y') }}</td>
+                                            <td>
+                                                <span class="badge {{ $expense->daily_expense_type === \App\Models\Expense::DAILY_TYPE_VEHICLE ? 'badge-primary' : 'badge-info' }}">
+                                                    {{ ucfirst($expense->daily_expense_type ?: \App\Models\Expense::DAILY_TYPE_OFFICE) }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if($expense->car)
+                                                    {{ $expense->car->registration ?: '—' }}
+                                                    @if($expense->car->carModel)
+                                                        <div class="small text-muted">{{ $expense->car->carModel->name }}</div>
+                                                    @endif
+                                                @else
+                                                    —
+                                                @endif
+                                            </td>
                                             <td>
                                                 {{ $expense->title ?: $expense->description }}
                                                 @if($expense->notes)
@@ -65,7 +82,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">
+                                            <td colspan="9" class="text-center text-muted py-4">
                                                 No daily expenses yet.
                                                 <a href="{{ route($url.'create') }}">Add your first daily expense</a>
                                             </td>

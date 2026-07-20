@@ -4,10 +4,10 @@ namespace App\Services;
 
 use App\Models\Agreement;
 use App\Models\AgreementSignatureToken;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
-use PDF;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use PDF;
 
 class CustomSigningService
 {
@@ -24,7 +24,7 @@ class CustomSigningService
                 'signer_email' => $agreement->driver->email,
                 'signer_name' => $agreement->driver->full_name,
                 'status' => 'pending',
-                'expires_at' => now()->addHours(72)
+                'expires_at' => now()->addHours(72),
             ]);
 
             // Generate signing URL
@@ -36,7 +36,7 @@ class CustomSigningService
             // Update agreement
             $agreement->update([
                 'hellosign_status' => 'pending',
-                'esign_sent_at' => now()
+                'esign_sent_at' => now(),
             ]);
 
             Log::info('Custom signing sent', ['agreement_id' => $agreement->id]);
@@ -44,11 +44,12 @@ class CustomSigningService
             return [
                 'success' => true,
                 'token' => $token,
-                'signing_url' => $signingUrl
+                'signing_url' => $signingUrl,
             ];
 
         } catch (\Exception $e) {
-            Log::error('Custom Signing Error: ' . $e->getMessage());
+            Log::error('Custom Signing Error: '.$e->getMessage());
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -65,9 +66,9 @@ class CustomSigningService
         try {
             $data = [
                 'agreement' => $agreement,
-                'driver'    => $agreement->driver,
-                'car'       => $agreement->car,
-                'company'   => $agreement->documentCompany(),
+                'driver' => $agreement->driver,
+                'car' => $agreement->car,
+                'company' => $agreement->documentCompany(),
                 'currentDate' => \Carbon\Carbon::now()->format('d/m/Y'),
             ];
 
@@ -76,7 +77,7 @@ class CustomSigningService
 
             // Temp directory mein save karo
             $tempDir = public_path('uploads/agreements/temp');
-            if (!file_exists($tempDir)) {
+            if (! file_exists($tempDir)) {
                 mkdir($tempDir, 0755, true);
             }
 
@@ -85,16 +86,16 @@ class CustomSigningService
             $pdf->save($pdfAttachmentPath);
 
         } catch (\Exception $e) {
-            \Log::warning('Agreement PDF attachment generate nahi ho saka: ' . $e->getMessage());
+            \Log::warning('Agreement PDF attachment generate nahi ho saka: '.$e->getMessage());
             // PDF attach na ho to bhi email send karo — koi problem nahi
             $pdfAttachmentPath = null;
         }
 
         // ✅ Step 2: Email data
         $emailData = [
-            'agreement'  => $agreement,
-            'driver'     => $agreement->driver,
-            'company'    => $agreement->documentCompany(),
+            'agreement' => $agreement,
+            'driver' => $agreement->driver,
+            'company' => $agreement->documentCompany(),
             'signing_url' => $signingUrl,
             'expires_at' => $token->expires_at->format('M d, Y h:i A'),
             'has_attachment' => ($pdfAttachmentPath && file_exists($pdfAttachmentPath)),
@@ -106,12 +107,12 @@ class CustomSigningService
             $emailData,
             function ($message) use ($agreement, $pdfAttachmentPath) {
                 $message->to($agreement->driver->email)
-                    ->subject('Sign Your Vehicle Hire Agreement - ' . $agreement->car->registration);
+                    ->subject('Sign Your Vehicle Hire Agreement - '.$agreement->car->registration);
 
                 // ✅ PDF attach karo agar successfully generate hui ho
                 if ($pdfAttachmentPath && file_exists($pdfAttachmentPath)) {
                     $message->attach($pdfAttachmentPath, [
-                        'as'   => 'Vehicle_Hire_Agreement_' . $agreement->car->registration . '.pdf',
+                        'as' => 'Vehicle_Hire_Agreement_'.$agreement->car->registration.'.pdf',
                         'mime' => 'application/pdf',
                     ]);
                 }
@@ -123,7 +124,7 @@ class CustomSigningService
             try {
                 unlink($pdfAttachmentPath);
             } catch (\Exception $e) {
-                \Log::warning('Temp PDF delete nahi ho saka: ' . $e->getMessage());
+                \Log::warning('Temp PDF delete nahi ho saka: '.$e->getMessage());
             }
         }
     }
@@ -144,13 +145,14 @@ class CustomSigningService
             $token->agreement->update([
                 'hellosign_status' => 'signed',
                 'esign_document_path' => $signedPdfPath,
-                'esign_completed_at' => now()
+                'esign_completed_at' => now(),
             ]);
 
             return ['success' => true, 'signed_pdf_path' => $signedPdfPath];
 
         } catch (\Exception $e) {
-            Log::error('Process Signature Error: ' . $e->getMessage());
+            Log::error('Process Signature Error: '.$e->getMessage());
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -185,11 +187,11 @@ class CustomSigningService
         $pdf->setPaper('A4', 'portrait');
 
         $directory = public_path('uploads/agreements/signed');
-        if (!file_exists($directory)) {
+        if (! file_exists($directory)) {
             mkdir($directory, 0755, true);
         }
 
-        $fileName = "signed_agreement_{$agreement->id}_" . time() . ".pdf";
+        $fileName = "signed_agreement_{$agreement->id}_".time().'.pdf';
         $pdf->save("{$directory}/{$fileName}");
 
         return "uploads/agreements/signed/{$fileName}";

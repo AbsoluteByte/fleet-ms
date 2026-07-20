@@ -16,10 +16,15 @@ class Expense extends Model
 
     public const TYPE_DAILY = 'Daily';
 
+    public const DAILY_TYPE_OFFICE = 'office';
+
+    public const DAILY_TYPE_VEHICLE = 'vehicle';
+
     protected $fillable = [
         'tenant_id',
         'car_id',
         'type',
+        'daily_expense_type',
         'title',
         'date',
         'description',
@@ -54,7 +59,7 @@ class Expense extends Model
 
     public function isDailyExpense(): bool
     {
-        return $this->car_id === null;
+        return $this->type === self::TYPE_DAILY;
     }
 
     public function scopePosted(Builder $query): Builder
@@ -69,12 +74,17 @@ class Expense extends Model
 
     public function scopeDaily(Builder $query): Builder
     {
-        return $query->whereNull('car_id');
+        return $query->where('type', self::TYPE_DAILY);
     }
 
     public function scopeCarLinked(Builder $query): Builder
     {
-        return $query->whereNotNull('car_id');
+        return $query
+            ->whereNotNull('car_id')
+            ->where(function (Builder $query) {
+                $query->whereNull('type')
+                    ->orWhere('type', '!=', self::TYPE_DAILY);
+            });
     }
 
     public function isPending(): bool

@@ -46,5 +46,6 @@
 @stack('jsFiles')
 @yield('js')
 @stack('js')
+<x-payment-follow-up-reminder-modal/>
 </body>
 </html>

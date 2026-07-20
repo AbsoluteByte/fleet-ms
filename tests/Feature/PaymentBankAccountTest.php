@@ -281,7 +281,6 @@ class PaymentBankAccountTest extends TestCase
             $table->timestamps();
         });
 
-
         Schema::create('daily_financial_sheets', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');

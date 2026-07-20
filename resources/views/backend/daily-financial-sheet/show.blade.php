@@ -135,6 +135,8 @@
                                         <td>
                                             @if($entry['direction'] === 'in')
                                                 <span class="text-success">IN</span>
+                                            @elseif($entry['direction'] === 'internal')
+                                                <span class="text-info">INTERNAL</span>
                                             @else
                                                 <span class="text-danger">OUT</span>
                                             @endif

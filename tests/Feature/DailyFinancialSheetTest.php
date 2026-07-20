@@ -8,6 +8,7 @@ use App\Models\Car;
 use App\Models\Company;
 use App\Models\DailyFinancialSheet;
 use App\Models\Driver;
+use App\Models\DriverCreditTransaction;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -15,6 +16,7 @@ use App\Models\PaymentAllocation;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\DailyFinancialSheetService;
+use App\Services\DriverCreditService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -84,6 +86,8 @@ class DailyFinancialSheetTest extends TestCase
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('driver_credit_transaction_lines');
+        Schema::dropIfExists('driver_credit_transactions');
         Schema::dropIfExists('deposit_refunds');
         Schema::dropIfExists('agreements');
         Schema::dropIfExists('model_has_roles');
@@ -457,6 +461,167 @@ class DailyFinancialSheetTest extends TestCase
         $this->assertEquals(0, (float) $invoice->balance_amount);
     }
 
+    public function test_driver_credit_is_reserved_and_applied_oldest_first_after_dfs_approval(): void
+    {
+        $date = '2026-07-17';
+        $payment = Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-01',
+            'amount' => 100,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->employee->id,
+        ]);
+        $olderInvoice = $this->createInvoice(60);
+        $olderInvoice->update(['invoice_date' => '2026-06-01', 'due_date' => '2026-06-05']);
+        $newerInvoice = $this->createInvoice(80);
+        $newerInvoice->update(['invoice_date' => '2026-07-01', 'due_date' => '2026-07-05']);
+
+        $transaction = app(DriverCreditService::class)->requestInvoiceApplication($this->driver, [
+            'request_date' => $date,
+            'notes' => 'Use available credit',
+        ]);
+
+        $this->assertEquals(100, (float) $transaction->amount);
+        $this->assertEquals(100, $this->driver->fresh()->reserved_credit_amount);
+        $this->assertEquals(0, $this->driver->fresh()->available_credit_amount);
+
+        $service = app(DailyFinancialSheetService::class);
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $creditEntry = $entries->firstWhere('id', 'driver-credit-'.$transaction->id);
+        $this->assertSame('internal', $creditEntry['direction']);
+        $totals = $service->computeTotals($entries, pendingOnly: true);
+        $this->assertEquals(0, $totals['cash_in']);
+        $this->assertEquals(0, $totals['cash_out']);
+        $this->assertCount(0, $totals['bank_in']);
+        $this->assertCount(0, $totals['bank_out']);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $this->post(route('daily-financial-sheet.approve', $date), [
+            'approve_mode' => 'selected',
+            'entry_ids' => ['driver-credit-'.$transaction->id],
+        ])->assertSessionHasNoErrors()
+            ->assertRedirect(route('daily-financial-sheet.show', $date));
+
+        $this->assertTrue($transaction->fresh()->isPosted());
+        $this->assertEquals(0, (float) $olderInvoice->fresh()->balance_amount);
+        $this->assertEquals(40, (float) $newerInvoice->fresh()->balance_amount);
+        $this->assertEquals(100, (float) PaymentAllocation::query()
+            ->where('payment_id', $payment->id)
+            ->sum('allocated_amount'));
+    }
+
+    public function test_full_credit_refund_is_readonly_reserved_and_counted_as_bank_out(): void
+    {
+        $date = '2026-07-17';
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $this->bankAccount->id,
+            'payment_date' => '2026-07-01',
+            'amount' => 125,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->employee->id,
+        ]);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+        $this->post(route('payments.credit.refund', $this->driver), [
+            'amount' => 1,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $this->bankAccount->id,
+            'request_date' => $date,
+        ])->assertSessionHasNoErrors();
+
+        $transaction = DriverCreditTransaction::query()->firstOrFail();
+        $this->assertEquals(125, (float) $transaction->amount);
+        $this->assertEquals(0, $this->driver->fresh()->available_credit_amount);
+
+        $service = app(DailyFinancialSheetService::class);
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $totals = $service->computeTotals($entries, pendingOnly: true);
+        $this->assertEquals(0, $totals['cash_out']);
+        $this->assertCount(1, $totals['bank_out']);
+        $this->assertEquals(125, $totals['bank_out'][0]['total']);
+
+        try {
+            app(DriverCreditService::class)->requestRefund($this->driver, [
+                'payment_method' => 'Cash',
+                'request_date' => $date,
+            ]);
+            $this->fail('A second request must not spend reserved credit.');
+        } catch (\Illuminate\Validation\ValidationException) {
+            $this->assertDatabaseCount('driver_credit_transactions', 1);
+        }
+
+        $service->approveSheet(
+            $this->tenant->id,
+            $date,
+            $this->approver->id,
+            null,
+            ['driver-credit-'.$transaction->id]
+        );
+        $this->assertTrue($transaction->fresh()->isPosted());
+        $this->assertEquals(0, $this->driver->fresh()->credit_amount);
+    }
+
+    public function test_cash_credit_refund_approve_all_and_refund_eligibility_are_enforced(): void
+    {
+        $date = '2026-07-18';
+        $refundDriver = Driver::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'first_name' => 'Cash',
+            'last_name' => 'Credit',
+            'email' => 'cash-credit@example.com',
+            'status' => 'active',
+        ]);
+        Payment::query()->create([
+            'driver_id' => $refundDriver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-01',
+            'amount' => 50,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->employee->id,
+        ]);
+
+        $transaction = app(DriverCreditService::class)->requestRefund($refundDriver, [
+            'payment_method' => 'Cash',
+            'request_date' => $date,
+        ]);
+        $service = app(DailyFinancialSheetService::class);
+        $totals = $service->computeTotals(
+            $service->entriesForDate($this->tenant->id, $date),
+            pendingOnly: true
+        );
+        $this->assertEquals(50, $totals['cash_out']);
+        $this->assertCount(0, $totals['bank_out']);
+
+        $service->approveSheet($this->tenant->id, $date, $this->approver->id);
+        $this->assertTrue($transaction->fresh()->isPosted());
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-01',
+            'amount' => 20,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->employee->id,
+        ]);
+        $this->createInvoice(20);
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        app(DriverCreditService::class)->requestRefund($this->driver, [
+            'payment_method' => 'Cash',
+            'request_date' => $date,
+        ]);
+    }
+
     private function createPendingPayment(string $date, float $amount): Payment
     {
         return Payment::query()->create([
@@ -521,7 +686,6 @@ class DailyFinancialSheetTest extends TestCase
             $table->rememberToken();
             $table->timestamps();
         });
-
 
         Schema::create('roles', function (Blueprint $table) {
             $table->id();
@@ -609,7 +773,35 @@ class DailyFinancialSheetTest extends TestCase
             $table->id();
             $table->foreignId('payment_id');
             $table->foreignId('invoice_id');
+            $table->foreignId('driver_credit_transaction_line_id')->nullable();
             $table->decimal('allocated_amount', 12, 2)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('driver_credit_transactions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->foreignId('driver_id');
+            $table->string('kind', 30);
+            $table->decimal('amount', 12, 2);
+            $table->date('request_date');
+            $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->foreignId('created_by')->nullable();
+            $table->foreignId('approved_by')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('driver_credit_transaction_lines', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('driver_credit_transaction_id');
+            $table->foreignId('source_payment_id');
+            $table->foreignId('target_invoice_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('status', 20)->default('reserved');
             $table->timestamps();
         });
 

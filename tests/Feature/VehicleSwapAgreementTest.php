@@ -9,7 +9,7 @@ use App\Models\Driver;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Models\VehicleSwap;
+use App\Services\AgreementUpgradeService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +33,8 @@ class VehicleSwapAgreementTest extends TestCase
     private Car $newCar;
 
     private Status $activeStatus;
+
+    private Status $swapStatus;
 
     private Status $terminatedStatus;
 
@@ -83,6 +85,7 @@ class VehicleSwapAgreementTest extends TestCase
         $this->newCar = $this->createCompliantCar('SWPNEW', $carModelId, $counselId, 'available_for_rent');
 
         $this->activeStatus = Status::query()->create(['name' => 'Active', 'type' => 'agreement']);
+        $this->swapStatus = Status::query()->create(['name' => 'Swap', 'type' => 'agreement']);
         $this->terminatedStatus = Status::query()->create(['name' => 'Terminated', 'type' => 'agreement']);
 
         $this->user = User::factory()->create();
@@ -123,43 +126,43 @@ class VehicleSwapAgreementTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_vehicle_swap_via_route_terminates_old_agreement_and_creates_linked_new_agreement(): void
+    public function test_vehicle_swaps_routes_are_removed(): void
     {
-        $response = $this->from(route('vehicle-swaps.create'))
-            ->post(route('vehicle-swaps.store'), [
-                'old_car_id' => $this->oldCar->id,
-                'swapped_with_car_id' => $this->newCar->id,
-                'agreed_rent' => 250,
-                'reason_for_swap' => VehicleSwap::REASON_UPGRADE,
-            ]);
+        $this->get('/admin/vehicle-swaps')->assertNotFound();
+        $this->get('/admin/vehicle-swaps/create')->assertNotFound();
+        $this->post('/admin/vehicle-swaps', [])->assertNotFound();
+    }
 
-        $newAgreement = Agreement::query()
-            ->where('upgraded_from_agreement_id', $this->agreement->id)
-            ->first();
+    public function test_change_car_routes_are_removed(): void
+    {
+        $this->get(route('agreements.show', $this->agreement).'/upgrade-cars')->assertNotFound();
+        $this->post(route('agreements.show', $this->agreement).'/upgrade-car', [])->assertNotFound();
+    }
 
-        $this->assertNotNull($newAgreement);
-        $response->assertRedirect(route('agreements.show', $newAgreement));
+    public function test_swap_service_terminates_old_agreement_and_creates_linked_swap_agreement(): void
+    {
+        $newAgreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($this->agreement, [
+            'car_id' => $this->newCar->id,
+            'driver_id' => $this->driver->id,
+            'agreed_rent' => 250,
+        ]);
 
         $oldAgreement = $this->agreement->fresh(['status']);
         $this->assertSame('Terminated', $oldAgreement->status->name);
         $this->assertSame($this->newCar->id, $newAgreement->car_id);
-        $this->assertSame(VehicleSwap::REASON_UPGRADE, $newAgreement->swap_reason);
         $this->assertSame('250.00', $newAgreement->agreed_rent);
+        $this->assertSame('Swap', $newAgreement->fresh('status')->status->name);
+        $this->assertSame($this->agreement->id, $newAgreement->upgraded_from_agreement_id);
+        $this->assertSame('500.00', $newAgreement->deposit_amount);
     }
 
     public function test_permission_letter_route_returns_success_for_swapped_agreement(): void
     {
-        $this->from(route('vehicle-swaps.create'))
-            ->post(route('vehicle-swaps.store'), [
-                'old_car_id' => $this->oldCar->id,
-                'swapped_with_car_id' => $this->newCar->id,
-                'agreed_rent' => 250,
-                'reason_for_swap' => VehicleSwap::REASON_UPGRADE,
-            ]);
-
-        $newAgreement = Agreement::query()
-            ->where('upgraded_from_agreement_id', $this->agreement->id)
-            ->firstOrFail();
+        $newAgreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($this->agreement, [
+            'car_id' => $this->newCar->id,
+            'driver_id' => $this->driver->id,
+            'agreed_rent' => 250,
+        ]);
 
         $response = $this->get(route('agreements.permission-letter', $newAgreement));
 
@@ -181,18 +184,13 @@ class VehicleSwapAgreementTest extends TestCase
         $this->newCar->update(['company_id' => $newCompany->id]);
         $this->agreement->update(['company_id' => $oldCompany->id]);
 
-        $this->from(route('vehicle-swaps.create'))
-            ->post(route('vehicle-swaps.store'), [
-                'old_car_id' => $this->oldCar->id,
-                'swapped_with_car_id' => $this->newCar->id,
-                'agreed_rent' => 250,
-                'reason_for_swap' => VehicleSwap::REASON_UPGRADE,
-            ]);
+        $newAgreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($this->agreement->fresh(), [
+            'car_id' => $this->newCar->id,
+            'driver_id' => $this->driver->id,
+            'agreed_rent' => 250,
+        ]);
 
-        $newAgreement = Agreement::query()
-            ->where('upgraded_from_agreement_id', $this->agreement->id)
-            ->with(['car.company', 'company'])
-            ->firstOrFail();
+        $newAgreement->load(['car.company', 'company']);
 
         $this->assertSame($newCompany->id, $newAgreement->company_id);
         $this->assertSame($newCompany->id, $newAgreement->documentCompany()?->id);
@@ -230,7 +228,7 @@ class VehicleSwapAgreementTest extends TestCase
             'deposit_amount' => 500,
             'collection_type' => 'weekly',
             'using_own_insurance' => false,
-            'status_id' => $this->activeStatus->id,
+            'status_id' => $this->swapStatus->id,
             'upgraded_from_agreement_id' => $this->agreement->id,
             'createdBy' => $this->user->id,
             'updatedBy' => $this->user->id,
@@ -240,22 +238,6 @@ class VehicleSwapAgreementTest extends TestCase
 
         $this->assertSame($oldCompany->id, $swappedAgreement->company_id);
         $this->assertSame($newCompany->id, $swappedAgreement->documentCompany()?->id);
-    }
-
-    public function test_future_start_active_agreement_appears_in_swap_old_car_list(): void
-    {
-        Carbon::setTestNow(Carbon::parse('2026-06-29 10:00:00'));
-
-        $this->agreement->update([
-            'start_date' => Carbon::parse('2026-06-30 09:00:00'),
-            'end_date' => Carbon::parse('2027-06-30'),
-        ]);
-
-        $cars = app(\App\Services\AgreementUpgradeService::class)
-            ->carsWithActiveUpgradeableAgreements($this->tenant->id);
-
-        $this->assertTrue($cars->contains('id', $this->oldCar->id));
-        $this->assertNotNull(Agreement::activeAgreementForCar($this->tenant->id, $this->oldCar->id));
     }
 
     private function setUpHttpTestExtras(): void

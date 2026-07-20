@@ -107,6 +107,7 @@ class PhvlArchiveController extends Controller
             'phvl_result_status' => e($phvlLabel),
             'phv_summary' => e($phvSummary),
             'completed_at' => e($archive->completed_at?->format('d M, Y H:i') ?? '—'),
+            'completed_at_sort' => $archive->completed_at?->format('Y-m-d H:i:s') ?? '',
             'completed_by' => e($archive->completedByUser?->name ?? '—'),
             'actions' => '<button type="button" class="btn btn-sm btn-outline-primary phvl-archive-timeline-btn" data-archive-id="'.$archive->id.'">View timeline</button>',
         ];

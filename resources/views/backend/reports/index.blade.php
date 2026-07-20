@@ -154,6 +154,7 @@
                                         <p class="text-muted small mb-1">
                                             Showing insurance activity from {{ \Carbon\Carbon::parse($insuranceFrom)->format('d M, Y') }}
                                             to {{ \Carbon\Carbon::parse($insuranceTo)->format('d M, Y') }}.
+                                            The <strong>Active on insurance</strong> tab lists currently active policies (date range not applied).
                                             @if($selectedInsuranceCompany)
                                                 Company: <strong>{{ $selectedInsuranceCompany->name }}</strong>.
                                             @endif
@@ -171,20 +172,20 @@
                                             </li>
                                             <li class="nav-item">
                                                 <a class="nav-link" id="reports-insurance-active-tab" data-toggle="pill" href="#reports-insurance-active-pane" role="tab">
-                                                    Activated &amp; still active
-                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedStillActive->count() }}</span>
+                                                    Activated in range
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedInRange->count() }}</span>
                                                 </a>
                                             </li>
                                             <li class="nav-item">
                                                 <a class="nav-link" id="reports-insurance-ended-tab" data-toggle="pill" href="#reports-insurance-ended-pane" role="tab">
                                                     Activated &amp; ended in range
-                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedAndEnded->count() }}</span>
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedOrRemovedInRange->count() }}</span>
                                                 </a>
                                             </li>
                                             <li class="nav-item">
                                                 <a class="nav-link" id="reports-insurance-preexisting-tab" data-toggle="pill" href="#reports-insurance-preexisting-pane" role="tab">
-                                                    Pre-existing policies
-                                                    <span class="badge badge-light ml-25">{{ $insurancePreExisting->count() }}</span>
+                                                    Active on insurance
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActiveOnInsurance->count() }}</span>
                                                 </a>
                                             </li>
                                         </ul>
@@ -193,9 +194,9 @@
                                             @php
                                                 $insuranceSubTabs = [
                                                     'removed' => ['id' => 'reportsInsuranceRemovedTable', 'pane' => 'reports-insurance-removed-pane', 'tab' => 'reports-insurance-removed-tab', 'rows' => $insuranceRemovedInRange, 'active' => true],
-                                                    'active' => ['id' => 'reportsInsuranceActiveTable', 'pane' => 'reports-insurance-active-pane', 'tab' => 'reports-insurance-active-tab', 'rows' => $insuranceActivatedStillActive, 'active' => false],
-                                                    'ended' => ['id' => 'reportsInsuranceEndedTable', 'pane' => 'reports-insurance-ended-pane', 'tab' => 'reports-insurance-ended-tab', 'rows' => $insuranceActivatedAndEnded, 'active' => false],
-                                                    'preexisting' => ['id' => 'reportsInsurancePreExistingTable', 'pane' => 'reports-insurance-preexisting-pane', 'tab' => 'reports-insurance-preexisting-tab', 'rows' => $insurancePreExisting, 'active' => false],
+                                                    'active' => ['id' => 'reportsInsuranceActiveTable', 'pane' => 'reports-insurance-active-pane', 'tab' => 'reports-insurance-active-tab', 'rows' => $insuranceActivatedInRange, 'active' => false],
+                                                    'ended' => ['id' => 'reportsInsuranceEndedTable', 'pane' => 'reports-insurance-ended-pane', 'tab' => 'reports-insurance-ended-tab', 'rows' => $insuranceActivatedOrRemovedInRange, 'active' => false],
+                                                    'preexisting' => ['id' => 'reportsInsurancePreExistingTable', 'pane' => 'reports-insurance-preexisting-pane', 'tab' => 'reports-insurance-preexisting-tab', 'rows' => $insuranceActiveOnInsurance, 'active' => false],
                                                 ];
                                             @endphp
 
@@ -1143,9 +1144,9 @@
 
                     const subTabLabels = {
                         removed: 'Removed in range',
-                        active: 'Activated and still active',
+                        active: 'Activated in range',
                         ended: 'Activated and ended in range',
-                        preexisting: 'Pre-existing policies'
+                        preexisting: 'Active on insurance'
                     };
                     const label = subTabLabels[activeInsuranceSubTab] || 'Insurance';
                     const filePrefix = 'insurance-' + activeInsuranceSubTab + '-report';

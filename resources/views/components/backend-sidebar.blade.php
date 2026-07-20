@@ -143,7 +143,7 @@
                         </li>
                     </ul>
                 </li>
-                <li class="nav-item {{ Request::is('admin/cars*') || Request::is('admin/car-status*') || Request::is('admin/car-services*') || Request::is('admin/reservations*') || Request::is('admin/vehicle-swaps*') || Request::is('admin/car-insurance-import*') || Request::is('admin/mot-test-date-import*') ? 'sidebar-group-active' : '' }}">
+                <li class="nav-item {{ Request::is('admin/cars*') || Request::is('admin/car-status*') || Request::is('admin/car-services*') || Request::is('admin/reservations*') || Request::is('admin/car-insurance-import*') || Request::is('admin/mot-test-date-import*') ? 'sidebar-group-active' : '' }}">
                     <a href="#">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
                              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -168,11 +168,6 @@
                         <li class="{{ Request::is('admin/reservations*') ? 'active' : '' }}">
                             <a href="{{ route('reservations.index') }}">
                                 <span class="menu-title">Reservations</span>
-                            </a>
-                        </li>
-                        <li class="{{ Request::is('admin/vehicle-swaps*') ? 'active' : '' }}">
-                            <a href="{{ route('vehicle-swaps.index') }}">
-                                <span class="menu-title">Vehicle Swaps</span>
                             </a>
                         </li>
                         <li class="{{ Request::is('admin/car-services*') ? 'active' : '' }}">

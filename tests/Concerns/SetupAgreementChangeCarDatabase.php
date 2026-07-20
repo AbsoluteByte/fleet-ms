@@ -149,6 +149,10 @@ trait SetupAgreementChangeCarDatabase
             $table->string('discount_type')->nullable();
             $table->decimal('discount_value', 10, 2)->nullable();
             $table->text('discount_notes')->nullable();
+            $table->boolean('discount_is_one_time')->default(false);
+            $table->dateTime('discount_started_at')->nullable();
+            $table->dateTime('discount_consumed_at')->nullable();
+            $table->unsignedBigInteger('discount_consumed_invoice_id')->nullable();
             $table->boolean('using_own_insurance')->nullable()->default(false);
             $table->unsignedBigInteger('insurance_provider_id')->nullable();
             $table->string('own_insurance_provider_name')->nullable();

@@ -4,7 +4,6 @@
         'available_for_rent' => 'Available for Rent',
         \App\Models\Car::FLEET_STATUS_NON_COMPLIANT => 'Non-Compliant',
         'reserved' => 'Reserved',
-        'vehicle_swap' => 'Vehicle Swap',
         'damaged' => 'Damaged',
         'written_off' => 'Written Off',
         'stolen' => 'Stolen',

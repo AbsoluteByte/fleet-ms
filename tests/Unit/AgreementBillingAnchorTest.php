@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Http\Controllers\Backend\AgreementController;
 use App\Models\Agreement;
 use App\Models\Driver;
 use App\Models\Invoice;
@@ -9,6 +10,9 @@ use App\Models\Status;
 use App\Models\Tenant;
 use App\Services\AgreementInvoiceService;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use ReflectionMethod;
 use Tests\Concerns\SetupAgreementChangeCarDatabase;
 use Tests\TestCase;
 
@@ -127,6 +131,35 @@ class AgreementBillingAnchorTest extends TestCase
         $this->assertTrue($invoices[1]->invoice_date->eq(Carbon::parse('2026-06-26')));
     }
 
+    public function test_non_active_agreement_does_not_generate_invoices_with_future_end_date(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-19 10:00:00'));
+
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-06-19'),
+            'end_date' => Carbon::parse('2027-06-19'),
+            'agreed_rent' => 500,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 250,
+        ]);
+        $expiredStatus = Status::create(['name' => 'Expired', 'type' => 'agreement']);
+        $agreement->update(['status_id' => $expiredStatus->id]);
+        $agreement->unsetRelation('status');
+
+        $generated = $this->service->generateForAgreement(
+            $agreement,
+            Carbon::parse('2026-07-31')
+        );
+
+        $this->assertSame(0, $generated);
+        $this->assertFalse(
+            Agreement::query()->billable()->whereKey($agreement->id)->exists()
+        );
+        $this->assertFalse(
+            Invoice::query()->where('source_id', $agreement->id)->exists()
+        );
+    }
+
     public function test_anchor_on_same_day_as_start_is_not_deferred(): void
     {
         $agreement = $this->makeAgreement([
@@ -153,6 +186,162 @@ class AgreementBillingAnchorTest extends TestCase
 
         $this->assertTrue($deferred->hasDeferredBillingAnchor());
         $this->assertTrue($deferred->billingAnchorDate()->eq(Carbon::parse('2026-06-22')));
+    }
+
+    public function test_recurring_discount_remains_on_every_generated_rent_invoice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-19 10:00:00'));
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-06-19'),
+            'end_date' => Carbon::parse('2026-07-31'),
+            'agreed_rent' => 500,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+            'discount_type' => 'percentage',
+            'discount_value' => 10,
+            'discount_is_one_time' => false,
+            'discount_started_at' => now(),
+        ]);
+
+        $this->assertSame(3, $this->service->generateForAgreement($agreement, Carbon::parse('2026-07-03')));
+
+        $invoices = Invoice::query()->where('source_id', $agreement->id)->orderBy('invoice_date')->get();
+        $this->assertCount(3, $invoices);
+        $this->assertSame([50.0, 50.0, 50.0], $invoices->map(fn (Invoice $invoice) => (float) $invoice->discount_amount)->all());
+        $this->assertSame([450.0, 450.0, 450.0], $invoices->map(fn (Invoice $invoice) => (float) $invoice->total_amount)->all());
+        $this->assertSame(450.0, $agreement->discounted_rent);
+        $this->assertNull($agreement->fresh()->discount_consumed_invoice_id);
+    }
+
+    public function test_one_time_discount_is_consumed_by_exactly_first_new_invoice_and_rerun_is_idempotent(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-19 10:00:00'));
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-06-19'),
+            'end_date' => Carbon::parse('2026-07-31'),
+            'agreed_rent' => 500,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+            'discount_type' => 'fixed',
+            'discount_value' => 75,
+            'discount_is_one_time' => true,
+            'discount_started_at' => now(),
+        ]);
+
+        $this->assertSame(3, $this->service->generateForAgreement($agreement, Carbon::parse('2026-07-03')));
+
+        $invoices = Invoice::query()->where('source_id', $agreement->id)->orderBy('invoice_date')->get();
+        $this->assertSame([75.0, 0.0, 0.0], $invoices->map(fn (Invoice $invoice) => (float) $invoice->discount_amount)->all());
+
+        $fresh = $agreement->fresh();
+        $this->assertSame($invoices->first()->id, $fresh->discount_consumed_invoice_id);
+        $this->assertNotNull($fresh->discount_consumed_at);
+        $this->assertSame(0, $this->service->generateForAgreement($fresh, Carbon::parse('2026-07-03')));
+        $this->assertDatabaseCount('invoices', 3);
+    }
+
+    public function test_initial_proration_consumes_one_time_discount_and_preserves_gross_subtotal(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-19 10:00:00'));
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-06-19'),
+            'billing_anchor_date' => Carbon::parse('2026-06-22'),
+            'end_date' => Carbon::parse('2026-07-31'),
+            'agreed_rent' => 700,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+            'discount_type' => 'percentage',
+            'discount_value' => 10,
+            'discount_is_one_time' => true,
+            'discount_started_at' => now(),
+        ]);
+
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-06-22'));
+
+        $invoices = Invoice::query()->where('source_id', $agreement->id)->orderBy('invoice_date')->get();
+        $this->assertCount(2, $invoices);
+        $this->assertSame(300.0, (float) $invoices[0]->subtotal);
+        $this->assertSame(30.0, (float) $invoices[0]->discount_amount);
+        $this->assertSame(270.0, (float) $invoices[0]->total_amount);
+        $this->assertSame(0.0, (float) $invoices[1]->discount_amount);
+        $this->assertSame($invoices[0]->id, $agreement->fresh()->discount_consumed_invoice_id);
+    }
+
+    public function test_closure_recalculates_only_consuming_invoice_and_same_day_removal_releases_discount(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-22 10:00:00'));
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-06-22'),
+            'end_date' => Carbon::parse('2026-07-31'),
+            'agreed_rent' => 700,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+            'discount_type' => 'percentage',
+            'discount_value' => 10,
+            'discount_is_one_time' => true,
+            'discount_started_at' => now(),
+        ]);
+
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-06-22'));
+        $invoice = Invoice::query()->where('source_id', $agreement->id)->firstOrFail();
+
+        $this->service->reconcileFinalInvoice($agreement, Carbon::parse('2026-06-24'));
+        $invoice->refresh();
+        $this->assertSame(200.0, (float) $invoice->subtotal);
+        $this->assertSame(20.0, (float) $invoice->discount_amount);
+        $this->assertSame(180.0, (float) $invoice->total_amount);
+
+        $this->service->reconcileFinalInvoice($agreement, Carbon::parse('2026-06-22'));
+        $this->assertDatabaseMissing('invoices', ['id' => $invoice->id]);
+        $this->assertTrue($agreement->fresh()->hasPendingOneTimeDiscount());
+    }
+
+    public function test_discount_configuration_preserves_start_date_until_it_changes_or_is_removed(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-18 10:00:00'));
+        Auth::shouldReceive('user')->andReturn((object) ['email' => 'jawad@samoretraders.com']);
+
+        $existing = new Agreement([
+            'discount_type' => 'percentage',
+            'discount_value' => 10,
+            'discount_notes' => 'Loyalty',
+            'discount_is_one_time' => true,
+            'discount_started_at' => Carbon::parse('2026-06-01 09:00:00'),
+            'discount_consumed_at' => Carbon::parse('2026-06-08 09:00:00'),
+            'discount_consumed_invoice_id' => 99,
+        ]);
+        $method = new ReflectionMethod(AgreementController::class, 'applyDiscountData');
+        $method->setAccessible(true);
+        $controller = app(AgreementController::class);
+
+        $unchanged = $method->invoke($controller, [], Request::create('/', 'POST', [
+            'discount_type' => 'percentage',
+            'discount_value' => '10.00',
+            'discount_notes' => 'Loyalty',
+            'discount_is_one_time' => '1',
+        ]), $existing);
+        $this->assertSame('2026-06-01 09:00:00', $unchanged['discount_started_at']->toDateTimeString());
+        $this->assertSame(99, $unchanged['discount_consumed_invoice_id']);
+
+        $changed = $method->invoke($controller, [], Request::create('/', 'POST', [
+            'discount_type' => 'percentage',
+            'discount_value' => '15',
+            'discount_notes' => 'Loyalty',
+            'discount_is_one_time' => '1',
+        ]), $existing);
+        $this->assertSame(now()->toDateTimeString(), $changed['discount_started_at']->toDateTimeString());
+        $this->assertNull($changed['discount_consumed_at']);
+        $this->assertNull($changed['discount_consumed_invoice_id']);
+
+        $removed = $method->invoke(
+            $controller,
+            [],
+            Request::create('/', 'POST', ['discount_is_one_time' => '0']),
+            $existing
+        );
+        $this->assertNull($removed['discount_type']);
+        $this->assertFalse($removed['discount_is_one_time']);
+        $this->assertNull($removed['discount_started_at']);
     }
 
     private function makeAgreement(array $attributes): Agreement

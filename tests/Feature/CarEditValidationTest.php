@@ -6,7 +6,6 @@ use App\Models\Car;
 use App\Models\CarInsurance;
 use App\Models\CarMot;
 use App\Models\Company;
-use App\Models\InsuranceProvider;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Models\User;
@@ -141,24 +140,24 @@ class CarEditValidationTest extends TestCase
 
         $response = $this->from(route('cars.edit', $car))
             ->put(route('cars.update', $car), $this->baseUpdatePayload($car, [
-            'color' => 'Blue',
-            'mots' => [
-                0 => [
-                    'id' => $latestMot->id,
-                    'test_date' => $latestMot->test_date->format('Y-m-d'),
-                    'expiry_date' => $latestMot->expiry_date->format('Y-m-d'),
-                    'amount' => $latestMot->amount,
-                    'term' => $latestMot->term,
+                'color' => 'Blue',
+                'mots' => [
+                    0 => [
+                        'id' => $latestMot->id,
+                        'test_date' => $latestMot->test_date->format('Y-m-d'),
+                        'expiry_date' => $latestMot->expiry_date->format('Y-m-d'),
+                        'amount' => $latestMot->amount,
+                        'term' => $latestMot->term,
+                    ],
+                    1 => [
+                        'id' => $olderMot->id,
+                        'test_date' => '',
+                        'expiry_date' => $olderMot->expiry_date->format('Y-m-d'),
+                        'amount' => $olderMot->amount,
+                        'term' => $olderMot->term,
+                    ],
                 ],
-                1 => [
-                    'id' => $olderMot->id,
-                    'test_date' => '',
-                    'expiry_date' => $olderMot->expiry_date->format('Y-m-d'),
-                    'amount' => $olderMot->amount,
-                    'term' => $olderMot->term,
-                ],
-            ],
-        ]));
+            ]));
 
         $response->assertRedirect(route('cars.edit', $car));
         $response->assertSessionDoesntHaveErrors();
@@ -257,6 +256,42 @@ class CarEditValidationTest extends TestCase
 
         $response->assertRedirect(route('cars.edit', $car));
         $response->assertSessionHasErrors('insurance_document');
+    }
+
+    public function test_tag_accessory_is_saved_and_uninstalling_clears_its_details(): void
+    {
+        $car = $this->createCar();
+
+        $response = $this->put(route('cars.update', $car), $this->baseUpdatePayload($car, [
+            'tag_installed' => 1,
+            'tag_status' => 'inactive',
+            'tag_notes' => 'Tag battery needs replacement',
+        ]));
+
+        $response->assertSessionDoesntHaveErrors();
+        $this->assertNull(session('error'), (string) session('error'));
+        $car->refresh();
+        $this->assertTrue($car->tag_installed);
+        $this->assertSame('inactive', $car->tag_status);
+        $this->assertSame('Tag battery needs replacement', $car->tag_notes);
+
+        $editResponse = $this->get(route('cars.edit', $car));
+        $editResponse->assertOk();
+        $editResponse->assertSee('name="tag_installed"', false);
+        $editResponse->assertSee('name="tag_status"', false);
+        $editResponse->assertSee('name="tag_notes"', false);
+
+        $response = $this->put(route('cars.update', $car), $this->baseUpdatePayload($car, [
+            'tag_installed' => 0,
+            'tag_status' => 'active',
+            'tag_notes' => 'This must be cleared',
+        ]));
+
+        $response->assertSessionDoesntHaveErrors();
+        $car->refresh();
+        $this->assertFalse($car->tag_installed);
+        $this->assertNull($car->tag_status);
+        $this->assertNull($car->tag_notes);
     }
 
     private function createCar(): Car
@@ -415,6 +450,15 @@ class CarEditValidationTest extends TestCase
             $table->unsignedBigInteger('log_book_applied_by')->nullable();
             $table->text('logbook_notes')->nullable();
             $table->json('old_log_book')->nullable();
+            $table->boolean('tracker_installed')->default(false);
+            $table->string('tracker_status', 20)->nullable();
+            $table->text('tracker_notes')->nullable();
+            $table->boolean('dashcam_installed')->default(false);
+            $table->string('dashcam_status', 20)->nullable();
+            $table->text('dashcam_notes')->nullable();
+            $table->boolean('tag_installed')->default(false);
+            $table->string('tag_status', 20)->nullable();
+            $table->text('tag_notes')->nullable();
             $table->string('phv_status')->nullable();
             $table->date('phv_applied_date')->nullable();
             $table->unsignedBigInteger('phv_applied_by')->nullable();

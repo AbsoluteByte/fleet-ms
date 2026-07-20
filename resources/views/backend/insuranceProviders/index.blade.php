@@ -18,6 +18,7 @@
                                     <thead>
                                     <tr>
                                         <th>Provider Name</th>
+                                        <th>Email</th>
                                         <th>Insurance Type</th>
                                         <th>Amount</th>
                                         <th>Policy Number</th>
@@ -30,6 +31,7 @@
                                     @forelse($insuranceProviders as $insuranceProvider)
                                         <tr>
                                             <td>{{ $insuranceProvider->provider_name }}</td>
+                                            <td>{{ $insuranceProvider->email ?: '—' }}</td>
                                             <td>{{ $insuranceProvider->insurance_type }}</td>
                                             <td>{{ $insuranceProvider->amount }}</td>
                                             <td>{{ $insuranceProvider->policy_number }}</td>

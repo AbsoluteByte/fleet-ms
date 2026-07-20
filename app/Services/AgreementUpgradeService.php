@@ -4,21 +4,18 @@ namespace App\Services;
 
 use App\Models\Agreement;
 use App\Models\Car;
-use App\Models\Driver;
 use App\Models\Status;
-use App\Models\VehicleSwap;
-use App\Services\CarFleetComplianceService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class AgreementUpgradeService
 {
     public function __construct(
-        private AgreementInvoiceService $invoiceService,
-        private PaymentAllocationService $paymentAllocationService
+        private AgreementInvoiceService $invoiceService
     ) {}
 
     public function availableCars(Agreement $agreement): Collection
@@ -39,32 +36,6 @@ class AgreementUpgradeService
             ->values();
     }
 
-    /**
-     * Cars that currently have an active agreement eligible for a car change / vehicle swap.
-     */
-    public function carsWithActiveUpgradeableAgreements(int $tenantId): Collection
-    {
-        return Agreement::query()
-            ->where('tenant_id', $tenantId)
-            ->withActiveAssignment()
-            ->with(['car.company', 'car.carModel', 'driver', 'status'])
-            ->get()
-            ->filter(fn (Agreement $agreement) => $this->canUpgrade($agreement))
-            ->map(function (Agreement $agreement) {
-                $car = $agreement->car;
-
-                if ($car) {
-                    $car->setRelation('activeAgreement', $agreement);
-                }
-
-                return $car;
-            })
-            ->filter()
-            ->unique('id')
-            ->sortBy('registration')
-            ->values();
-    }
-
     public function canUpgrade(Agreement $agreement): bool
     {
         if ($agreement->isReplacementVehicle() || $agreement->isUpgradedAgreement() || $agreement->hasBeenUpgraded()) {
@@ -81,54 +52,22 @@ class AgreementUpgradeService
     }
 
     /**
-     * @return array{next_anchor: string, remaining_days: int, period_days: int, old_agreed_rent: float, estimated_adjustment?: float, adjustment_type?: string}
+     * Create a Swap agreement from an Active original: terminate original, carry deposit,
+     * inherit billing cycle via upgraded_from_agreement_id. No invoices or credits on create.
+     *
+     * @param  array<string, mixed>  $input
      */
-    public function upgradePreview(Agreement $agreement, ?float $newRent = null): array
-    {
-        $changeDate = now()->startOfDay();
-        $originalStart = $agreement->start_date->copy()->startOfDay();
-        $rentInterval = (string) $agreement->rent_interval;
-        $nextAnchor = $this->invoiceService->nextBillingAnchor($originalStart, $changeDate, $rentInterval);
-        $previousAnchor = $this->invoiceService->previousBillingAnchor($originalStart, $nextAnchor, $rentInterval);
-        $remainingDays = $this->invoiceService->isBillingAnchor($originalStart, $changeDate, $rentInterval)
-            ? 0
-            : $changeDate->diffInDays($nextAnchor);
-
-        $preview = [
-            'next_anchor' => $nextAnchor->toDateString(),
-            'remaining_days' => $remainingDays,
-            'period_days' => max($previousAnchor->diffInDays($nextAnchor), 1),
-            'old_agreed_rent' => (float) $agreement->agreed_rent,
-        ];
-
-        if ($newRent !== null) {
-            $tempNew = new Agreement([
-                'agreed_rent' => round($newRent, 2),
-                'rent_interval' => $agreement->rent_interval,
-                'discount_type' => $agreement->discount_type,
-                'discount_value' => $agreement->discount_value,
-                'start_date' => $changeDate,
-            ]);
-
-            $adjustment = $this->invoiceService->calculateChangeCarAdjustment($tempNew, $agreement, $changeDate);
-            $preview['estimated_adjustment'] = $adjustment;
-            $preview['adjustment_type'] = $this->invoiceService->changeCarAdjustmentType($adjustment);
-        }
-
-        return $preview;
-    }
-
-    public function upgrade(Agreement $old, array $input): Agreement
+    public function createSwapFromAgreement(Agreement $old, array $input): Agreement
     {
         if (! $this->canUpgrade($old)) {
             throw ValidationException::withMessages([
-                'agreement' => ['This agreement is not eligible for a car change.'],
+                'upgraded_from_agreement_id' => ['This agreement is not eligible for a vehicle swap.'],
             ]);
         }
 
         $car = Car::where('tenant_id', $old->tenant_id)
             ->with(['mots', 'roadTaxes', 'phvs', 'reservations', 'insurances.status'])
-            ->find($input['car_id']);
+            ->find($input['car_id'] ?? null);
 
         if (! $car || $car->id === $old->car_id) {
             throw ValidationException::withMessages([
@@ -140,11 +79,17 @@ class AgreementUpgradeService
 
         if (! $car->isSelectableForAgreement($rentedCarIds)) {
             throw ValidationException::withMessages([
-                'car_id' => ['The selected vehicle is not available for this car change.'],
+                'car_id' => ['The selected vehicle is not available for this vehicle swap.'],
             ]);
         }
 
-        $newRent = round((float) $input['agreed_rent'], 2);
+        if ((int) ($input['driver_id'] ?? 0) !== (int) $old->driver_id) {
+            throw ValidationException::withMessages([
+                'driver_id' => ['The driver must match the original agreement.'],
+            ]);
+        }
+
+        $newRent = round((float) ($input['agreed_rent'] ?? 0), 2);
 
         if ($newRent < 0) {
             throw ValidationException::withMessages([
@@ -153,36 +98,41 @@ class AgreementUpgradeService
         }
 
         $terminatedStatus = Status::where('type', 'agreement')->where('name', 'Terminated')->firstOrFail();
-        $activeStatus = Status::where('type', 'agreement')->where('name', 'Active')->firstOrFail();
-        $changeDate = now();
+        $swapStatus = Status::where('type', 'agreement')->where('name', 'Swap')->firstOrFail();
+        $changeDate = isset($input['start_date'])
+            ? Carbon::parse($input['start_date'])
+            : now();
         $changeDay = $changeDate->copy()->startOfDay();
-        $swapReason = $input['swap_reason'] ?? null;
-        $swapReasonLabel = $swapReason
-            ? (VehicleSwap::reasonLabels()[$swapReason] ?? $swapReason)
-            : null;
-        $terminationNote = $swapReasonLabel
-            ? 'Vehicle swap: '.$swapReasonLabel
-            : 'Closed due to car change.';
 
-        return DB::transaction(function () use ($old, $car, $newRent, $terminatedStatus, $activeStatus, $changeDate, $changeDay, $input, $terminationNote, $swapReason) {
+        return DB::transaction(function () use ($old, $car, $newRent, $terminatedStatus, $swapStatus, $changeDate, $changeDay, $input) {
+            $old = Agreement::query()->whereKey($old->id)->lockForUpdate()->firstOrFail();
+
+            if (! $this->canUpgrade($old->load('status'))) {
+                throw ValidationException::withMessages([
+                    'upgraded_from_agreement_id' => ['This agreement is not eligible for a vehicle swap.'],
+                ]);
+            }
+
             $originalEndDate = $old->end_date;
+            $transferDiscount = ! $old->discount_is_one_time || $old->hasPendingOneTimeDiscount();
 
             $old->update([
                 'status_id' => $terminatedStatus->id,
                 'end_date' => $changeDay->toDateString(),
                 'termination_notice_date' => $changeDay->toDateString(),
                 'termination_available_from_date' => $changeDay->toDateString(),
-                'termination_notes' => $terminationNote,
+                'termination_notes' => 'Closed due to vehicle swap.',
                 'termination_recorded_by' => Auth::id(),
                 'updatedBy' => Auth::id(),
             ]);
 
             $this->releaseCar($old->fresh(['car']));
 
-            $newAgreement = Agreement::create([
+            $attributes = [
                 'tenant_id' => $old->tenant_id,
                 'company_id' => $car->company_id,
                 'driver_id' => $old->driver_id,
+                'paying_company_name' => $old->paying_company_name,
                 'car_id' => $car->id,
                 'start_date' => $changeDate,
                 'end_date' => $originalEndDate,
@@ -191,57 +141,46 @@ class AgreementUpgradeService
                 'deposit_amount' => $old->deposit_amount,
                 'collection_type' => $old->collection_type,
                 'auto_schedule_collections' => false,
-                'discount_type' => $old->discount_type,
-                'discount_value' => $old->discount_value,
-                'discount_notes' => $old->discount_notes,
-                'using_own_insurance' => (bool) ($old->using_own_insurance ?? false),
-                'insurance_provider_id' => $old->insurance_provider_id,
-                'own_insurance_provider_name' => $old->own_insurance_provider_name,
-                'own_insurance_start_date' => $old->own_insurance_start_date,
-                'own_insurance_end_date' => $old->own_insurance_end_date,
-                'own_insurance_type' => $old->own_insurance_type,
-                'own_insurance_policy_number' => $old->own_insurance_policy_number,
-                'own_insurance_proof_document' => $old->own_insurance_proof_document,
-                'notes' => $old->notes,
-                'swap_reason' => $swapReason,
-                'swap_phvl_issue_type' => $input['swap_phvl_issue_type'] ?? null,
-                'swap_phvl_issue_notes' => $input['swap_phvl_issue_notes'] ?? null,
-                'swap_reason_notes' => $input['swap_reason_notes'] ?? null,
-                'status_id' => $activeStatus->id,
+                'discount_type' => $transferDiscount ? $old->discount_type : null,
+                'discount_value' => $transferDiscount ? $old->discount_value : null,
+                'discount_notes' => $transferDiscount ? $old->discount_notes : null,
+                'discount_is_one_time' => $transferDiscount && (bool) $old->discount_is_one_time,
+                'discount_started_at' => $transferDiscount ? $old->discount_started_at : null,
+                'discount_consumed_at' => null,
+                'discount_consumed_invoice_id' => null,
+                'using_own_insurance' => (bool) ($input['using_own_insurance'] ?? $old->using_own_insurance ?? false),
+                'insurance_provider_id' => $input['insurance_provider_id'] ?? $old->insurance_provider_id,
+                'own_insurance_provider_name' => $input['own_insurance_provider_name'] ?? $old->own_insurance_provider_name,
+                'own_insurance_start_date' => $input['own_insurance_start_date'] ?? $old->own_insurance_start_date,
+                'own_insurance_end_date' => $input['own_insurance_end_date'] ?? $old->own_insurance_end_date,
+                'own_insurance_type' => $input['own_insurance_type'] ?? $old->own_insurance_type,
+                'own_insurance_policy_number' => $input['own_insurance_policy_number'] ?? $old->own_insurance_policy_number,
+                'own_insurance_proof_document' => $input['own_insurance_proof_document'] ?? $old->own_insurance_proof_document,
+                'notes' => $input['notes'] ?? $old->notes,
+                'status_id' => $swapStatus->id,
                 'upgraded_from_agreement_id' => $old->id,
                 'createdBy' => Auth::id(),
                 'updatedBy' => Auth::id(),
-            ]);
+            ];
 
-            $newAgreement = $newAgreement->fresh(['upgradedFromAgreement']);
-            $adjustment = $this->invoiceService->calculateChangeCarAdjustment($newAgreement, $old, $changeDay);
-
-            $this->invoiceService->generateForAgreement($newAgreement);
-
-            if ($adjustment < 0 && $old->driver_id) {
-                $this->createChangeCarCredit($old->driver, abs($adjustment), $changeDay, $old, $newAgreement);
+            foreach ([
+                'mutual_detail_slip_document' => $input['mutual_detail_slip_document'] ?? null,
+                'mileage_out' => $input['mileage_out'] ?? null,
+                'mileage_in' => $input['mileage_in'] ?? null,
+                'condition_report' => $input['condition_report'] ?? null,
+            ] as $column => $value) {
+                if ($value !== null && Schema::hasColumn('agreements', $column)) {
+                    $attributes[$column] = $value;
+                }
             }
+
+            $newAgreement = Agreement::create($attributes);
+            $newAgreement = $newAgreement->fresh(['upgradedFromAgreement', 'status']);
+
+            app(DriverAgreementStatusService::class)->syncForAgreement($newAgreement);
 
             return $newAgreement;
         });
-    }
-
-    private function createChangeCarCredit(Driver $driver, float $amount, Carbon $paymentDate, Agreement $old, Agreement $new): void
-    {
-        if ($amount <= 0) {
-            return;
-        }
-
-        $this->paymentAllocationService->createPayment($driver, [
-            'payment_method' => 'Car Change Credit',
-            'payment_date' => $paymentDate->toDateString(),
-            'amount' => round($amount, 2),
-            'notes' => sprintf(
-                'Car change rent credit from agreement #%d to #%d (prorated rent decrease).',
-                $old->id,
-                $new->id
-            ),
-        ], true, [], true);
     }
 
     private function releaseCar(Agreement $agreement): void

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
+use App\Models\Car;
 use App\Models\Expense;
 use App\Models\Payment;
 use Illuminate\Http\Request;
@@ -39,7 +40,7 @@ class DailyExpenseController extends Controller
         $expenses = Expense::query()
             ->where('tenant_id', $tenant->id)
             ->daily()
-            ->with('bankAccount')
+            ->with(['bankAccount', 'car.carModel'])
             ->latest('date')
             ->latest('id')
             ->paginate(15);
@@ -60,10 +61,15 @@ class DailyExpenseController extends Controller
             ->where('tenant_id', $tenant->id)
             ->orderBy('bank_name')
             ->get();
+        $cars = Car::query()
+            ->where('tenant_id', $tenant->id)
+            ->with(['carModel', 'company'])
+            ->orderBy('registration')
+            ->get();
 
         $model = new Expense;
 
-        return view($this->dir.'create', compact('bankAccounts', 'model'));
+        return view($this->dir.'create', compact('bankAccounts', 'cars', 'model'));
     }
 
     public function store(Request $request)
@@ -76,6 +82,15 @@ class DailyExpenseController extends Controller
         }
 
         $validated = $request->validate([
+            'daily_expense_type' => ['required', Rule::in([
+                Expense::DAILY_TYPE_OFFICE,
+                Expense::DAILY_TYPE_VEHICLE,
+            ])],
+            'car_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => $request->input('daily_expense_type') === Expense::DAILY_TYPE_VEHICLE),
+                Rule::exists('cars', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
             'title' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0.01',
             'payment_method' => 'required|string|in:Bank Transfer,Cash,Cheque,Card Payment,Direct Debit',
@@ -110,8 +125,11 @@ class DailyExpenseController extends Controller
 
         Expense::query()->create([
             'tenant_id' => $tenant->id,
-            'car_id' => null,
+            'car_id' => $validated['daily_expense_type'] === Expense::DAILY_TYPE_VEHICLE
+                ? $validated['car_id']
+                : null,
             'type' => Expense::TYPE_DAILY,
+            'daily_expense_type' => $validated['daily_expense_type'],
             'title' => $validated['title'],
             'date' => $validated['date'],
             'description' => $validated['title'],

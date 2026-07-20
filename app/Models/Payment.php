@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Payment extends Model
 {
@@ -79,6 +80,11 @@ class Payment extends Model
         return $this->hasMany(PaymentAllocation::class);
     }
 
+    public function creditTransactionLines()
+    {
+        return $this->hasMany(DriverCreditTransactionLine::class, 'source_payment_id');
+    }
+
     public function sourceAgreement()
     {
         return $this->belongsTo(Agreement::class, 'allocation_source_id');
@@ -116,7 +122,48 @@ class Payment extends Model
 
     public function getUnallocatedAmountAttribute()
     {
-        return max((float) $this->amount - $this->allocated_amount, 0);
+        return max((float) $this->amount - $this->allocated_amount - $this->refunded_credit_amount, 0);
+    }
+
+    public function getReservedCreditAmountAttribute(): float
+    {
+        if (! Schema::hasTable('driver_credit_transaction_lines')) {
+            return 0.0;
+        }
+
+        return round((float) $this->creditTransactionLines()
+            ->where('status', DriverCreditTransactionLine::STATUS_RESERVED)
+            ->whereHas('transaction', fn ($query) => $query->pending())
+            ->sum('amount'), 2);
+    }
+
+    public function getRefundedCreditAmountAttribute(): float
+    {
+        if (! Schema::hasTable('driver_credit_transaction_lines')) {
+            return 0.0;
+        }
+
+        return round((float) $this->creditTransactionLines()
+            ->where('status', DriverCreditTransactionLine::STATUS_CONSUMED)
+            ->whereHas('transaction', fn ($query) => $query
+                ->posted()
+                ->where('kind', DriverCreditTransaction::KIND_REFUND))
+            ->sum('amount'), 2);
+    }
+
+    public function getSpendableCreditAmountAttribute(): float
+    {
+        if (! $this->isPosted()) {
+            return 0.0;
+        }
+
+        return round(max(
+            (float) $this->amount
+            - (float) $this->allocated_amount
+            - $this->reserved_credit_amount
+            - $this->refunded_credit_amount,
+            0
+        ), 2);
     }
 
     public static function generatePaymentNo(): string

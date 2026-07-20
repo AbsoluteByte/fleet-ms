@@ -189,6 +189,9 @@ class DashboardController extends Controller
                     'expiring_road_tax' => 0,
                     'expiring_driver_licenses' => 0,
                     'expiring_phd_licenses' => 0,
+                    'expiring_agreement_end_dates' => 0,
+                    'expiring_agreement_termination_notices' => 0,
+                    'agreement_notifications' => 0,
                     'total_count' => 0,
                 ],
             ];
@@ -654,44 +657,11 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 9. AGREEMENT TERMINATION NOTICES ====================
-        $terminationNotices = Agreement::with(['driver', 'car'])
-            ->where('tenant_id', $tenant->id)
-            ->whereHas('car', function ($query) use ($nonRoadTaxNotificationExcludedStatuses) {
-                $query->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
-            })
-            ->whereNotNull('termination_notice_date')
-            ->where(function ($query) {
-                $query->whereNull('termination_available_from_date')
-                    ->orWhere('termination_available_from_date', '<=', now()->addDays(30));
-            })
-            ->orderBy('termination_available_from_date')
-            ->get();
+        // ==================== 9. AGREEMENT END / TERMINATION NOTICE (10-DAY WINDOW) ====================
+        $agreementUpcomingNotifications = $this->buildAgreementFleetNotifications($tenant, $nonRoadTaxNotificationExcludedStatuses);
 
-        foreach ($terminationNotices as $agreement) {
-            $availableDate = $agreement->termination_available_from_date ?: $agreement->termination_notice_date;
-            $daysDiff = (int) now()->diffInDays($availableDate, false);
-            $msg = $daysDiff >= 0
-                ? 'Available in '.$daysDiff.' day'.($daysDiff === 1 ? '' : 's')
-                : 'Available since '.abs($daysDiff).' day'.(abs($daysDiff) === 1 ? '' : 's').' ago';
-
-            $notifications->push([
-                'id' => 'agreement_termination_'.$agreement->id,
-                'type' => 'agreement_termination',
-                'priority' => $daysDiff < 0 ? 1 : 6,
-                'title' => 'Rent Agreement Termination',
-                'message' => ($agreement->car->registration ?? 'Vehicle').' - '.$msg,
-                'simple_message' => ($agreement->car->registration ?? 'Vehicle').' - '.$msg,
-                'vehicle' => $agreement->car->registration ?? 'N/A',
-                'time_ago' => $availableDate->diffForHumans(),
-                'action_url' => route('agreements.show', $agreement),
-                'icon' => 'icon-file-text',
-                'color' => $daysDiff < 0 ? 'danger' : 'info',
-                'bg_color' => $daysDiff < 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                'border_color' => $daysDiff < 0 ? '#ef4444' : '#3b82f6',
-                'created_at' => $availableDate,
-                'sort_key' => $availableDate->timestamp,
-            ]);
+        foreach ($agreementUpcomingNotifications as $agreementNotification) {
+            $notifications->push($agreementNotification);
         }
 
         // ==================== 10. DRIVER LICENSES ====================
@@ -816,7 +786,9 @@ class DashboardController extends Controller
             'expiring_mot' => $expiringMots->count(),
             'expiring_road_tax' => $expiringRoadTaxes->count() + $carsMissingRoadTax->count(),
             'car_service_due' => $serviceNotifications->count(),
-            'agreement_terminations' => $terminationNotices->count(),
+            'expiring_agreement_end_dates' => $agreementUpcomingNotifications->where('type', 'agreement_end_date')->count(),
+            'expiring_agreement_termination_notices' => $agreementUpcomingNotifications->where('type', 'agreement_termination_notice')->count(),
+            'agreement_notifications' => $agreementUpcomingNotifications->count(),
             'expiring_driver_licenses' => $expiringDriverLicenses->count(),
             'expiring_phd_licenses' => $expiringPhdLicenses->count(),
             'total_count' => $sortedNotifications->count(),
@@ -903,6 +875,8 @@ class DashboardController extends Controller
             if ($request->has('type') && $request->type) {
                 if ($request->type === 'road_tax_expiry') {
                     $fleetNotifications = $fleetNotifications->whereIn('type', ['road_tax_expiry', 'road_tax_missing']);
+                } elseif ($request->type === 'agreement_notifications') {
+                    $fleetNotifications = $fleetNotifications->whereIn('type', ['agreement_end_date', 'agreement_termination_notice']);
                 } else {
                     $fleetNotifications = $fleetNotifications->where('type', $request->type);
                 }
@@ -941,8 +915,8 @@ class DashboardController extends Controller
             }
 
             $paymentNotifications = $paymentNotifications->sortBy([
-                ['sort_key', 'asc'],
-                ['id', 'asc'],
+                ['invoice_date_sort', 'desc'],
+                ['invoice_id', 'desc'],
             ])->values();
 
             // ✅ Transform for DataTable
@@ -1069,6 +1043,121 @@ class DashboardController extends Controller
     }
 
     /**
+     * Active/Swap agreements with end_date or termination_notice_date within the next 10 days.
+     * One notification per agreement, keyed by the nearest qualifying date.
+     */
+    private function buildAgreementFleetNotifications($tenant, array $excludedCarStatuses): Collection
+    {
+        $windowStart = now()->startOfDay();
+        $windowEnd = now()->addDays(10)->endOfDay();
+
+        $agreements = Agreement::with(['driver', 'car', 'status'])
+            ->where('tenant_id', $tenant->id)
+            ->currentlyActive()
+            ->whereHas('car', function ($query) use ($excludedCarStatuses) {
+                $query->whereNotIn('fleet_status', $excludedCarStatuses);
+            })
+            ->get();
+
+        $notifications = collect();
+
+        foreach ($agreements as $agreement) {
+            $qualifyingDates = [];
+
+            if ($agreement->end_date) {
+                $endDate = $agreement->end_date->copy()->startOfDay();
+                if ($endDate->gte($windowStart) && $endDate->lte($windowEnd)) {
+                    $qualifyingDates['end_date'] = $endDate;
+                }
+            }
+
+            if ($agreement->termination_notice_date) {
+                $terminationDate = $agreement->termination_notice_date->copy()->startOfDay();
+                if ($terminationDate->gte($windowStart) && $terminationDate->lte($windowEnd)) {
+                    $qualifyingDates['termination_notice'] = $terminationDate;
+                }
+            }
+
+            if ($qualifyingDates === []) {
+                continue;
+            }
+
+            $nearestKey = array_key_first($qualifyingDates);
+            $nearestDate = $qualifyingDates[$nearestKey];
+
+            foreach ($qualifyingDates as $key => $date) {
+                if ($date->lt($nearestDate)) {
+                    $nearestKey = $key;
+                    $nearestDate = $date;
+                }
+            }
+
+            $daysDiff = (int) $windowStart->diffInDays($nearestDate, false);
+            $registration = $agreement->car->registration ?? 'Vehicle';
+            $driverLabel = $agreement->driver?->selectOptionLabel() ?? 'Driver';
+
+            if ($nearestKey === 'end_date') {
+                $type = 'agreement_end_date';
+                $title = 'Agreement Ending Soon';
+                $msg = $daysDiff === 0
+                    ? 'Ends today'
+                    : 'Ends in '.$daysDiff.' day'.($daysDiff === 1 ? '' : 's');
+
+                if (isset($qualifyingDates['termination_notice'])) {
+                    $termDays = (int) $windowStart->diffInDays($qualifyingDates['termination_notice'], false);
+                    $msg .= ' (termination notice in '.$termDays.' day'.($termDays === 1 ? '' : 's').')';
+                }
+            } else {
+                $type = 'agreement_termination_notice';
+                $title = 'Termination Notice Due';
+                $msg = $daysDiff === 0
+                    ? 'Termination notice today'
+                    : 'Termination notice in '.$daysDiff.' day'.($daysDiff === 1 ? '' : 's');
+
+                if (isset($qualifyingDates['end_date'])) {
+                    $endDays = (int) $windowStart->diffInDays($qualifyingDates['end_date'], false);
+                    $msg .= ' (agreement ends in '.$endDays.' day'.($endDays === 1 ? '' : 's').')';
+                }
+            }
+
+            if ($daysDiff === 0) {
+                $color = 'warning';
+                $priority = 2;
+                $bgColor = 'rgba(245, 158, 11, 0.1)';
+                $borderColor = '#f59e0b';
+            } else {
+                $color = 'secondary';
+                $priority = 6;
+                $bgColor = 'rgba(107, 114, 128, 0.1)';
+                $borderColor = '#6b7280';
+            }
+
+            $fullMessage = $registration.' - '.$driverLabel.' - '.$msg;
+
+            $notifications->push([
+                'id' => 'agreement_upcoming_'.$agreement->id,
+                'type' => $type,
+                'priority' => $priority,
+                'title' => $title,
+                'message' => $fullMessage,
+                'simple_message' => $fullMessage,
+                'vehicle' => $registration,
+                'driver' => $driverLabel,
+                'time_ago' => $nearestDate->diffForHumans(),
+                'action_url' => route('agreements.show', $agreement),
+                'icon' => 'icon-file-text',
+                'color' => $color,
+                'bg_color' => $bgColor,
+                'border_color' => $borderColor,
+                'created_at' => $nearestDate,
+                'sort_key' => $nearestDate->timestamp,
+            ]);
+        }
+
+        return $notifications;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function invoicePaymentNotificationPayload(
@@ -1104,6 +1193,7 @@ class DashboardController extends Controller
             'border_color' => $borderColor,
             'created_at' => $invoice->due_date,
             'sort_key' => $invoice->due_date->timestamp,
+            'invoice_date_sort' => $invoice->invoice_date?->timestamp ?? $invoice->id,
         ];
     }
 }

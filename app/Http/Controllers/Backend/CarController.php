@@ -17,6 +17,7 @@ use App\Models\Counsel;
 use App\Models\Driver;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
+use App\Services\CarInsuranceFleetNotificationService;
 use App\Services\PhvlArchiveService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -139,6 +140,9 @@ class CarController extends Controller
             'dashcam_installed' => 'nullable|boolean',
             'dashcam_status' => 'nullable|in:active,inactive',
             'dashcam_notes' => 'nullable|string',
+            'tag_installed' => 'nullable|boolean',
+            'tag_status' => 'nullable|in:active,inactive',
+            'tag_notes' => 'nullable|string',
             'available_from_date' => 'nullable|date',
             'reserve_car' => 'nullable|boolean',
             'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
@@ -310,6 +314,17 @@ class CarController extends Controller
                     }
 
                     $car->insurances()->create($insuranceData);
+
+                    $provider = InsuranceProvider::query()->find($validated['insurance_provider_id']);
+                    if ($provider) {
+                        $this->queueInsuranceFleetNotifications(
+                            $car,
+                            $provider,
+                            $selectedInsuranceStatusId,
+                            null,
+                            true
+                        );
+                    }
                 }
 
                 return $car;
@@ -455,6 +470,9 @@ class CarController extends Controller
             'dashcam_installed' => 'nullable|boolean',
             'dashcam_status' => 'nullable|in:active,inactive',
             'dashcam_notes' => 'nullable|string',
+            'tag_installed' => 'nullable|boolean',
+            'tag_status' => 'nullable|in:active,inactive',
+            'tag_notes' => 'nullable|string',
             'available_from_date' => 'nullable|date',
             'reserve_car' => 'nullable|boolean',
             'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
@@ -563,7 +581,7 @@ class CarController extends Controller
         $this->validateMotPhvDocuments($request, $car);
 
         try {
-            $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant) {
+            $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant, $latestInsuranceBeforeUpdate) {
 
                 $carData = $this->carMassAssignmentFromValidated($validated, $request, $car);
                 $carData = $this->mergeV5DocumentCarData($request, $carData, $car);
@@ -760,6 +778,18 @@ class CarController extends Controller
                     } else {
                         // Keep one row per insurance lifecycle; mutate the current row through status changes.
                         $latestInsurance->update($insuranceData);
+                    }
+
+                    $provider = InsuranceProvider::query()->find($validated['insurance_provider_id']);
+                    if ($provider) {
+                        $previousStatusName = strtolower(trim((string) optional(optional($latestInsuranceBeforeUpdate)->status)->name));
+                        $this->queueInsuranceFleetNotifications(
+                            $car,
+                            $provider,
+                            $selectedInsuranceStatusId,
+                            $previousStatusName,
+                            ! $latestInsuranceBeforeUpdate || $startingNewCycle
+                        );
                     }
                 } else {
                     // Keep historical insurance records when insurance section is unchecked.
@@ -1410,11 +1440,11 @@ class CarController extends Controller
     }
 
     /**
-     * Tracker / dashcam installed flags; clear status and notes when uninstalled.
+     * Accessory installed flags; clear status and notes when uninstalled.
      */
     private function mergeAccessoriesCarData(Request $request, array $carData): array
     {
-        foreach (['tracker', 'dashcam'] as $accessory) {
+        foreach (['tracker', 'dashcam', 'tag'] as $accessory) {
             $installedKey = $accessory.'_installed';
             $statusKey = $accessory.'_status';
             $notesKey = $accessory.'_notes';
@@ -1789,6 +1819,42 @@ class CarController extends Controller
         }
 
         return $statuses->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    private function queueInsuranceFleetNotifications(
+        Car $car,
+        InsuranceProvider $provider,
+        int $newStatusId,
+        ?string $previousStatusName,
+        bool $isNewInsuranceRow,
+    ): void {
+        $appliedId = $this->insuranceStatusIdByName('Applied');
+        $cancelledIds = $this->insuranceCancelledStatusIds();
+        $previousStatusName = strtolower(trim((string) $previousStatusName));
+
+        DB::afterCommit(function () use ($car, $provider, $newStatusId, $appliedId, $cancelledIds, $previousStatusName, $isNewInsuranceRow) {
+            $carForMail = $car->fresh(['company', 'carModel']);
+            if (! $carForMail) {
+                return;
+            }
+
+            $providerForMail = $provider->fresh();
+            if (! $providerForMail) {
+                return;
+            }
+
+            $service = app(CarInsuranceFleetNotificationService::class);
+
+            if ($newStatusId === $appliedId && $isNewInsuranceRow) {
+                $service->notifyApplied($carForMail, $providerForMail);
+
+                return;
+            }
+
+            if (in_array($newStatusId, $cancelledIds, true) && $previousStatusName === 'active') {
+                $service->notifyCancelled($carForMail, $providerForMail);
+            }
+        });
     }
 
     /**

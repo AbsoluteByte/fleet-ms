@@ -1,6 +1,4 @@
 @php
-    use App\Models\VehicleSwap;
-
     $fleetLabels = $fleetLabels ?? [];
     $prefillCarId = $prefillCarId ?? null;
     $prefillTargetStatus = $prefillTargetStatus ?? null;
@@ -9,9 +7,6 @@
     $activeTargetStatus = old('target_status', $prefillTargetStatus);
     $activeCarId = old('car_id', $prefillCarId);
     $payloadOld = fn (string $key, $default = '') => old('payload.'.$key, $prefillStatusPayload[$key] ?? $default);
-
-    $swapReasonOld = old('reason_for_swap', '');
-    $phvlTypeOld = old('phvl_issue_type', '');
 
     $step2OldCarId = $activeCarId;
     $step2OldTarget = $activeTargetStatus;
@@ -50,9 +45,6 @@
 
 <div id="fleet_step2" class="{{ $activeTargetStatus ? '' : 'd-none' }}">
     <h5 id="fleet_step2_summary" class="border-bottom pb-2 mb-3 text-center">{{ $step2SummaryText }}</h5>
-
-    <input type="hidden" name="swapped_with_car_id" id="fleet_hidden_swapped_with_car_id"
-           value="{{ old('swapped_with_car_id') }}">
 
     {{-- Available for rent --}}
     <div class="fleet-status-panel {{ $activeTargetStatus === 'available_for_rent' ? '' : 'd-none' }}"
@@ -164,162 +156,6 @@
                 <input type="text" id="fleet_rsv_balance_payable_display" class="form-control"
                        readonly tabindex="-1" value="">
                 <small class="text-muted">Auto-calculated from agreed rent + agreed advance − amount paid.</small>
-            </div>
-        </div>
-    </div>
-
-    {{-- Vehicle swap (replacement = Step 1 car; old car selected here) --}}
-    <div class="fleet-status-panel {{ $activeTargetStatus === 'vehicle_swap' ? '' : 'd-none' }}"
-         data-status="vehicle_swap">
-        <div class="row">
-            <div class="col-md-12 form-group">
-                <label for="fleet_swap_old_car_id">Old car (driver’s previous vehicle) <span
-                            class="text-danger">*</span></label>
-                <select name="old_car_id" id="fleet_swap_old_car_id"
-                        class="form-control select-search @error('old_car_id') is-invalid @enderror">
-                    <option value="">— Select —</option>
-                    @foreach($cars as $car)
-                        <option value="{{ $car->id }}"
-                            {{ (string) old('old_car_id') === (string) $car->id ? 'selected' : '' }}>
-                            {{ $car->registration }} — {{ $car->carModel->name ?? '' }}</option>
-                    @endforeach
-                </select>
-                @error('old_car_id')
-                <div class="invalid-feedback d-block">{{ $message }}</div>
-                @enderror
-                @error('car_id')
-                <div class="invalid-feedback d-block">{{ $message }}</div>
-                @enderror
-            </div>
-
-            <div class="col-md-4 form-group">
-                <label for="fleet_swap_customer_name">Client's name <span class="text-danger">*</span></label>
-                <input type="text" name="customer_name" id="fleet_swap_customer_name"
-                       class="form-control @error('customer_name') is-invalid @enderror"
-                       maxlength="255" value="{{ old('customer_name') }}">
-                @error('customer_name')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-            <div class="col-md-4 form-group">
-                <label for="fleet_swap_customer_phone">Contact</label>
-                <input type="text" name="customer_phone" id="fleet_swap_customer_phone"
-                       class="form-control @error('customer_phone') is-invalid @enderror"
-                       maxlength="50" value="{{ old('customer_phone') }}">
-                @error('customer_phone')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-            <div class="col-md-4 form-group">
-                <label for="fleet_swap_customer_email">Email</label>
-                <input type="email" name="customer_email" id="fleet_swap_customer_email"
-                       class="form-control @error('customer_email') is-invalid @enderror"
-                       maxlength="255" value="{{ old('customer_email') }}">
-                @error('customer_email')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-
-            <div class="col-md-6 form-group">
-                <label for="fleet_swap_reservation_date">Reservation date <span class="text-danger">*</span></label>
-                <input type="date" name="reservation_date" id="fleet_swap_reservation_date"
-                       class="form-control @error('reservation_date') is-invalid @enderror"
-                       value="{{ old('reservation_date', now()->toDateString()) }}">
-                @error('reservation_date')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-            <div class="col-md-6 form-group">
-                <label for="fleet_swap_pick_up_date">Pick up date <span class="text-danger">*</span></label>
-                <input type="date" name="pick_up_date" id="fleet_swap_pick_up_date"
-                       class="form-control @error('pick_up_date') is-invalid @enderror"
-                       value="{{ old('pick_up_date') }}">
-                @error('pick_up_date')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-
-            <div class="col-md-4 form-group">
-                <label for="fleet_swap_agreed_rent">Agreed rent <span class="text-danger">*</span></label>
-                <input type="number" name="agreed_rent" id="fleet_swap_agreed_rent"
-                       class="form-control @error('agreed_rent') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('agreed_rent') }}">
-                @error('agreed_rent')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-            <div class="col-md-4 form-group">
-                <label for="fleet_swap_agreed_advance">Agreed advance <span class="text-danger">*</span></label>
-                <input type="number" name="agreed_advance" id="fleet_swap_agreed_advance"
-                       class="form-control @error('agreed_advance') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('agreed_advance') }}">
-                @error('agreed_advance')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-            <div class="col-md-4 form-group">
-                <label for="fleet_swap_amount_paid">Amount paid <span class="text-danger">*</span></label>
-                <input type="number" name="amount_paid" id="fleet_swap_amount_paid"
-                       class="form-control @error('amount_paid') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('amount_paid') }}">
-                @error('amount_paid')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-
-            <div class="col-md-12 form-group">
-                <label for="fleet_swap_balance_payable_display">Balance payable on pick up</label>
-                <input type="text" id="fleet_swap_balance_payable_display" class="form-control"
-                       readonly tabindex="-1" value="">
-                <small class="text-muted">Auto-calculated from agreed rent + agreed advance − amount paid.</small>
-            </div>
-
-            <div class="col-md-6 form-group">
-                <label for="fleet_swap_reason_for_swap">Reason for swap <span class="text-danger">*</span></label>
-                <select name="reason_for_swap" id="fleet_swap_reason_for_swap"
-                        class="form-control @error('reason_for_swap') is-invalid @enderror">
-                    <option value="">— Select —</option>
-                    @foreach(VehicleSwap::reasonLabels() as $value => $label)
-                        <option value="{{ $value }}" {{ (string) $swapReasonOld === (string) $value ? 'selected' : '' }}>
-                            {{ $label }}</option>
-                    @endforeach
-                </select>
-                @error('reason_for_swap')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-
-            <div class="col-md-6 form-group d-none" id="fleet_swap_phvl_issue_type_wrap">
-                <label for="fleet_swap_phvl_issue_type">PHVL issue type <span class="text-danger">*</span></label>
-                <select name="phvl_issue_type" id="fleet_swap_phvl_issue_type"
-                        class="form-control @error('phvl_issue_type') is-invalid @enderror">
-                    <option value="">— Select —</option>
-                    @foreach(VehicleSwap::phvlIssueTypeLabels() as $value => $label)
-                        <option value="{{ $value }}" {{ (string) $phvlTypeOld === (string) $value ? 'selected' : '' }}>
-                            {{ $label }}</option>
-                    @endforeach
-                </select>
-                @error('phvl_issue_type')
-                <div class="invalid-feedback d-block">{{ $message }}</div>
-                @enderror
-            </div>
-
-            <div class="col-md-12 form-group d-none" id="fleet_swap_phvl_issue_notes_wrap">
-                <label for="fleet_swap_phvl_issue_notes">PHVL issue notes <span class="text-danger">*</span></label>
-                <textarea name="phvl_issue_notes" id="fleet_swap_phvl_issue_notes" rows="3"
-                          class="form-control @error('phvl_issue_notes') is-invalid @enderror">{{ old('phvl_issue_notes') }}</textarea>
-                @error('phvl_issue_notes')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
-
-            <div class="col-md-12 form-group d-none" id="fleet_swap_reason_notes_wrap">
-                <label for="fleet_swap_reason_notes">Reason notes <span class="text-danger">*</span></label>
-                <textarea name="reason_notes" id="fleet_swap_reason_notes" rows="3"
-                          class="form-control @error('reason_notes') is-invalid @enderror">{{ old('reason_notes') }}</textarea>
-                @error('reason_notes')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
             </div>
         </div>
     </div>

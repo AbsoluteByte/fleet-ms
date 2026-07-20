@@ -118,6 +118,8 @@
                                             data-tracker-status="{{ $car->tracker_installed ? ($car->tracker_status ?? '') : '' }}"
                                             data-dashcam-installed="{{ $car->dashcam_installed ? '1' : '0' }}"
                                             data-dashcam-status="{{ $car->dashcam_installed ? ($car->dashcam_status ?? '') : '' }}"
+                                            data-tag-installed="{{ $car->tag_installed ? '1' : '0' }}"
+                                            data-tag-status="{{ $car->tag_installed ? ($car->tag_status ?? '') : '' }}"
                                         >
                                             <td>
                                                 <strong>{{ $car->registration ?: '—' }}</strong>
@@ -149,18 +151,26 @@
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <a href="{{ route('cars.show', $car) }}" class="btn btn-sm btn-outline-info">
+                                                    <a href="{{ route('cars.show', $car) }}"
+                                                       class="btn btn-sm btn-outline-info js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="View Car" aria-label="View Car">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
-                                                    <a href="{{ route('cars.edit', $car) }}" class="btn btn-sm btn-outline-warning">
+                                                    <a href="{{ route('cars.edit', $car) }}"
+                                                       class="btn btn-sm btn-outline-warning js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="Edit Car" aria-label="Edit Car">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
                                                     <span class="car-notifications-wrap">
                                                         <button type="button"
-                                                                class="btn btn-sm btn-outline-primary car-notifications-btn"
+                                                                class="btn btn-sm btn-outline-primary car-notifications-btn js-action-tooltip"
                                                                 data-notifications-url="{{ route('cars.notifications', $car) }}"
                                                                 data-registration="{{ $car->registration }}"
-                                                                title="View car notifications{{ $carNotificationCount > 0 ? ' (' . $carNotificationCount . ')' : '' }}">
+                                                                data-toggle="tooltip" data-placement="top"
+                                                                title="View Car Notifications{{ $carNotificationCount > 0 ? ' (' . $carNotificationCount . ')' : '' }}"
+                                                                aria-label="View Car Notifications">
                                                             <i class="fa fa-bell"></i>
                                                         </button>
                                                         @if($carNotificationCount > 0)
@@ -170,7 +180,9 @@
                                                     <form action="{{ route('cars.destroy', $car) }}" method="POST" style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger js-action-tooltip"
+                                                                data-toggle="tooltip" data-placement="top"
+                                                                title="Delete Car" aria-label="Delete Car"
                                                                 data-car-registration="{{ $car->registration }}"
                                                                 onclick="if (!confirm('Are you sure?')) { return false; } try { sessionStorage.setItem('fleetiq_deleted_car_registration', this.dataset.carRegistration || ''); } catch (e) {} return true;">
                                                             <i class="fa fa-trash"></i>
@@ -314,6 +326,24 @@
             <div class="form-group">
                 <label for="carsFilterDashcamStatus">Dashcam status</label>
                 <select id="carsFilterDashcamStatus" class="form-control cars-advanced-filter" data-filter-key="dashcamStatus">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTagInstalled">Tag</label>
+                <select id="carsFilterTagInstalled" class="form-control cars-advanced-filter" data-filter-key="tagInstalled">
+                    <option value="">All</option>
+                    <option value="1">Installed</option>
+                    <option value="0">Uninstalled</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTagStatus">Tag status</label>
+                <select id="carsFilterTagStatus" class="form-control cars-advanced-filter" data-filter-key="tagStatus">
                     <option value="">All</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -690,7 +720,9 @@
                 trackerInstalled: '',
                 trackerStatus: '',
                 dashcamInstalled: '',
-                dashcamStatus: ''
+                dashcamStatus: '',
+                tagInstalled: '',
+                tagStatus: ''
             };
             const expiryFilters = {
                 mot: { from: '', to: '', includeMissing: false },
@@ -719,12 +751,22 @@
             }
             let quickFilter = '';
 
+            function initializeActionTooltips() {
+                $('.js-action-tooltip').tooltip({ container: 'body' });
+            }
+
             const dataTable = $('#dataTable').DataTable({
                 processing: true,
                 responsive: true,
                 columnDefs: [
                     { targets: -1, visible: false, searchable: true }
                 ],
+            });
+
+            initializeActionTooltips();
+            dataTable.on('draw.dt responsive-display.dt', function () {
+                $('.tooltip').remove();
+                initializeActionTooltips();
             });
 
             const $filter = $('#dataTable_filter');
@@ -845,6 +887,14 @@
                 }
                 if (advancedFilters.dashcamStatus
                     && row.dataset.dashcamStatus !== advancedFilters.dashcamStatus) {
+                    return false;
+                }
+                if (advancedFilters.tagInstalled !== ''
+                    && row.dataset.tagInstalled !== advancedFilters.tagInstalled) {
+                    return false;
+                }
+                if (advancedFilters.tagStatus
+                    && row.dataset.tagStatus !== advancedFilters.tagStatus) {
                     return false;
                 }
 
@@ -1077,6 +1127,14 @@
 
                 if (advancedFilters.dashcamStatus) {
                     lines.push('Dashcam status: ' + (advancedFilters.dashcamStatus === 'active' ? 'Active' : 'Inactive'));
+                }
+
+                if (advancedFilters.tagInstalled !== '') {
+                    lines.push('Tag: ' + (advancedFilters.tagInstalled === '1' ? 'Installed' : 'Uninstalled'));
+                }
+
+                if (advancedFilters.tagStatus) {
+                    lines.push('Tag status: ' + (advancedFilters.tagStatus === 'active' ? 'Active' : 'Inactive'));
                 }
 
                 [

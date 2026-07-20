@@ -91,8 +91,12 @@ class PaymentAllocationService
                 break;
             }
 
-            $invoiceBalance = (float) $invoice->balance_amount;
+            $invoiceBalance = max((float) $invoice->balance_amount - $invoice->reserved_credit_amount, 0);
             $allocatedAmount = min($remainingAmount, $invoiceBalance);
+
+            if ($allocatedAmount <= 0) {
+                continue;
+            }
 
             $this->createAllocation($payment, $invoice, $allocatedAmount);
             $remainingAmount = round($remainingAmount - $allocatedAmount, 2);
@@ -122,8 +126,12 @@ class PaymentAllocationService
                 break;
             }
 
-            $invoiceBalance = (float) $invoice->balance_amount;
+            $invoiceBalance = max((float) $invoice->balance_amount - $invoice->reserved_credit_amount, 0);
             $allocatedAmount = min($remainingAmount, $invoiceBalance);
+
+            if ($allocatedAmount <= 0) {
+                continue;
+            }
 
             $this->createAllocation($payment, $invoice, $allocatedAmount);
             $remainingAmount = round($remainingAmount - $allocatedAmount, 2);
@@ -163,7 +171,11 @@ class PaymentAllocationService
                 ]);
             }
 
-            if ($amount > (float) $invoice->balance_amount) {
+            $availableInvoiceBalance = max(
+                (float) $invoice->balance_amount - $invoice->reserved_credit_amount,
+                0
+            );
+            if ($amount > $availableInvoiceBalance) {
                 throw ValidationException::withMessages([
                     "allocations.{$invoiceId}" => 'Allocation cannot be greater than invoice balance.',
                 ]);
@@ -186,7 +198,10 @@ class PaymentAllocationService
                 return;
             }
 
-            $remainingBalance = (float) $invoice->balance_amount;
+            $remainingBalance = max(
+                (float) $invoice->balance_amount - $invoice->reserved_credit_amount,
+                0
+            );
 
             $payments = Payment::query()
                 ->where('driver_id', $invoice->driver_id)
@@ -201,8 +216,7 @@ class PaymentAllocationService
                     break;
                 }
 
-                $allocatedAmount = (float) $payment->allocations()->sum('allocated_amount');
-                $availableCredit = max((float) $payment->amount - $allocatedAmount, 0);
+                $availableCredit = $payment->spendable_credit_amount;
 
                 if ($availableCredit <= 0) {
                     continue;

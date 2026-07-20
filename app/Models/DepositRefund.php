@@ -17,6 +17,11 @@ class DepositRefund extends Model
         'agreement_id',
         'driver_id',
         'amount',
+        'gross_deposit_amount',
+        'deductions_amount',
+        'debt_offset_amount',
+        'debt_payment_id',
+        'refund_credit_payment_id',
         'payment_method',
         'bank_account_id',
         'refund_date',
@@ -27,6 +32,9 @@ class DepositRefund extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'gross_deposit_amount' => 'decimal:2',
+        'deductions_amount' => 'decimal:2',
+        'debt_offset_amount' => 'decimal:2',
         'refund_date' => 'date',
     ];
 
@@ -43,6 +51,16 @@ class DepositRefund extends Model
     public function bankAccount(): BelongsTo
     {
         return $this->belongsTo(BankAccount::class);
+    }
+
+    public function debtPayment(): BelongsTo
+    {
+        return $this->belongsTo(Payment::class, 'debt_payment_id');
+    }
+
+    public function refundCreditPayment(): BelongsTo
+    {
+        return $this->belongsTo(Payment::class, 'refund_credit_payment_id');
     }
 
     public function createdByUser(): BelongsTo

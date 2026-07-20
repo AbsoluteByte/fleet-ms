@@ -212,6 +212,7 @@ class AgreementTerminateNonCompliantTest extends TestCase
 
         Schema::table('agreements', function (Blueprint $table) {
             $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            $table->text('mutual_detail_slip_document')->nullable();
         });
 
         Schema::table('car_reservations', function (Blueprint $table) {

@@ -494,6 +494,21 @@
         'dashcam_notes',
         (isset($model) && $model->id) ? ($model->dashcam_notes ?? '') : ''
     );
+    $tagInstalled = (bool) old(
+        'tag_installed',
+        (isset($model) && $model->id) ? ($model->tag_installed ?? false) : false
+    );
+    $tagStatus = old(
+        'tag_status',
+        (isset($model) && $model->id) ? ($model->tag_status ?? 'active') : 'active'
+    );
+    if (! in_array($tagStatus, ['active', 'inactive'], true)) {
+        $tagStatus = 'active';
+    }
+    $tagNotes = old(
+        'tag_notes',
+        (isset($model) && $model->id) ? ($model->tag_notes ?? '') : ''
+    );
 @endphp
 <style>
     .car-accessory-card {
@@ -597,7 +612,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-6 mb-2 mb-md-0">
+                    <div class="col-lg-4 col-md-6 mb-2">
                         <div class="car-accessory-card">
                             <div class="car-accessory-card__title">
                                 <i class="fa fa-map-marker-alt text-primary mr-50"></i> Tracker
@@ -631,7 +646,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-lg-4 col-md-6 mb-2">
                         <div class="car-accessory-card">
                             <div class="car-accessory-card__title">
                                 <i class="fa fa-video text-primary mr-50"></i> Dashcam
@@ -659,6 +674,40 @@
                                               class="form-control @error('dashcam_notes') is-invalid @enderror"
                                               placeholder="Optional">{{ $dashcamNotes }}</textarea>
                                     @error('dashcam_notes')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4 col-md-6 mb-2">
+                        <div class="car-accessory-card">
+                            <div class="car-accessory-card__title">
+                                <i class="fa fa-tag text-primary mr-50"></i> Tag
+                            </div>
+                            <input type="hidden" name="tag_installed" id="tag_installed" value="{{ $tagInstalled ? '1' : '0' }}">
+                            <span class="car-accessory-field-label">Install status</span>
+                            <div class="car-accessory-toggle" role="group" aria-label="Tag install status" data-accessory-toggle="tag_installed">
+                                <button type="button" class="car-accessory-toggle__btn {{ ! $tagInstalled ? 'is-active' : '' }}" data-value="0">Uninstalled</button>
+                                <button type="button" class="car-accessory-toggle__btn {{ $tagInstalled ? 'is-active' : '' }}" data-value="1">Installed</button>
+                            </div>
+                            <div id="tag-details" style="display: {{ $tagInstalled ? 'block' : 'none' }};">
+                                <input type="hidden" name="tag_status" id="tag_status" value="{{ $tagStatus }}">
+                                <span class="car-accessory-field-label">Status</span>
+                                <div class="car-accessory-toggle car-accessory-toggle--status {{ $tagStatus === 'inactive' ? 'car-accessory-toggle--inactive-selected' : '' }}"
+                                     role="group" aria-label="Tag status" data-accessory-toggle="tag_status">
+                                    <button type="button" class="car-accessory-toggle__btn {{ $tagStatus === 'inactive' ? 'is-active' : '' }}" data-value="inactive">Inactive</button>
+                                    <button type="button" class="car-accessory-toggle__btn {{ $tagStatus === 'active' ? 'is-active' : '' }}" data-value="active">Active</button>
+                                </div>
+                                @error('tag_status')
+                                <div class="text-danger small mb-1">{{ $message }}</div>
+                                @enderror
+                                <div class="form-group mb-0">
+                                    <label for="tag_notes">Notes</label>
+                                    <textarea name="tag_notes" id="tag_notes" rows="3"
+                                              class="form-control @error('tag_notes') is-invalid @enderror"
+                                              placeholder="Optional">{{ $tagNotes }}</textarea>
+                                    @error('tag_notes')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
@@ -2667,7 +2716,7 @@
                             group.classList.toggle('car-accessory-toggle--inactive-selected', value === 'inactive');
                         }
 
-                        if (inputId === 'tracker_installed' || inputId === 'dashcam_installed') {
+                        if (inputId.endsWith('_installed')) {
                             syncAccessoryInstalled(inputId.replace('_installed', ''));
                         }
                     });

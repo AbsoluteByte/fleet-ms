@@ -144,7 +144,8 @@
                     (data.summary.expiring_mot || 0) +
                     (data.summary.expiring_road_tax || 0) +
                     (data.summary.expiring_driver_licenses || 0) +
-                    (data.summary.expiring_phd_licenses || 0);
+                    (data.summary.expiring_phd_licenses || 0) +
+                    (data.summary.agreement_notifications || 0);
             }
 
             // Alternative: If notifications array is available, use its length
@@ -260,6 +261,8 @@
                 'road_tax_missing': 'due-soon',
                 'driver_license_expiry': 'insurance-expiry',
                 'phd_license_expiry': 'insurance-expiry',
+                'agreement_end_date': 'due-soon',
+                'agreement_termination_notice': 'due-soon',
                 'default': ''
             };
             return classes[type] || classes.default;
