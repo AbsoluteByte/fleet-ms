@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Agreement;
+use App\Models\AgreementAdditionalCharge;
 use App\Models\DriverCreditTransactionLine;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -95,6 +96,41 @@ class AgreementInvoiceService
         }
 
         return $generated;
+    }
+
+    public function createAdditionalChargeInvoice(Agreement $agreement, AgreementAdditionalCharge $charge): Invoice
+    {
+        if ($charge->invoice_id) {
+            return $charge->invoice()->firstOrFail();
+        }
+
+        $amount = round((float) $charge->amount, 2);
+        $invoiceDate = now()->startOfDay();
+        $dueDate = $invoiceDate->copy()->addDays(5);
+        $typeLabel = $charge->typeLabel();
+        $detail = filled($charge->notes) ? trim((string) $charge->notes) : null;
+        $notes = $detail ? $typeLabel.': '.$detail : $typeLabel;
+
+        $invoice = Invoice::create([
+            'driver_id' => $agreement->driver_id,
+            'source_id' => $agreement->id,
+            'invoice_type' => 'agreement_additional_charge',
+            'invoice_date' => $invoiceDate->toDateString(),
+            'due_date' => $dueDate->toDateString(),
+            'subtotal' => $amount,
+            'discount_amount' => 0,
+            'discount_description' => null,
+            'tax_amount' => 0,
+            'total_amount' => $amount,
+            'paid_amount' => 0,
+            'balance_amount' => $amount,
+            'status' => $dueDate->lt(now()->startOfDay()) ? 'overdue' : 'pending',
+            'notes' => $notes,
+        ]);
+
+        app(PaymentAllocationService::class)->allocateAvailableCreditToInvoice($invoice);
+
+        return $invoice;
     }
 
     public function nextBillingAnchor(Carbon $originalStart, Carbon $fromDate, string $rentInterval): Carbon

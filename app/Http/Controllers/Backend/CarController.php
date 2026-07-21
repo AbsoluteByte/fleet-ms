@@ -65,7 +65,7 @@ class CarController extends Controller
                 'insurances.status',
                 'services',
                 'reservations',
-                'agreements',
+                'agreements.status',
             ])
             ->latest()
             ->get();

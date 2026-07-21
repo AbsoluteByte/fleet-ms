@@ -98,7 +98,7 @@ class Agreement extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class, 'source_id')
-            ->whereIn('invoice_type', ['agreement', 'agreement_deposit']);
+            ->whereIn('invoice_type', ['agreement', 'agreement_deposit', 'agreement_additional_charge']);
     }
 
     public function discountConsumedInvoice()
@@ -143,6 +143,11 @@ class Agreement extends Model
     public function deductions()
     {
         return $this->hasMany(AgreementDeduction::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function additionalCharges()
+    {
+        return $this->hasMany(AgreementAdditionalCharge::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function getDeductionsTotalAttribute(): float

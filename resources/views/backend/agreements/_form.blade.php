@@ -348,6 +348,118 @@
                         </div>
                     </div>
                 </div>
+
+                @php
+                    $damageTypes = \App\Models\AgreementAdditionalCharge::types();
+                    $additionalChargeRows = old('additional_charges');
+                    if ($additionalChargeRows === null) {
+                        $additionalChargeRows = $model->additionalCharges->map(fn ($charge) => [
+                            'id' => $charge->id,
+                            'type' => $charge->type,
+                            'amount' => $charge->amount,
+                            'notes' => $charge->notes,
+                            'locked' => $charge->invoice_id !== null,
+                        ])->values()->all();
+                    } else {
+                        $existingChargeIds = $model->additionalCharges->keyBy('id');
+                        $additionalChargeRows = collect($additionalChargeRows)->map(function ($charge) use ($existingChargeIds) {
+                            $chargeId = $charge['id'] ?? null;
+                            $charge['locked'] = $chargeId && $existingChargeIds->has($chargeId)
+                                && $existingChargeIds->get($chargeId)->invoice_id !== null;
+
+                            return $charge;
+                        })->values()->all();
+                    }
+                @endphp
+                <div class="col-12">
+                    <input type="hidden" name="additional_charges_present" value="1">
+                    <div class="agreement-deductions-panel mb-3">
+                        <div class="agreement-deductions-panel__header">
+                            <div class="agreement-deductions-panel__heading">
+                                <span class="agreement-deductions-panel__icon">
+                                    <i class="fa fa-plus-circle"></i>
+                                </span>
+                                <div>
+                                    <h6 class="agreement-deductions-panel__title">Damages</h6>
+                                    <p class="agreement-deductions-panel__subtitle">Add vehicle-related costs during the hire period. Each damage entry creates an invoice for the driver.</p>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-primary agreement-deductions-panel__add" id="add-additional-charge-row">
+                                <i class="fa fa-plus me-1"></i> Add damage
+                            </button>
+                        </div>
+
+                        <div class="agreement-deductions-panel__body">
+                            <div id="additional-charges-repeater">
+                                @foreach($additionalChargeRows as $index => $charge)
+                                    @php
+                                        $chargeLocked = ! empty($charge['locked']);
+                                    @endphp
+                                    <div class="deduction-row mb-2 additional-charge-row">
+                                        <div class="row g-2 align-items-end">
+                                            @if(! empty($charge['id']))
+                                                <input type="hidden" name="additional_charges[{{ $index }}][id]" value="{{ $charge['id'] }}">
+                                            @endif
+                                            <div class="col-md-3">
+                                                <label class="form-label">Type</label>
+                                                <select class="form-control"
+                                                        name="additional_charges[{{ $index }}][type]"
+                                                        required
+                                                        @disabled($chargeLocked)>
+                                                    @foreach($damageTypes as $typeValue => $typeLabel)
+                                                        <option value="{{ $typeValue }}"
+                                                            @selected(($charge['type'] ?? \App\Models\AgreementAdditionalCharge::TYPE_MISCELLANEOUS_CHARGES) === $typeValue)>
+                                                            {{ $typeLabel }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                @if($chargeLocked)
+                                                    <input type="hidden" name="additional_charges[{{ $index }}][type]" value="{{ $charge['type'] ?? \App\Models\AgreementAdditionalCharge::TYPE_MISCELLANEOUS_CHARGES }}">
+                                                @endif
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Amount</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">£</span>
+                                                    <input type="number" class="form-control"
+                                                           name="additional_charges[{{ $index }}][amount]"
+                                                           value="{{ $charge['amount'] ?? '' }}"
+                                                           min="0.01" step="0.01" required
+                                                           @readonly($chargeLocked)>
+                                                </div>
+                                            </div>
+                                            <div class="{{ $chargeLocked ? 'col-md-7' : 'col-md-6' }}">
+                                                <label class="form-label">Notes</label>
+                                                <input type="text" class="form-control"
+                                                       name="additional_charges[{{ $index }}][notes]"
+                                                       value="{{ $charge['notes'] ?? '' }}"
+                                                       placeholder="Reason for damage (e.g. tyres, body repair)"
+                                                       maxlength="2000"
+                                                       @readonly($chargeLocked)>
+                                            </div>
+                                            @unless($chargeLocked)
+                                                <div class="col-md-1">
+                                                    <button type="button" class="btn btn-outline-danger remove-additional-charge-row" title="Remove damage">
+                                                        <i class="fa fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            @endunless
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            @error('additional_charges')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                            @error('additional_charges.*.amount')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                            @error('additional_charges.*.type')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+                </div>
             @endif
         </div>
     </div>
@@ -1447,6 +1559,53 @@
                 const removeButton = event.target.closest('.remove-deduction-row');
                 if (removeButton) {
                     removeButton.closest('.deduction-row').remove();
+                }
+            });
+        }
+
+        const additionalChargesRepeater = document.getElementById('additional-charges-repeater');
+        const addAdditionalChargeButton = document.getElementById('add-additional-charge-row');
+        let additionalChargeIndex = additionalChargesRepeater ? additionalChargesRepeater.querySelectorAll('.additional-charge-row').length : 0;
+
+        if (addAdditionalChargeButton && additionalChargesRepeater) {
+            addAdditionalChargeButton.addEventListener('click', function () {
+                const row = document.createElement('div');
+                row.className = 'deduction-row mb-2 additional-charge-row';
+                row.innerHTML = `
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">Type</label>
+                            <select class="form-control" name="additional_charges[${additionalChargeIndex}][type]" required>
+                                <option value="insurance_excess">Insurance Excess</option>
+                                <option value="miscellaneous_charges">Miscellaneous Charges</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Amount</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" class="form-control" name="additional_charges[${additionalChargeIndex}][amount]" min="0.01" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Notes</label>
+                            <input type="text" class="form-control" name="additional_charges[${additionalChargeIndex}][notes]" placeholder="Reason for damage (e.g. tyres, body repair)" maxlength="2000">
+                        </div>
+                        <div class="col-md-1">
+                            <button type="button" class="btn btn-outline-danger remove-additional-charge-row" title="Remove damage">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                additionalChargeIndex += 1;
+                additionalChargesRepeater.appendChild(row);
+            });
+
+            additionalChargesRepeater.addEventListener('click', function (event) {
+                const removeButton = event.target.closest('.remove-additional-charge-row');
+                if (removeButton) {
+                    removeButton.closest('.additional-charge-row').remove();
                 }
             });
         }

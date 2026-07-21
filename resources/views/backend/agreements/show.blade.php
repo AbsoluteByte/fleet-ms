@@ -490,6 +490,30 @@
                             </strong>
                         </div>
 
+                        <h6 class="mb-2 mt-3">Damages</h6>
+                        @forelse($agreement->additionalCharges as $charge)
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>
+                                    <strong>{{ $charge->typeLabel() }}</strong>
+                                    @if($charge->notes)
+                                        — {{ $charge->notes }}
+                                    @endif
+                                    @if($charge->invoice)
+                                        <span class="text-muted">({{ $charge->invoice->invoice_no ?: '#'.$charge->invoice->id }})</span>
+                                    @endif
+                                </span>
+                                <span class="text-danger">£{{ number_format((float) $charge->amount, 2) }}</span>
+                            </div>
+                        @empty
+                            <p class="small text-muted mb-1">No damages recorded.</p>
+                        @endforelse
+                        @if($agreement->additionalCharges->isNotEmpty())
+                            <div class="d-flex justify-content-between border-top pt-1">
+                                <span>Damages total</span>
+                                <strong>£{{ number_format((float) $agreement->additionalCharges->sum('amount'), 2) }}</strong>
+                            </div>
+                        @endif
+
                         @if($agreement->hasBeenUpgraded())
                             <div class="alert alert-info py-2 mt-3 mb-0">
                                 Deposit transferred to

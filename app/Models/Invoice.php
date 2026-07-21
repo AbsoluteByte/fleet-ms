@@ -86,7 +86,7 @@ class Invoice extends Model
 
     public function vehicleRegistrationLabel(): string
     {
-        if (! in_array($this->invoice_type, ['agreement', 'agreement_deposit'], true) || ! $this->source_id) {
+        if (! in_array($this->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) || ! $this->source_id) {
             return '—';
         }
 

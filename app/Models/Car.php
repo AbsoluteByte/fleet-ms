@@ -93,6 +93,14 @@ class Car extends Model
         return $this->hasMany(Agreement::class);
     }
 
+    public function terminationNoticeAgreement(): ?Agreement
+    {
+        return $this->agreements
+            ->filter(fn (Agreement $agreement) => $agreement->isBillableStatus() && filled($agreement->termination_notice_date))
+            ->sortByDesc(fn (Agreement $agreement) => [$agreement->termination_notice_date, $agreement->id])
+            ->first();
+    }
+
     public function claims()
     {
         return $this->hasMany(Claim::class);

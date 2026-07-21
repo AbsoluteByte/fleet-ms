@@ -60,6 +60,7 @@
                                         <th>Status</th>
                                         <th>PHV Council</th>
                                         <th>Insurance Status</th>
+                                        <th class="cars-available-from-col">Available From</th>
                                         <th>Actions</th>
                                         <th>VIN</th>
                                     </tr>
@@ -96,6 +97,9 @@
                                                 ->first();
                                             $phvExpiry = $latestPhv?->expiry_date;
                                             $phvExpiryIso = $phvExpiry ? $phvExpiry->format('Y-m-d') : '';
+                                            $terminationAgreement = $car->terminationNoticeAgreement();
+                                            $terminationNoticeIso = optional($terminationAgreement?->termination_notice_date)->format('Y-m-d') ?? '';
+                                            $terminationAvailableFromIso = optional($terminationAgreement?->termination_available_from_date)->format('Y-m-d') ?? '';
                                         @endphp
                                         <tr
                                             data-company="{{ $car->company->name }}"
@@ -120,6 +124,8 @@
                                             data-dashcam-status="{{ $car->dashcam_installed ? ($car->dashcam_status ?? '') : '' }}"
                                             data-tag-installed="{{ $car->tag_installed ? '1' : '0' }}"
                                             data-tag-status="{{ $car->tag_installed ? ($car->tag_status ?? '') : '' }}"
+                                            data-termination-notice-date="{{ $terminationNoticeIso }}"
+                                            data-termination-available-from="{{ $terminationAvailableFromIso }}"
                                         >
                                             <td>
                                                 <strong>{{ $car->registration ?: '—' }}</strong>
@@ -148,6 +154,9 @@
                                                         <span class="insurance-status-label">Inactive</span>
                                                     </span>
                                                 @endif
+                                            </td>
+                                            <td class="cars-available-from-col">
+                                                {{ $terminationAvailableFromIso ? \Carbon\Carbon::parse($terminationAvailableFromIso)->format('d M Y') : '—' }}
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">
@@ -194,7 +203,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="9" class="text-center text-muted py-4">
+                                            <td colspan="10" class="text-center text-muted py-4">
                                                 <i class="fa fa-car fa-3x mb-3"></i>
                                                 <br>
                                                 No cars found. <a href="{{ route('cars.create') }}">Add your first car</a>
@@ -274,6 +283,22 @@
                         <option value="{{ $statusKey }}">{{ $statusLabel }}</option>
                     @endforeach
                 </select>
+            </div>
+
+            <div class="form-group">
+                <label class="d-block mb-50">Termination Notice</label>
+                <label class="small text-muted mb-25 d-block">Notice date between</label>
+                <div class="form-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsTerminationNoticeFrom">From</label>
+                        <input type="date" id="carsTerminationNoticeFrom" class="form-control cars-termination-notice-filter">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsTerminationNoticeTo">To</label>
+                        <input type="date" id="carsTerminationNoticeTo" class="form-control cars-termination-notice-filter">
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-50">Shows cars whose Active/Swap agreement has a termination notice in this range.</small>
             </div>
 
             <div class="form-group">
@@ -729,6 +754,8 @@
                 roadTax: { from: '', to: '', includeMissing: false },
                 phv: { from: '', to: '', includeMissing: false },
             };
+            const terminationNoticeFilter = { from: '', to: '' };
+            const availableFromColumnIndex = 7;
             const quickFilterLabels = {
                 available_by_phv: 'Available by PHV',
                 preparation_for_phvl: 'PHVL Preparation',
@@ -759,6 +786,7 @@
                 processing: true,
                 responsive: true,
                 columnDefs: [
+                    { targets: availableFromColumnIndex, visible: false },
                     { targets: -1, visible: false, searchable: true }
                 ],
             });
@@ -848,6 +876,37 @@
                 expiryFilters.phv.includeMissing = document.getElementById('carsIncludeMissingPhv').checked;
             }
 
+            function syncTerminationNoticeFilterFromForm() {
+                terminationNoticeFilter.from = document.getElementById('carsTerminationNoticeFrom').value;
+                terminationNoticeFilter.to = document.getElementById('carsTerminationNoticeTo').value;
+            }
+
+            function isTerminationNoticeFilterActive() {
+                return !!(terminationNoticeFilter.from || terminationNoticeFilter.to);
+            }
+
+            function passesTerminationNoticeFilter(row) {
+                if (!isTerminationNoticeFilterActive()) {
+                    return true;
+                }
+
+                const noticeDate = row.dataset.terminationNoticeDate || '';
+                if (!noticeDate) {
+                    return false;
+                }
+
+                return expiryInRange(noticeDate, terminationNoticeFilter.from, terminationNoticeFilter.to);
+            }
+
+            function toggleAvailableFromColumn(show) {
+                dataTable.column(availableFromColumnIndex).visible(show);
+            }
+
+            function drawCarsTable() {
+                toggleAvailableFromColumn(isTerminationNoticeFilterActive());
+                dataTable.draw();
+            }
+
             $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
                 if (settings.nTable.id !== 'dataTable') {
                     return true;
@@ -869,7 +928,8 @@
                     && passesQuickFilter(row)
                     && passesExpiryFilter(row, expiryFilters.mot, 'motExpiry', 'motMissing')
                     && passesExpiryFilter(row, expiryFilters.roadTax, 'roadTaxExpiry', 'roadTaxMissing')
-                    && passesExpiryFilter(row, expiryFilters.phv, 'phvExpiry', 'phvMissing');
+                    && passesExpiryFilter(row, expiryFilters.phv, 'phvExpiry', 'phvMissing')
+                    && passesTerminationNoticeFilter(row);
             });
 
             function passesAccessoryFilters(row) {
@@ -958,6 +1018,11 @@
                 dataTable.draw();
             });
 
+            $('.cars-termination-notice-filter').on('change input', function () {
+                syncTerminationNoticeFilterFromForm();
+                drawCarsTable();
+            });
+
             $('.cars-quick-filter').on('click', function () {
                 const selectedFilter = $(this).data('quick-filter');
                 quickFilter = quickFilter === selectedFilter ? '' : selectedFilter;
@@ -974,9 +1039,12 @@
                 expiryFilters.mot = { from: '', to: '', includeMissing: false };
                 expiryFilters.roadTax = { from: '', to: '', includeMissing: false };
                 expiryFilters.phv = { from: '', to: '', includeMissing: false };
+                $('#carsTerminationNoticeFrom, #carsTerminationNoticeTo').val('');
+                terminationNoticeFilter.from = '';
+                terminationNoticeFilter.to = '';
                 quickFilter = '';
                 updateQuickFilterButtons();
-                dataTable.draw();
+                drawCarsTable();
             });
 
             function formatYmd(date) {
@@ -1073,6 +1141,16 @@
                 return label + ': ' + parts.join('; ');
             }
 
+            function getCarsExportHeaders() {
+                const headers = carsExportHeaders.slice();
+
+                if (isTerminationNoticeFilterActive()) {
+                    headers.splice(7, 0, 'Available From');
+                }
+
+                return headers;
+            }
+
             function buildCarsExportMeta() {
                 const lines = [];
                 const searchTerm = (dataTable.search() || '').trim();
@@ -1103,6 +1181,12 @@
 
                 if (advancedFilters.carStatus) {
                     lines.push('Vehicle status: ' + selectedOptionText('carsFilterStatus'));
+                }
+
+                if (isTerminationNoticeFilterActive()) {
+                    const fromLabel = terminationNoticeFilter.from ? formatDisplayDate(terminationNoticeFilter.from) : 'any';
+                    const toLabel = terminationNoticeFilter.to ? formatDisplayDate(terminationNoticeFilter.to) : 'any';
+                    lines.push('Termination notice: ' + fromLabel + ' to ' + toLabel);
                 }
 
                 if (advancedFilters.model) {
@@ -1197,6 +1281,10 @@
                     row.push(formatDisplayDate(node.dataset.roadTaxExpiry || ''));
                     row.push(formatDisplayDate(node.dataset.phvExpiry || ''));
 
+                    if (isTerminationNoticeFilterActive()) {
+                        row.splice(7, 0, formatDisplayDate(node.dataset.terminationAvailableFrom || '') || '—');
+                    }
+
                     rows.push(row);
                 });
 
@@ -1206,6 +1294,7 @@
             function exportCarsCsv() {
                 const exportMeta = buildCarsExportMeta();
                 const bodyRows = collectCarsExportRows();
+                const exportHeaders = getCarsExportHeaders();
 
                 if (bodyRows.length === 0) {
                     alert('No records to export. Adjust your search or filters and try again.');
@@ -1217,7 +1306,7 @@
                     lines.push(csvEscape(line));
                 });
                 lines.push('');
-                lines.push(carsExportHeaders.map(csvEscape).join(','));
+                lines.push(exportHeaders.map(csvEscape).join(','));
                 bodyRows.forEach(function (row) {
                     lines.push(row.map(csvEscape).join(','));
                 });
@@ -1228,6 +1317,7 @@
             function exportCarsPdf() {
                 const exportMeta = buildCarsExportMeta();
                 const bodyRows = collectCarsExportRows();
+                const exportHeaders = getCarsExportHeaders();
 
                 if (bodyRows.length === 0) {
                     alert('No records to export. Adjust your search or filters and try again.');
@@ -1240,7 +1330,7 @@
                 }
 
                 const tableBody = [
-                    carsExportHeaders.map(function (header) {
+                    exportHeaders.map(function (header) {
                         return { text: header, style: 'tableHeader' };
                     })
                 ];
@@ -1275,7 +1365,7 @@
                         {
                             table: {
                                 headerRows: 1,
-                                widths: carsExportHeaders.map(function () { return '*'; }),
+                                widths: exportHeaders.map(function () { return '*'; }),
                                 body: tableBody
                             },
                             layout: 'lightHorizontalLines'

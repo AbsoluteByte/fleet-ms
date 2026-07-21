@@ -34,9 +34,11 @@
                                 'overdue' => 'badge-danger',
                                 default => 'badge-warning',
                             };
-                            $invoiceTypeLabel = $invoice->invoice_type === 'agreement_deposit'
-                                ? 'Deposit'
-                                : 'Rent';
+                            $invoiceTypeLabel = match($invoice->invoice_type) {
+                                'agreement_deposit' => 'Deposit',
+                                'agreement_additional_charge' => 'Damage',
+                                default => 'Rent',
+                            };
                         @endphp
                         <tr>
                             <td><strong>{{ $invoice->invoice_no }}</strong></td>

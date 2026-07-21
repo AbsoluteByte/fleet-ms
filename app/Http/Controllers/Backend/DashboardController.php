@@ -1020,7 +1020,7 @@ class DashboardController extends Controller
     {
         $sourceIds = $invoices
             ->filter(function ($invoice) {
-                return in_array($invoice->invoice_type, ['agreement', 'agreement_deposit'], true) && $invoice->source_id;
+                return in_array($invoice->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) && $invoice->source_id;
             })
             ->pluck('source_id')
             ->unique()
@@ -1035,7 +1035,7 @@ class DashboardController extends Controller
 
     private function invoiceVehicleRegistration(Invoice $invoice, Collection $agreementsById): string
     {
-        if (! in_array($invoice->invoice_type, ['agreement', 'agreement_deposit'], true) || ! $invoice->source_id) {
+        if (! in_array($invoice->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) || ! $invoice->source_id) {
             return 'N/A';
         }
 
