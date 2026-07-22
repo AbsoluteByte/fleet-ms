@@ -119,6 +119,21 @@ class AgreementFleetNotificationTest extends TestCase
         $this->assertStringContainsString('Ends in 5 days', $notification['simple_message']);
     }
 
+    public function test_agreement_notification_includes_paying_company_when_set(): void
+    {
+        $agreement = $this->createAgreement([
+            'end_date' => '2026-07-25',
+            'status_id' => $this->activeStatus->id,
+            'paying_company_name' => 'Metro Cars PLC',
+        ]);
+
+        $notification = $this->agreementNotificationFor($agreement->id);
+
+        $this->assertNotNull($notification);
+        $this->assertSame('Metro Cars PLC', $notification['paying_company']);
+        $this->assertStringContainsString('Pays via: Metro Cars PLC', $notification['simple_message']);
+    }
+
     public function test_active_agreement_with_termination_notice_in_three_days_is_included(): void
     {
         $agreement = $this->createAgreement([
@@ -281,6 +296,7 @@ class AgreementFleetNotificationTest extends TestCase
 
         Schema::table('agreements', function (Blueprint $table) {
             $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            $table->string('paying_company_name')->nullable();
         });
 
         Schema::table('car_insurances', function (Blueprint $table) {

@@ -39,9 +39,12 @@
                                             $startIso = optional($agreement->start_date)->format('Y-m-d') ?? '';
                                             $endIso = optional($agreement->end_date)->format('Y-m-d') ?? '';
                                             $closingIso = optional($agreement->closing_date)->format('Y-m-d') ?? '';
-                                            $noticeIso = optional($agreement->termination_notice_date)->format('Y-m-d') ?? '';
+                                            $noticeIso = ($agreement->isBillableStatus() && $agreement->termination_notice_date)
+                                                ? $agreement->termination_notice_date->format('Y-m-d')
+                                                : '';
                                             $closedOnIso = optional($agreement->effectiveCloseDate())->format('Y-m-d') ?? '';
                                             $statusName = (string) optional($agreement->status)->name;
+                                            $isBillableForNotice = $agreement->isBillableStatus() ? '1' : '0';
                                             // Filter labels match the action button:
                                             // refunded = refund already recorded (grey button)
                                             // pending  = eligible to refund, not recorded yet (green button)
@@ -59,6 +62,7 @@
                                             data-end-date="{{ $endIso }}"
                                             data-closing-date="{{ $closingIso }}"
                                             data-notice-date="{{ $noticeIso }}"
+                                            data-is-billable="{{ $isBillableForNotice }}"
                                             data-closed-on="{{ $closedOnIso }}"
                                             data-status="{{ $statusName }}"
                                             data-refund-status="{{ $filterRefundStatus }}"
@@ -284,6 +288,7 @@
                     <input type="checkbox" class="custom-control-input" id="agreementsHasNotice">
                     <label class="custom-control-label" for="agreementsHasNotice">Has termination notice</label>
                 </div>
+                <small class="text-muted">Active or Swap agreements only.</small>
             </div>
 
             <div class="form-group">
@@ -296,6 +301,7 @@
                         <input type="date" id="agreementsNoticeTo" class="form-control agreements-date-filter" data-range="notice" data-bound="to">
                     </div>
                 </div>
+                <small class="text-muted">Active or Swap agreements with a termination notice in this range.</small>
             </div>
 
             <div class="form-group">
@@ -483,6 +489,10 @@
                 return name === 'expired' || name === 'terminated';
             }
 
+            function isBillableRow(row) {
+                return row && row.getAttribute('data-is-billable') === '1';
+            }
+
             function syncFiltersFromForm() {
                 filters.status = document.getElementById('agreementsFilterStatus').value;
                 filters.hasNotice = document.getElementById('agreementsHasNotice').checked;
@@ -497,9 +507,28 @@
                 filters.refundStatus = document.getElementById('agreementsFilterRefundStatus').value;
             }
 
+            function passesTerminationNoticeFilters(row) {
+                if (!row) {
+                    return !filters.hasNotice && !isRangeActive(filters.notice);
+                }
+
+                var billable = isBillableRow(row);
+                var noticeDate = row.getAttribute('data-notice-date') || '';
+
+                if (filters.hasNotice && (!billable || !noticeDate)) {
+                    return false;
+                }
+
+                if (isRangeActive(filters.notice) && (!billable || !passesDateRange(noticeDate, filters.notice))) {
+                    return false;
+                }
+
+                return true;
+            }
+
             function passesFilters(row) {
                 if (!row) {
-                    return true;
+                    return !filters.hasNotice && !isRangeActive(filters.notice);
                 }
 
                 var status = row.getAttribute('data-status') || '';
@@ -508,6 +537,7 @@
                 var noticeDate = row.getAttribute('data-notice-date') || '';
                 var endDate = row.getAttribute('data-end-date') || '';
                 var refundStatus = row.getAttribute('data-refund-status') || '';
+                var billable = isBillableRow(row);
 
                 if (filters.status && status !== filters.status) {
                     return false;
@@ -530,19 +560,13 @@
                     return false;
                 }
 
-                if (filters.hasNotice && !noticeDate) {
+                if (!passesTerminationNoticeFilters(row)) {
                     return false;
-                }
-
-                if (isRangeActive(filters.notice)) {
-                    if (!passesDateRange(noticeDate, filters.notice)) {
-                        return false;
-                    }
                 }
 
                 if (isRangeActive(filters.due)) {
                     var endMatch = dateInRange(endDate, filters.due.from, filters.due.to);
-                    var noticeMatch = dateInRange(noticeDate, filters.due.from, filters.due.to);
+                    var noticeMatch = billable && dateInRange(noticeDate, filters.due.from, filters.due.to);
                     if (!endMatch && !noticeMatch) {
                         return false;
                     }
@@ -556,8 +580,7 @@
                     return true;
                 }
 
-                var aoData = settings.aoData[dataIndex];
-                var row = aoData ? aoData.nTr : null;
+                var row = dataTable.row(dataIndex).node();
 
                 return passesFilters(row);
             });

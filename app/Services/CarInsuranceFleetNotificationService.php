@@ -12,6 +12,10 @@ class CarInsuranceFleetNotificationService
 {
     public const INTERNAL_RECIPIENT_EMAIL = 'jawad@samoretraders.com';
 
+    public const SAMORE_SENDER_EMAIL = 'info@samoretraders.com';
+
+    public const PROACTIVE_SENDER_EMAIL = 'proactivehybrid@gmail.com';
+
     public function notifyApplied(Car $car, InsuranceProvider $provider): void
     {
         $this->send($car, $provider, 'add');
@@ -48,13 +52,65 @@ class CarInsuranceFleetNotificationService
             return;
         }
 
-        Mail::to($recipients)->send(new CarInsuranceFleetChangeMail(
+        $sender = $this->senderForCompany($companyKey);
+        [$mailer, $useCustomFrom] = $this->resolveMailDelivery($companyKey, $sender);
+
+        Mail::mailer($mailer)->to($recipients)->send(new CarInsuranceFleetChangeMail(
             $car,
             $provider,
             $action,
             $subject,
             $body,
+            $sender,
+            $useCustomFrom,
         ));
+    }
+
+    /**
+     * @param  array{address: string, name: string}|null  $sender
+     * @return array{0: string, 1: bool}
+     */
+    private function resolveMailDelivery(?string $companyKey, ?array $sender): array
+    {
+        $dedicatedMailer = match ($companyKey) {
+            'samore' => 'samore',
+            'proactive' => 'proactive',
+            default => null,
+        };
+
+        if ($dedicatedMailer !== null && $this->mailerIsConfigured($dedicatedMailer)) {
+            return [$dedicatedMailer, true];
+        }
+
+        $defaultMailer = (string) config('mail.default', 'smtp');
+        $senderAddress = strtolower(trim((string) ($sender['address'] ?? '')));
+        $smtpUsername = strtolower(trim((string) config("mail.mailers.{$defaultMailer}.username", '')));
+
+        return [$defaultMailer, $senderAddress !== '' && $senderAddress === $smtpUsername];
+    }
+
+    private function mailerIsConfigured(string $mailer): bool
+    {
+        return filled(config("mail.mailers.{$mailer}.username"))
+            && filled(config("mail.mailers.{$mailer}.password"));
+    }
+
+    /**
+     * @return array{address: string, name: string}|null
+     */
+    private function senderForCompany(?string $companyKey): ?array
+    {
+        return match ($companyKey) {
+            'samore' => [
+                'address' => self::SAMORE_SENDER_EMAIL,
+                'name' => 'Samore Traders Ltd',
+            ],
+            'proactive' => [
+                'address' => self::PROACTIVE_SENDER_EMAIL,
+                'name' => 'Proactive Hybrid Corporate Ltd',
+            ],
+            default => null,
+        };
     }
 
     /**
@@ -104,7 +160,7 @@ class CarInsuranceFleetNotificationService
             'Dear Brother,',
             'Assalamu Alaikum.',
             'I hope you are doing well.',
-            "Kindly arrange to add the following vehicles to the fleet insurance policy of Samore Traders Ltd under Policy Number: {$policyNumber}.",
+            "Kindly arrange to add the following vehicle to the fleet insurance policy of Samore Traders Ltd under Policy Number: {$policyNumber}.",
             'We would be grateful if you could issue the insurance certificate.',
             'Vehicle Details:',
             $vehicleLine,
@@ -170,7 +226,7 @@ class CarInsuranceFleetNotificationService
             'Dear Brother,',
             'Assalamu Alaikum.',
             'I hope you are doing well.',
-            "Kindly arrange to add the following vehicles to the fleet insurance policy of {$companyName} under Policy Number: {$policyNumber}.",
+            "Kindly arrange to add the following vehicle to the fleet insurance policy of {$companyName} under Policy Number: {$policyNumber}.",
             'We would be grateful if you could issue the insurance certificate.',
             'Vehicle Details:',
             $vehicleLine,

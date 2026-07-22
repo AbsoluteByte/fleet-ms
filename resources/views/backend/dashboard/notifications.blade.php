@@ -383,6 +383,11 @@
                             <i class="feather icon-user"></i> ${row.driver}
                         </span>`;
                             }
+                            if (row.paying_company) {
+                                html += `<span class="badge badge-light-primary ml-50">
+                            Pays via: ${row.paying_company}
+                        </span>`;
+                            }
                             return html || '-';
                         }
                     },
@@ -521,6 +526,9 @@
             }
             if (row.driver) {
                 parts.push(row.driver);
+            }
+            if (row.paying_company) {
+                parts.push('Pays via: ' + row.paying_company);
             }
             return parts.length ? parts.join(' / ') : '—';
         }

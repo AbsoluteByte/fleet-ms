@@ -4,6 +4,7 @@
         <tr>
             <th>Invoice No</th>
             <th>Type</th>
+            <th>Pays via</th>
             <th>Invoice Date</th>
             <th>Due Date</th>
             <th>Total</th>
@@ -18,6 +19,7 @@
             <tr>
                 <td><strong>{{ $invoice->invoice_no }}</strong></td>
                 <td>{{ ucfirst(str_replace('_', ' ', $invoice->invoice_type)) }}</td>
+                <td>{{ $invoice->payingCompanyNameLabel() ?? '—' }}</td>
                 <td>{{ optional($invoice->invoice_date)->format('d M Y') }}</td>
                 <td>{{ optional($invoice->due_date)->format('d M Y') }}</td>
                 <td>£{{ number_format($invoice->total_amount, 2) }}</td>
@@ -38,7 +40,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="9" class="text-center text-muted">No invoices found.</td>
+                <td colspan="10" class="text-center text-muted">No invoices found.</td>
             </tr>
         @endforelse
         </tbody>

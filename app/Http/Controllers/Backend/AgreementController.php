@@ -284,7 +284,7 @@ class AgreementController extends Controller
             'discountConsumedInvoice',
             'depositRefund.debtPayment', 'depositRefund.refundCreditPayment',
             'invoices' => function ($query) {
-                $query->orderByDesc('invoice_date')->orderByDesc('id');
+                $query->with('sourceAgreement')->orderByDesc('invoice_date')->orderByDesc('id');
             },
             'collections' => function ($query) {
                 $query->orderBy('due_date');

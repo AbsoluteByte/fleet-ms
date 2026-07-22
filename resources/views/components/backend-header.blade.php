@@ -202,6 +202,7 @@
                             <h6 class="text-${colorClass} media-heading mb-1">${notification.title}</h6>
                             <small class="notification-text">${notification.simple_message}</small>
                             ${notification.vehicle ? `<div class="notification-vehicle mt-1">${notification.vehicle}</div>` : ''}
+                            ${notification.paying_company ? `<div class="notification-paying-company mt-1">Pays via: ${notification.paying_company}</div>` : ''}
                             ${notification.amount ? `<div class="notification-amount mt-1">${notification.amount}</div>` : ''}
                             <small class="d-block mt-1">
                                 <time class="media-meta text-muted">${notification.time_ago}</time>

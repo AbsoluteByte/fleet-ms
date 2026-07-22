@@ -521,6 +521,7 @@ class DailyFinancialSheetService
             'car_registration' => $carRegistration,
             'agreement_id' => $agreementId,
             'agreement_url' => $agreementId ? route('agreements.show', $agreementId) : null,
+            'paying_company_name' => $this->resolvePaymentPayingCompanyName($payment, $linkedRefund, $targetInvoice),
             'payment_method' => $payment->payment_method,
             'bank_account_id' => $payment->bank_account_id,
             'bank_name' => $payment->bankAccount?->bank_name,
@@ -565,6 +566,28 @@ class DailyFinancialSheetService
         }
 
         return null;
+    }
+
+    private function resolvePaymentPayingCompanyName(
+        Payment $payment,
+        ?DepositRefund $linkedRefund = null,
+        ?Invoice $targetInvoice = null,
+    ): ?string {
+        $candidates = [
+            $linkedRefund?->agreement?->paying_company_name,
+            $payment->sourceAgreement?->paying_company_name,
+        ];
+
+        foreach ($candidates as $candidate) {
+            $name = trim((string) ($candidate ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        $targetInvoice ??= $this->resolveTargetInvoice($payment);
+
+        return $targetInvoice?->payingCompanyNameLabel();
     }
 
     private function resolveTargetInvoice(Payment $payment): ?Invoice
@@ -677,6 +700,9 @@ class DailyFinancialSheetService
             'car_registration' => $registration,
             'agreement_id' => $refund->agreement_id,
             'agreement_url' => route('agreements.show', $refund->agreement_id),
+            'paying_company_name' => filled($refund->agreement?->paying_company_name)
+                ? trim((string) $refund->agreement->paying_company_name)
+                : null,
             'payment_method' => $refund->payment_method,
             'bank_account_id' => $refund->bank_account_id,
             'bank_name' => $refund->bankAccount?->bank_name,

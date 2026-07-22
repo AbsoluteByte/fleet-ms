@@ -61,22 +61,24 @@ class PaymentController extends Controller
         $this->authorizeDriver($driver, $tenant);
 
         $invoices = $driver->invoices()
-            ->with('paymentAllocations.payment')
+            ->with(['paymentAllocations.payment', 'sourceAgreement'])
             ->orderByDesc('invoice_date')
             ->orderByDesc('id')
             ->get();
 
         $activeInvoices = $driver->activeInvoices()
+            ->with('sourceAgreement')
             ->orderBy('invoice_date')
             ->orderBy('due_date')
             ->get();
 
         $dueInvoices = $driver->overdueInvoices()
+            ->with('sourceAgreement')
             ->orderBy('due_date')
             ->get();
 
         $payments = $driver->payments()
-            ->with(['allocations.invoice', 'bankAccount'])
+            ->with(['allocations.invoice.sourceAgreement', 'bankAccount'])
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->get();
@@ -230,7 +232,7 @@ class PaymentController extends Controller
     public function show(Payment $payment)
     {
         $tenant = Auth::user()->currentTenant();
-        $payment->load(['driver', 'bankAccount', 'allocations.invoice']);
+        $payment->load(['driver', 'bankAccount', 'sourceAgreement', 'allocations.invoice.sourceAgreement']);
         $this->authorizeDriver($payment->driver, $tenant);
 
         return view($this->dir.'payment', compact('payment'));

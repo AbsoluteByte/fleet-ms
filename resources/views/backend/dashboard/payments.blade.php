@@ -146,6 +146,7 @@
                             <th>PRIORITY</th>
                             <th>DRIVER</th>
                             <th>VEHICLE</th>
+                            <th>PAYS VIA</th>
                             <th>AMOUNT</th>
                             <th>DUE DATE</th>
                             <th>STATUS</th>
@@ -294,6 +295,12 @@
                         }
                     },
                     {
+                        data: 'paying_company',
+                        render: function(data) {
+                            return data ? `<span class="badge badge-light-primary">Pays via: ${data}</span>` : '—';
+                        }
+                    },
+                    {
                         data: 'amount',
                         render: function(data, type, row) {
                             return `<span class="font-weight-bold text-${row.color}">${data}</span>`;
@@ -355,6 +362,7 @@
             'Priority',
             'Driver',
             'Vehicle',
+            'Pays via',
             'Amount',
             'Due Date',
             'Status'
@@ -409,6 +417,7 @@
                     paymentPriorityLabels[row.priority] || 'Medium',
                     row.driver_name || '—',
                     row.vehicle || '—',
+                    row.paying_company || '—',
                     row.amount || '—',
                     row.due_date || '—',
                     row.time_ago || '—'

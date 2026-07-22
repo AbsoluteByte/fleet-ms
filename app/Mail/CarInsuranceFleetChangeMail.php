@@ -18,11 +18,13 @@ class CarInsuranceFleetChangeMail extends Mailable
         public string $action,
         public string $subjectLine,
         public string $bodyText,
+        public ?array $sender = null,
+        public bool $useCustomFrom = false,
     ) {}
 
     public function build()
     {
-        return $this->subject($this->subjectLine)
+        $message = $this->subject($this->subjectLine)
             ->view('emails.car-insurance-fleet-change')
             ->with([
                 'bodyText' => $this->bodyText,
@@ -30,5 +32,22 @@ class CarInsuranceFleetChangeMail extends Mailable
                 'provider' => $this->provider,
                 'action' => $this->action,
             ]);
+
+        if (! is_array($this->sender) || ! filled($this->sender['address'] ?? null)) {
+            return $message;
+        }
+
+        $address = (string) $this->sender['address'];
+        $name = filled($this->sender['name'] ?? null) ? (string) $this->sender['name'] : null;
+
+        $message->replyTo($address, $name);
+
+        if ($this->useCustomFrom) {
+            $message->from($address, $name);
+        } elseif ($name !== null) {
+            $message->from((string) config('mail.from.address'), $name);
+        }
+
+        return $message;
     }
 }

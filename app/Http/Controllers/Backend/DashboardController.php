@@ -927,6 +927,7 @@ class DashboardController extends Controller
                     'priority' => $notification['priority'],
                     'driver_name' => $notification['simple_message'] ? explode(' - ', $notification['simple_message'])[0] : 'N/A',
                     'vehicle' => $notification['vehicle'] ?? 'N/A',
+                    'paying_company' => $notification['paying_company'] ?? null,
                     'amount' => $notification['amount'] ?? '£0.00',
                     'amount_raw' => $amountRaw,
                     'due_date' => $notification['created_at']->format('d M, Y'),
@@ -1133,6 +1134,10 @@ class DashboardController extends Controller
             }
 
             $fullMessage = $registration.' - '.$driverLabel.' - '.$msg;
+            $payingCompany = trim((string) ($agreement->paying_company_name ?? ''));
+            if ($payingCompany !== '') {
+                $fullMessage .= ' - Pays via: '.$payingCompany;
+            }
 
             $notifications->push([
                 'id' => 'agreement_upcoming_'.$agreement->id,
@@ -1143,6 +1148,7 @@ class DashboardController extends Controller
                 'simple_message' => $fullMessage,
                 'vehicle' => $registration,
                 'driver' => $driverLabel,
+                'paying_company' => $payingCompany !== '' ? $payingCompany : null,
                 'time_ago' => $nearestDate->diffForHumans(),
                 'action_url' => route('agreements.show', $agreement),
                 'icon' => 'icon-file-text',
@@ -1183,6 +1189,7 @@ class DashboardController extends Controller
             'simple_message' => $simpleMessage,
             'amount' => '£'.number_format((float) $invoice->balance_amount, 2),
             'vehicle' => $this->invoiceVehicleRegistration($invoice, $agreementsById),
+            'paying_company' => $this->invoicePayingCompanyName($invoice, $agreementsById),
             'driver_id' => $invoice->driver_id,
             'invoice_id' => $invoice->id,
             'time_ago' => $timeAgo,
@@ -1195,5 +1202,16 @@ class DashboardController extends Controller
             'sort_key' => $invoice->due_date->timestamp,
             'invoice_date_sort' => $invoice->invoice_date?->timestamp ?? $invoice->id,
         ];
+    }
+
+    private function invoicePayingCompanyName(Invoice $invoice, Collection $agreementsById): ?string
+    {
+        if (! in_array($invoice->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) || ! $invoice->source_id) {
+            return null;
+        }
+
+        $name = trim((string) ($agreementsById->get($invoice->source_id)?->paying_company_name ?? ''));
+
+        return $name !== '' ? $name : null;
     }
 }

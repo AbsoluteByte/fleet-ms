@@ -6,7 +6,12 @@
                 <i class="fa fa-file-text-o me-2"></i>
                 Agreement Invoices
             </h5>
-            <span class="badge badge-light-primary">{{ $agreement->invoices->count() }} invoices</span>
+            <div class="text-right">
+                @if($agreement->paying_company_name)
+                    <small class="text-muted d-block">Pays via: {{ $agreement->paying_company_name }}</small>
+                @endif
+                <span class="badge badge-light-primary">{{ $agreement->invoices->count() }} invoices</span>
+            </div>
         </div>
         <div class="card-body p-0" style="margin-top: 0;">
             <div class="table-responsive">

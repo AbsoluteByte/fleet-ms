@@ -152,6 +152,7 @@ class CarInsuranceFleetEmailTest extends TestCase
             return $mail->action === 'add'
                 && $mail->hasTo('insurer@samore.example.com')
                 && $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && ($mail->sender['address'] ?? null) === CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL
                 && str_contains($mail->subjectLine, 'Request to Add Vehicles to Fleet Insurance Policy POL-SAM-001')
                 && str_contains($mail->bodyText, 'Samore Traders Ltd')
                 && str_contains($mail->bodyText, 'Toyota Prius-');
@@ -176,6 +177,7 @@ class CarInsuranceFleetEmailTest extends TestCase
             return $mail->action === 'remove'
                 && $mail->hasTo('insurer@samore.example.com')
                 && $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && ($mail->sender['address'] ?? null) === CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL
                 && str_contains($mail->subjectLine, 'Request to Remove Vehicles from Fleet Insurance Policy POL-SAM-001 '.$car->registration)
                 && str_contains($mail->bodyText, 'remove the following vehicle');
         });
@@ -235,7 +237,8 @@ class CarInsuranceFleetEmailTest extends TestCase
 
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
             return str_contains($mail->bodyText, 'Proactive Hybrid Corporate Ltd')
-                && str_contains($mail->bodyText, 'PROACTIVE HYBRID CORPORATE LTD');
+                && str_contains($mail->bodyText, 'PROACTIVE HYBRID CORPORATE LTD')
+                && ($mail->sender['address'] ?? null) === CarInsuranceFleetNotificationService::PROACTIVE_SENDER_EMAIL;
         });
     }
 
@@ -252,7 +255,8 @@ class CarInsuranceFleetEmailTest extends TestCase
 
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
             return str_contains($mail->bodyText, 'Acme Motors Ltd')
-                && str_contains($mail->bodyText, 'Kindly arrange to add the following vehicles');
+                && str_contains($mail->bodyText, 'Kindly arrange to add the following vehicle')
+                && $mail->sender === null;
         });
     }
 

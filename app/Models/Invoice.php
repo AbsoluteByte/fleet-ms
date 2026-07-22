@@ -95,6 +95,17 @@ class Invoice extends Model
         return is_string($registration) && $registration !== '' ? $registration : '—';
     }
 
+    public function payingCompanyNameLabel(): ?string
+    {
+        if (! in_array($this->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) || ! $this->source_id) {
+            return null;
+        }
+
+        $name = trim((string) ($this->sourceAgreement?->paying_company_name ?? ''));
+
+        return $name !== '' ? $name : null;
+    }
+
     public function markAsPaid($amountPaid = null)
     {
         $payment = $amountPaid ?? $this->balance_amount;

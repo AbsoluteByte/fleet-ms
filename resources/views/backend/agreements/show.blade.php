@@ -533,6 +533,12 @@
                                     <span>Refund amount</span>
                                     <strong>£{{ number_format((float) $refund->amount, 2) }}</strong>
                                 </div>
+                                @if($refund->isPosted() && $refund->refund_date)
+                                    <div class="d-flex justify-content-between small mt-1">
+                                        <span>Refund date</span>
+                                        <strong>{{ $refund->refund_date->format('M d, Y') }}</strong>
+                                    </div>
+                                @endif
                                 @if((float) $refund->debt_offset_amount > 0)
                                     <div class="d-flex justify-content-between small">
                                         <span>{{ $refund->isPosted() ? 'Debt cleared from deposit' : 'Debt offset pending' }}</span>

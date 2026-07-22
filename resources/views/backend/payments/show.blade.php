@@ -4,6 +4,11 @@
     @php
         $creditAmount = $driver->credit_amount;
         $availableCredit = $creditPreview['available_credit'] ?? 0;
+        $payingCompanyNames = $invoices
+            ->map(fn ($invoice) => $invoice->payingCompanyNameLabel())
+            ->filter()
+            ->unique()
+            ->values();
     @endphp
 
     <div class="row">
@@ -14,6 +19,9 @@
                     <div>
                         <h4 class="card-title mb-0">{{ $driver->selectOptionLabel() ?: 'Driver' }}</h4>
                         <small class="text-muted">{{ $driver->email }} {{ $driver->phone_number ? ' | '.$driver->phone_number : '' }}</small>
+                        @if($payingCompanyNames->isNotEmpty())
+                            <small class="text-muted d-block">Pays via: {{ $payingCompanyNames->implode(', ') }}</small>
+                        @endif
                     </div>
                     <div>
                         @if($availableCredit > 0 && ($creditPreview['outstanding'] ?? 0) <= 0)

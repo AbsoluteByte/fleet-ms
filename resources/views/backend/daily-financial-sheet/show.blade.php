@@ -148,6 +148,9 @@
                                             @if(!empty($entry['agreement_url']))
                                                 <div><a href="{{ $entry['agreement_url'] }}">Agreement #{{ $entry['agreement_id'] }}</a></div>
                                             @endif
+                                            @if(!empty($entry['paying_company_name']))
+                                                <div class="text-muted small">Pays via: {{ $entry['paying_company_name'] }}</div>
+                                            @endif
                                         </td>
                                         <td>{{ $entry['car_registration'] ?? '—' }}</td>
                                         <td>{{ $entry['payment_method'] }}</td>
