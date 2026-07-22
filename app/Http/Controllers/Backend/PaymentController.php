@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\Driver;
 use App\Models\Payment;
+use App\Services\DriverCreditService;
 use App\Services\PaymentAllocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -41,6 +43,10 @@ class PaymentController extends Controller
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
             ->with(['agreements' => fn ($query) => $query->currentlyActive()->with('car')])
+            ->withMax(['payments as last_posted_payment_date' => function ($query) {
+                $query->posted();
+            }], 'payment_date')
+            ->withMax('invoices as latest_invoice_date', 'invoice_date')
             ->withCount(['invoices', 'payments'])
             ->orderBy('first_name')
             ->orderBy('last_name')
@@ -55,29 +61,84 @@ class PaymentController extends Controller
         $this->authorizeDriver($driver, $tenant);
 
         $invoices = $driver->invoices()
-            ->with('paymentAllocations.payment')
+            ->with(['paymentAllocations.payment', 'sourceAgreement'])
             ->orderByDesc('invoice_date')
             ->orderByDesc('id')
             ->get();
 
         $activeInvoices = $driver->activeInvoices()
+            ->with('sourceAgreement')
             ->orderBy('invoice_date')
             ->orderBy('due_date')
             ->get();
 
         $dueInvoices = $driver->overdueInvoices()
+            ->with('sourceAgreement')
             ->orderBy('due_date')
             ->get();
 
         $payments = $driver->payments()
-            ->with(['allocations.invoice', 'bankAccount'])
+            ->with(['allocations.invoice.sourceAgreement', 'bankAccount'])
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->get();
 
         $summary = $this->driverSummary($driver);
+        $creditPreview = app(DriverCreditService::class)->preview($driver);
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view($this->dir.'show', compact('driver', 'invoices', 'activeInvoices', 'dueInvoices', 'payments', 'summary'));
+        return view($this->dir.'show', compact(
+            'driver',
+            'invoices',
+            'activeInvoices',
+            'dueInvoices',
+            'payments',
+            'summary',
+            'creditPreview',
+            'bankAccounts'
+        ));
+    }
+
+    public function refundCredit(Request $request, Driver $driver, DriverCreditService $creditService)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $this->authorizeDriver($driver, $tenant);
+
+        $validated = $request->validate([
+            'payment_method' => 'required|in:Cash,Bank Transfer,Cheque,Card Payment,Direct Debit',
+            'bank_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
+                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
+            'request_date' => 'required|date',
+            'notes' => 'nullable|string|max:5000',
+        ]);
+        $validated['bank_account_id'] = Payment::bankAccountIdForMethod(
+            $validated['payment_method'],
+            $validated['bank_account_id'] ?? null
+        );
+
+        $creditService->requestRefund($driver, $validated);
+
+        return redirect()->route('payments.driver', $driver)
+            ->with('success', 'Credit refund submitted for daily financial sheet approval.');
+    }
+
+    public function applyCredit(Request $request, Driver $driver, DriverCreditService $creditService)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $this->authorizeDriver($driver, $tenant);
+
+        $validated = $request->validate([
+            'request_date' => 'required|date',
+            'notes' => 'nullable|string|max:5000',
+        ]);
+
+        $creditService->requestInvoiceApplication($driver, $validated);
+
+        return redirect()->route('payments.driver', $driver)
+            ->with('success', 'Credit application submitted for daily financial sheet approval.');
     }
 
     public function create(Request $request)
@@ -134,7 +195,7 @@ class PaymentController extends Controller
             'payment_method' => 'required|string|max:255',
             'bank_account_id' => [
                 'nullable',
-                'required_if:payment_method,Bank Transfer',
+                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
                 Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
             ],
             'payment_date' => 'required|date',
@@ -152,9 +213,10 @@ class PaymentController extends Controller
             $driver,
             [
                 'payment_method' => $validated['payment_method'],
-                'bank_account_id' => ($validated['payment_method'] ?? '') === 'Bank Transfer'
-                    ? ($validated['bank_account_id'] ?? null)
-                    : null,
+                'bank_account_id' => Payment::bankAccountIdForMethod(
+                    $validated['payment_method'],
+                    $validated['bank_account_id'] ?? null
+                ),
                 'payment_date' => $validated['payment_date'],
                 'amount' => $validated['amount'],
                 'notes' => $validated['notes'] ?? null,
@@ -164,13 +226,13 @@ class PaymentController extends Controller
         );
 
         return redirect()->route('payments.driver', $payment->driver_id)
-            ->with('success', 'Payment added successfully.');
+            ->with('success', 'Payment recorded. It will apply to invoices after daily financial sheet approval.');
     }
 
     public function show(Payment $payment)
     {
         $tenant = Auth::user()->currentTenant();
-        $payment->load(['driver', 'bankAccount', 'allocations.invoice']);
+        $payment->load(['driver', 'bankAccount', 'sourceAgreement', 'allocations.invoice.sourceAgreement']);
         $this->authorizeDriver($payment->driver, $tenant);
 
         return view($this->dir.'payment', compact('payment'));
@@ -206,11 +268,112 @@ class PaymentController extends Controller
             ->with('success', 'Payment notes updated.');
     }
 
+    public function updateDriverFollowUp(Request $request, Driver $driver)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $this->authorizeDriver($driver, $tenant);
+
+        $validated = $request->validate([
+            'notes' => 'nullable|string|max:5000',
+            'set_reminder' => 'nullable|boolean',
+            'remind_at' => [
+                Rule::requiredIf(fn () => $request->boolean('set_reminder')),
+                'nullable',
+                'date',
+            ],
+        ]);
+
+        $notes = isset($validated['notes']) ? trim((string) $validated['notes']) : '';
+        $setReminder = $request->boolean('set_reminder');
+
+        $driver->payment_follow_up_notes = $notes !== '' ? $notes : null;
+
+        if ($setReminder) {
+            $driver->payment_remind_at = \Carbon\Carbon::parse($validated['remind_at']);
+            $driver->payment_reminder_dismissed_at = null;
+        } else {
+            $driver->payment_remind_at = null;
+            $driver->payment_reminder_dismissed_at = null;
+        }
+
+        $driver->save();
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Note / reminder saved.',
+                'driver' => [
+                    'id' => $driver->id,
+                    'notes' => $driver->payment_follow_up_notes,
+                    'remind_at' => $driver->payment_remind_at?->toIso8601String(),
+                    'remind_at_display' => $driver->payment_remind_at?->timezone(config('app.timezone'))->format('d M Y, H:i'),
+                    'has_note' => $driver->hasPaymentFollowUpNote(),
+                    'has_reminder' => $driver->hasPaymentReminder(),
+                    'is_due' => $driver->isPaymentReminderDue(),
+                ],
+            ]);
+        }
+
+        return redirect()->route('payments.index')
+            ->with('success', 'Note / reminder saved.');
+    }
+
+    public function dueFollowUpReminders()
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return response()->json(['reminders' => []]);
+        }
+
+        $drivers = Driver::query()
+            ->where('tenant_id', $tenant->id)
+            ->withDuePaymentReminder()
+            ->orderBy('payment_remind_at')
+            ->get();
+
+        return response()->json([
+            'reminders' => $drivers->map(fn (Driver $driver) => [
+                'id' => $driver->id,
+                'name' => $driver->selectOptionLabel() ?: trim($driver->first_name.' '.$driver->last_name),
+                'phone' => $driver->phone_number,
+                'notes' => $driver->payment_follow_up_notes,
+                'remind_at' => $driver->payment_remind_at?->toIso8601String(),
+                'remind_at_display' => $driver->payment_remind_at?->format('d M Y, H:i'),
+                'payments_url' => route('payments.driver', $driver),
+                'dismiss_url' => route('payments.follow-up.dismiss', $driver),
+            ])->values(),
+        ]);
+    }
+
+    public function dismissFollowUpReminder(Driver $driver)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $this->authorizeDriver($driver, $tenant);
+
+        $driver->payment_reminder_dismissed_at = now();
+        $driver->save();
+
+        if (request()->expectsJson() || request()->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Reminder dismissed.',
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Reminder dismissed.');
+    }
+
     public function destroy(Payment $payment)
     {
         $tenant = Auth::user()->currentTenant();
         $payment->load(['driver', 'allocations.invoice']);
         $this->authorizeDriver($payment->driver, $tenant);
+
+        if (Schema::hasTable('driver_credit_transaction_lines') && $payment->creditTransactionLines()->exists()) {
+            return redirect()->route('payments.driver', $payment->driver_id)
+                ->with('error', 'This payment is linked to a driver credit transaction and cannot be deleted.');
+        }
 
         $invoices = $payment->allocations->pluck('invoice')->filter();
 
@@ -235,10 +398,13 @@ class PaymentController extends Controller
 
     private function driverSummary(Driver $driver): array
     {
+        $postedPayments = $driver->payments()->posted();
+
         return [
             'total_invoiced' => (float) $driver->invoices()->sum('total_amount'),
-            'total_paid' => (float) $driver->payments()->sum('amount'),
-            'total_allocated' => (float) $driver->payments()
+            'total_paid' => (float) $postedPayments->sum('amount'),
+            'total_pending' => (float) $driver->payments()->pending()->sum('amount'),
+            'total_allocated' => (float) $postedPayments
                 ->join('payment_allocations', 'payments.id', '=', 'payment_allocations.payment_id')
                 ->sum('payment_allocations.allocated_amount'),
             'total_due' => (float) $driver->activeInvoices()->sum('balance_amount'),
@@ -248,6 +414,10 @@ class PaymentController extends Controller
 
     private function bankAccountsForTenant(int $tenantId)
     {
+        if (! Schema::hasTable('bank_accounts')) {
+            return collect();
+        }
+
         return BankAccount::query()
             ->where('tenant_id', $tenantId)
             ->orderBy('bank_name')

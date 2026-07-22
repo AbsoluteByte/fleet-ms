@@ -14,6 +14,7 @@ class PaymentAllocation extends Model
     protected $fillable = [
         'payment_id',
         'invoice_id',
+        'driver_credit_transaction_line_id',
         'allocated_amount',
         'created_at',
     ];
@@ -31,5 +32,10 @@ class PaymentAllocation extends Model
     public function invoice()
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function creditTransactionLine()
+    {
+        return $this->belongsTo(DriverCreditTransactionLine::class, 'driver_credit_transaction_line_id');
     }
 }

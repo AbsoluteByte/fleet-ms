@@ -26,10 +26,16 @@
                             <strong>Payment Method</strong>
                             <p>{{ $payment->payment_method }}</p>
                         </div>
-                        @if($payment->payment_method === 'Bank Transfer' && $payment->bankAccount)
+                        @if(\App\Models\Payment::requiresBankAccount($payment->payment_method) && $payment->bankAccount)
                         <div class="col-md-4 mb-2">
                             <strong>Bank Account</strong>
                             <p>{{ $payment->bankAccount->bank_name }}</p>
+                        </div>
+                        @endif
+                        @if(filled($payment->sourceAgreement?->paying_company_name))
+                        <div class="col-md-4 mb-2">
+                            <strong>Paying company</strong>
+                            <p>{{ $payment->sourceAgreement->paying_company_name }}</p>
                         </div>
                         @endif
                         <div class="col-md-4 mb-2">
@@ -66,6 +72,7 @@
                             <thead>
                             <tr>
                                 <th>Invoice No</th>
+                                <th>Pays via</th>
                                 <th>Invoice Date</th>
                                 <th>Due Date</th>
                                 <th>Allocated Amount</th>
@@ -75,13 +82,14 @@
                             @forelse($payment->allocations as $allocation)
                                 <tr>
                                     <td>{{ optional($allocation->invoice)->invoice_no }}</td>
+                                    <td>{{ optional($allocation->invoice)->payingCompanyNameLabel() ?? '—' }}</td>
                                     <td>{{ optional(optional($allocation->invoice)->invoice_date)->format('d M Y') }}</td>
                                     <td>{{ optional(optional($allocation->invoice)->due_date)->format('d M Y') }}</td>
                                     <td>£{{ number_format($allocation->allocated_amount, 2) }}</td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted">No invoice allocations. This amount is currently driver credit.</td>
+                                    <td colspan="5" class="text-center text-muted">No invoice allocations. This amount is currently driver credit.</td>
                                 </tr>
                             @endforelse
                             </tbody>

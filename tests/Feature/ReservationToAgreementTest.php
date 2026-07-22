@@ -147,18 +147,18 @@ class ReservationToAgreementTest extends TestCase
 
         $response = $this->from(route('agreements.create'))
             ->post(route('agreements.store'), [
-            'reservation_id' => $reservation->id,
-            'company_id' => $company->id,
-            'driver_id' => $driver->id,
-            'car_id' => $car->id,
-            'start_date' => '2026-06-30T09:00',
-            'end_date' => '2027-06-30',
-            'agreed_rent' => 150,
-            'rent_interval' => 'Weekly',
-            'collection_type' => 'weekly',
-            'deposit_amount' => 200,
-            'status_id' => $activeStatus->id,
-        ]);
+                'reservation_id' => $reservation->id,
+                'company_id' => $company->id,
+                'driver_id' => $driver->id,
+                'car_id' => $car->id,
+                'start_date' => '2026-06-30T09:00',
+                'end_date' => '2027-06-30',
+                'agreed_rent' => 150,
+                'rent_interval' => 'Weekly',
+                'collection_type' => 'weekly',
+                'deposit_amount' => 200,
+                'status_id' => $activeStatus->id,
+            ]);
 
         $response->assertRedirect(route('agreements.index'));
         $response->assertSessionHasNoErrors();
@@ -272,18 +272,18 @@ class ReservationToAgreementTest extends TestCase
 
         $response = $this->from(route('agreements.create'))
             ->post(route('agreements.store'), [
-            'reservation_id' => $reservation->id,
-            'company_id' => $company->id,
-            'driver_id' => $driver->id,
-            'car_id' => $car->id,
-            'start_date' => '2026-06-30T09:00',
-            'end_date' => '2027-06-30',
-            'agreed_rent' => 150,
-            'rent_interval' => 'Weekly',
-            'collection_type' => 'weekly',
-            'deposit_amount' => 200,
-            'status_id' => $activeStatus->id,
-        ]);
+                'reservation_id' => $reservation->id,
+                'company_id' => $company->id,
+                'driver_id' => $driver->id,
+                'car_id' => $car->id,
+                'start_date' => '2026-06-30T09:00',
+                'end_date' => '2027-06-30',
+                'agreed_rent' => 150,
+                'rent_interval' => 'Weekly',
+                'collection_type' => 'weekly',
+                'deposit_amount' => 200,
+                'status_id' => $activeStatus->id,
+            ]);
 
         $response->assertRedirect(route('agreements.index'));
         $response->assertSessionHasNoErrors();
@@ -390,18 +390,18 @@ class ReservationToAgreementTest extends TestCase
 
         $response = $this->from(route('agreements.create'))
             ->post(route('agreements.store'), [
-            'reservation_id' => $reservation->id,
-            'company_id' => $company->id,
-            'driver_id' => $driver->id,
-            'car_id' => $car->id,
-            'start_date' => '2026-06-30T09:00',
-            'end_date' => '2027-06-30',
-            'agreed_rent' => 150,
-            'rent_interval' => 'Weekly',
-            'collection_type' => 'weekly',
-            'deposit_amount' => 200,
-            'status_id' => $activeStatus->id,
-        ]);
+                'reservation_id' => $reservation->id,
+                'company_id' => $company->id,
+                'driver_id' => $driver->id,
+                'car_id' => $car->id,
+                'start_date' => '2026-06-30T09:00',
+                'end_date' => '2027-06-30',
+                'agreed_rent' => 150,
+                'rent_interval' => 'Weekly',
+                'collection_type' => 'weekly',
+                'deposit_amount' => 200,
+                'status_id' => $activeStatus->id,
+            ]);
 
         $response->assertRedirect(route('agreements.index'));
         $response->assertSessionHasNoErrors();
@@ -473,17 +473,17 @@ class ReservationToAgreementTest extends TestCase
 
         $response = $this->from(route('agreements.create'))
             ->post(route('agreements.store'), [
-            'company_id' => $company->id,
-            'driver_id' => $driver->id,
-            'car_id' => $car->id,
-            'start_date' => '2026-06-30T09:00',
-            'end_date' => '2027-06-30',
-            'agreed_rent' => 150,
-            'rent_interval' => 'Weekly',
-            'collection_type' => 'weekly',
-            'deposit_amount' => 200,
-            'status_id' => $activeStatus->id,
-        ]);
+                'company_id' => $company->id,
+                'driver_id' => $driver->id,
+                'car_id' => $car->id,
+                'start_date' => '2026-06-30T09:00',
+                'end_date' => '2027-06-30',
+                'agreed_rent' => 150,
+                'rent_interval' => 'Weekly',
+                'collection_type' => 'weekly',
+                'deposit_amount' => 200,
+                'status_id' => $activeStatus->id,
+            ]);
 
         $response->assertRedirect(route('agreements.index'));
         $response->assertSessionHasNoErrors();

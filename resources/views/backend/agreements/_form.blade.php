@@ -1,6 +1,6 @@
 <!-- Basic Information -->
 <div class="card mb-2">
-    <div class="">
+    <div class="card-header" style="position: static; width: 100%; z-index: unset;">
         <h5 class="card-title mb-0">
             <i class="fa fa-info-circle me-2"></i>
             Agreement Details
@@ -102,6 +102,22 @@
                         <p class="mb-0 mt-2 small">You can still create this agreement if that is intended.</p>
                     </div>
                 </div>
+                <div class="mb-3">
+                    <label for="paying_company_name" class="form-label">Paying Company Name</label>
+                    <input type="text"
+                           name="paying_company_name"
+                           id="paying_company_name"
+                           class="form-control @error('paying_company_name') is-invalid @enderror"
+                           value="{{ old('paying_company_name', $model->paying_company_name ?? '') }}"
+                           maxlength="255"
+                           placeholder="e.g. ABC Ltd">
+                    <small class="form-text text-muted">
+                        Optional. Company that pays when the agreement is in the client's name.
+                    </small>
+                    @error('paying_company_name')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
             </div>
 
             <div class="col-md-6">
@@ -144,6 +160,20 @@
                     </select>
                     <small class="text-muted d-block mt-1">Rent and deposit remain on the original agreement. Select the driver's active hire agreement.</small>
                     @error('parent_agreement_id')
+                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="col-md-6" id="swap-original-agreement-section" style="display: none;">
+                <div class="mb-3">
+                    <label for="upgraded_from_agreement_id" class="form-label">Original agreement *</label>
+                    <select name="upgraded_from_agreement_id" id="upgraded_from_agreement_id"
+                            class="form-control select-search @error('upgraded_from_agreement_id') is-invalid @enderror">
+                        <option value="">Select original agreement</option>
+                    </select>
+                    <small class="text-muted d-block mt-1">Original will be terminated. Deposit carries over; invoices follow the original billing dates at the new rent.</small>
+                    @error('upgraded_from_agreement_id')
                     <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
                 </div>
@@ -234,6 +264,203 @@
                     @enderror
                 </div>
             </div>
+
+            @if(isset($model) && $model->id)
+                @php
+                    $deductionsLocked = $model->depositRefund !== null;
+                    $deductionRows = old('deductions');
+                    if ($deductionRows === null) {
+                        $deductionRows = $model->deductions->map(fn ($deduction) => [
+                            'amount' => $deduction->amount,
+                            'notes' => $deduction->notes,
+                        ])->values()->all();
+                    }
+                @endphp
+                <div class="col-12">
+                    <input type="hidden" name="deductions_present" value="1">
+                    <div class="agreement-deductions-panel mb-3">
+                        <div class="agreement-deductions-panel__header">
+                            <div class="agreement-deductions-panel__heading">
+                                <span class="agreement-deductions-panel__icon">
+                                    <i class="fa fa-minus-circle"></i>
+                                </span>
+                                <div>
+                                    <h6 class="agreement-deductions-panel__title">Deposit Deductions</h6>
+                                    <p class="agreement-deductions-panel__subtitle">Add charges that will be deducted when the deposit is settled.</p>
+                                </div>
+                            </div>
+                            @unless($deductionsLocked)
+                                <button type="button" class="btn btn-primary agreement-deductions-panel__add" id="add-deduction-row">
+                                    <i class="fa fa-plus me-1"></i> Add deduction
+                                </button>
+                            @endunless
+                        </div>
+
+                        <div class="agreement-deductions-panel__body">
+                            @if($deductionsLocked)
+                                <div class="alert alert-warning py-2 mb-3">
+                                    <i class="fa fa-lock me-1"></i>
+                                    Deductions are locked because a deposit settlement has been recorded.
+                                </div>
+                            @endif
+
+                            <div id="deductions-repeater">
+                                @foreach($deductionRows as $index => $deduction)
+                                    <div class="deduction-row mb-2">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-md-3">
+                                                <label class="form-label">Amount</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">£</span>
+                                                    <input type="number" class="form-control"
+                                                           name="deductions[{{ $index }}][amount]"
+                                                           value="{{ $deduction['amount'] ?? '' }}"
+                                                           min="0.01" step="0.01" required
+                                                           @readonly($deductionsLocked)>
+                                                </div>
+                                            </div>
+                                            <div class="{{ $deductionsLocked ? 'col-md-9' : 'col-md-8' }}">
+                                                <label class="form-label">Notes</label>
+                                                <input type="text" class="form-control"
+                                                       name="deductions[{{ $index }}][notes]"
+                                                       value="{{ $deduction['notes'] ?? '' }}"
+                                                       placeholder="Reason for deduction"
+                                                       maxlength="2000"
+                                                       @readonly($deductionsLocked)>
+                                            </div>
+                                            @unless($deductionsLocked)
+                                                <div class="col-md-1">
+                                                    <button type="button" class="btn btn-outline-danger remove-deduction-row" title="Remove deduction">
+                                                        <i class="fa fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            @endunless
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            @error('deductions')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                            @error('deductions.*.amount')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+                </div>
+
+                @php
+                    $damageTypes = \App\Models\AgreementAdditionalCharge::types();
+                    $additionalChargeRows = old('additional_charges');
+                    if ($additionalChargeRows === null) {
+                        $additionalChargeRows = $model->additionalCharges->map(fn ($charge) => [
+                            'id' => $charge->id,
+                            'type' => $charge->type,
+                            'amount' => $charge->amount,
+                            'notes' => $charge->notes,
+                            'locked' => $charge->invoice_id !== null,
+                        ])->values()->all();
+                    } else {
+                        $existingChargeIds = $model->additionalCharges->keyBy('id');
+                        $additionalChargeRows = collect($additionalChargeRows)->map(function ($charge) use ($existingChargeIds) {
+                            $chargeId = $charge['id'] ?? null;
+                            $charge['locked'] = $chargeId && $existingChargeIds->has($chargeId)
+                                && $existingChargeIds->get($chargeId)->invoice_id !== null;
+
+                            return $charge;
+                        })->values()->all();
+                    }
+                @endphp
+                <div class="col-12">
+                    <input type="hidden" name="additional_charges_present" value="1">
+                    <div class="agreement-deductions-panel mb-3">
+                        <div class="agreement-deductions-panel__header">
+                            <div class="agreement-deductions-panel__heading">
+                                <span class="agreement-deductions-panel__icon">
+                                    <i class="fa fa-plus-circle"></i>
+                                </span>
+                                <div>
+                                    <h6 class="agreement-deductions-panel__title">Damages</h6>
+                                    <p class="agreement-deductions-panel__subtitle">Add vehicle-related costs during the hire period. Each damage entry creates an invoice for the driver.</p>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-primary agreement-deductions-panel__add" id="add-additional-charge-row">
+                                <i class="fa fa-plus me-1"></i> Add damage
+                            </button>
+                        </div>
+
+                        <div class="agreement-deductions-panel__body">
+                            <div id="additional-charges-repeater">
+                                @foreach($additionalChargeRows as $index => $charge)
+                                    @php
+                                        $chargeLocked = ! empty($charge['locked']);
+                                    @endphp
+                                    <div class="deduction-row mb-2 additional-charge-row">
+                                        <div class="row g-2 align-items-end">
+                                            @if(! empty($charge['id']))
+                                                <input type="hidden" name="additional_charges[{{ $index }}][id]" value="{{ $charge['id'] }}">
+                                            @endif
+                                            <div class="col-md-3">
+                                                <label class="form-label">Type</label>
+                                                <select class="form-control"
+                                                        name="additional_charges[{{ $index }}][type]"
+                                                        required
+                                                        @disabled($chargeLocked)>
+                                                    @foreach($damageTypes as $typeValue => $typeLabel)
+                                                        <option value="{{ $typeValue }}"
+                                                            @selected(($charge['type'] ?? \App\Models\AgreementAdditionalCharge::TYPE_MISCELLANEOUS_CHARGES) === $typeValue)>
+                                                            {{ $typeLabel }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                @if($chargeLocked)
+                                                    <input type="hidden" name="additional_charges[{{ $index }}][type]" value="{{ $charge['type'] ?? \App\Models\AgreementAdditionalCharge::TYPE_MISCELLANEOUS_CHARGES }}">
+                                                @endif
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Amount</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">£</span>
+                                                    <input type="number" class="form-control"
+                                                           name="additional_charges[{{ $index }}][amount]"
+                                                           value="{{ $charge['amount'] ?? '' }}"
+                                                           min="0.01" step="0.01" required
+                                                           @readonly($chargeLocked)>
+                                                </div>
+                                            </div>
+                                            <div class="{{ $chargeLocked ? 'col-md-7' : 'col-md-6' }}">
+                                                <label class="form-label">Notes</label>
+                                                <input type="text" class="form-control"
+                                                       name="additional_charges[{{ $index }}][notes]"
+                                                       value="{{ $charge['notes'] ?? '' }}"
+                                                       placeholder="Reason for damage (e.g. tyres, body repair)"
+                                                       maxlength="2000"
+                                                       @readonly($chargeLocked)>
+                                            </div>
+                                            @unless($chargeLocked)
+                                                <div class="col-md-1">
+                                                    <button type="button" class="btn btn-outline-danger remove-additional-charge-row" title="Remove damage">
+                                                        <i class="fa fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            @endunless
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                            @error('additional_charges')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                            @error('additional_charges.*.amount')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                            @error('additional_charges.*.type')
+                                <div class="text-danger small mt-2">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 </div>
@@ -343,6 +570,10 @@
                 <label class="form-label d-block">Discount Type</label>
                 @php
                     $selectedDiscountType = old('discount_type') ?? (isset($model) ? $model->discount_type : '');
+                    $oneTimeDiscountEnabled = (bool) old(
+                        'discount_is_one_time',
+                        isset($model) ? $model->discount_is_one_time : false
+                    );
                 @endphp
                 <div class="discount-type-group" role="group" aria-label="Discount type">
                     <input type="radio" class="discount-type-radio" name="discount_type" id="discount_type_percentage" value="percentage" autocomplete="off"
@@ -378,6 +609,30 @@
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
+        </div>
+
+        <div class="discount-mode-wrap mt-2">
+            <input type="hidden" name="discount_is_one_time" value="0">
+            <input type="checkbox" class="discount-mode-checkbox" name="discount_is_one_time"
+                   id="discount_is_one_time" value="1" autocomplete="off"
+                   {{ $oneTimeDiscountEnabled ? 'checked' : '' }}>
+            <label for="discount_is_one_time"
+                   class="discount-mode-toggle {{ $oneTimeDiscountEnabled ? 'is-active' : '' }}"
+                   id="discount-one-time-toggle">
+                <span class="discount-mode-toggle__icon"><i class="fa fa-bolt"></i></span>
+                <span class="discount-mode-toggle__content">
+                    <strong>One-time discount</strong>
+                    <small id="discount-one-time-help">
+                        {{ $oneTimeDiscountEnabled ? 'Applies only to the next rent invoice' : 'Off — discount repeats on rent invoices' }}
+                    </small>
+                </span>
+                <span class="discount-mode-toggle__state" id="discount-one-time-state">
+                    {{ $oneTimeDiscountEnabled ? 'Enabled' : 'Off' }}
+                </span>
+            </label>
+            @error('discount_is_one_time')
+            <div class="text-danger">{{ $message }}</div>
+            @enderror
         </div>
 
         <div class="form-group mt-2 mb-0">
@@ -817,6 +1072,106 @@
 
 @push('css')
     <style>
+        .agreement-deductions-panel {
+            overflow: hidden;
+            background: #fff;
+            border: 1px solid #ebe9f1;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(34, 41, 47, 0.05);
+        }
+
+        .agreement-deductions-panel__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 16px 18px;
+            background: rgba(115, 103, 240, 0.06);
+            border-bottom: 1px solid #ebe9f1;
+        }
+
+        .agreement-deductions-panel__heading {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .agreement-deductions-panel__icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            flex: 0 0 38px;
+            border-radius: 9px;
+            color: #7367f0;
+            background: rgba(115, 103, 240, 0.13);
+            font-size: 16px;
+        }
+
+        .agreement-deductions-panel__title {
+            margin: 0;
+            color: #5e5873;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .agreement-deductions-panel__subtitle {
+            margin: 3px 0 0;
+            color: #82868b;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .agreement-deductions-panel__add {
+            flex-shrink: 0;
+            padding: 0.45rem 0.85rem;
+            font-size: 12px;
+        }
+
+        .agreement-deductions-panel__body {
+            padding: 16px 18px;
+        }
+
+        .agreement-deductions-panel .deduction-row {
+            padding: 12px;
+            background: #fafafa;
+            border: 1px solid #ebe9f1;
+            border-radius: 8px;
+        }
+
+        .agreement-deductions-panel .deduction-row:last-child {
+            margin-bottom: 0 !important;
+        }
+
+        .agreement-deductions-panel .deduction-row .form-label {
+            margin-bottom: 5px;
+            color: #5e5873;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .agreement-deductions-panel .remove-deduction-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 38px;
+            padding: 0.5rem;
+        }
+
+        @media (max-width: 767.98px) {
+            .agreement-deductions-panel__header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .agreement-deductions-panel__add {
+                width: 100%;
+            }
+        }
+
         .discount-type-group {
             display: flex;
             flex-wrap: wrap;
@@ -883,6 +1238,76 @@
             background: #f8f7ff;
             color: #4b4586;
             box-shadow: 0 0 0 2px rgba(115, 103, 240, 0.15);
+        }
+
+        .discount-mode-checkbox {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .discount-mode-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            max-width: 520px;
+            margin: 0;
+            padding: 13px 15px;
+            border: 1px solid #d9d8f3;
+            border-radius: 8px;
+            background: #fff;
+            color: #5e5873;
+            cursor: pointer;
+            transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+        }
+
+        .discount-mode-toggle:hover {
+            border-color: #7367f0;
+            box-shadow: 0 2px 10px rgba(115, 103, 240, .08);
+        }
+
+        .discount-mode-toggle.is-active {
+            border-color: #7367f0;
+            background: #f8f7ff;
+            box-shadow: 0 2px 10px rgba(115, 103, 240, .12);
+        }
+
+        .discount-mode-toggle__icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            flex: 0 0 34px;
+            border-radius: 50%;
+            background: rgba(115, 103, 240, .12);
+            color: #7367f0;
+        }
+
+        .discount-mode-toggle__content {
+            display: flex;
+            flex: 1 1 auto;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .discount-mode-toggle__content small {
+            color: #82808f;
+            margin-top: 2px;
+        }
+
+        .discount-mode-toggle__state {
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #ebe9f1;
+            color: #6e6b7b;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .discount-mode-toggle.is-active .discount-mode-toggle__state {
+            background: #7367f0;
+            color: #fff;
         }
 
         @media (max-width: 767.98px) {
@@ -1067,10 +1492,123 @@
     <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-agreement.js') }}?v=20260624"></script>
     <script>
         const replacementVehicleStatusId = @json($replacementVehicleStatusId ?? null);
+        const swapStatusId = @json($swapStatusId ?? null);
         const originalAgreements = @json($originalAgreements ?? []);
         const driversActiveAgreements = @json($driversActiveAgreements ?? []);
         const isAgreementCreate = @json(! isset($model) || ! $model->id);
         const selectedParentAgreementId = @json(old('parent_agreement_id') ?? (isset($model) ? $model->parent_agreement_id : null));
+        const selectedSwapOriginalAgreementId = @json(old('upgraded_from_agreement_id') ?? (isset($model) ? $model->upgraded_from_agreement_id : null));
+        const isExistingSwapAgreement = @json(isset($model) && $model->id && $model->upgraded_from_agreement_id);
+
+        const oneTimeDiscountCheckbox = document.getElementById('discount_is_one_time');
+        const oneTimeDiscountToggle = document.getElementById('discount-one-time-toggle');
+        const oneTimeDiscountState = document.getElementById('discount-one-time-state');
+        const oneTimeDiscountHelp = document.getElementById('discount-one-time-help');
+
+        function syncOneTimeDiscountToggle() {
+            if (! oneTimeDiscountCheckbox || ! oneTimeDiscountToggle) {
+                return;
+            }
+
+            const enabled = oneTimeDiscountCheckbox.checked;
+            oneTimeDiscountToggle.classList.toggle('is-active', enabled);
+            oneTimeDiscountState.textContent = enabled ? 'Enabled' : 'Off';
+            oneTimeDiscountHelp.textContent = enabled
+                ? 'Applies only to the next rent invoice'
+                : 'Off — discount repeats on rent invoices';
+        }
+
+        if (oneTimeDiscountCheckbox) {
+            oneTimeDiscountCheckbox.addEventListener('change', syncOneTimeDiscountToggle);
+            syncOneTimeDiscountToggle();
+        }
+
+        const deductionsRepeater = document.getElementById('deductions-repeater');
+        const addDeductionButton = document.getElementById('add-deduction-row');
+        let deductionIndex = deductionsRepeater ? deductionsRepeater.querySelectorAll('.deduction-row').length : 0;
+
+        if (addDeductionButton && deductionsRepeater) {
+            addDeductionButton.addEventListener('click', function () {
+                const row = document.createElement('div');
+                row.className = 'deduction-row mb-2';
+                row.innerHTML = `
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">Amount</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" class="form-control" name="deductions[${deductionIndex}][amount]" min="0.01" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Notes</label>
+                            <input type="text" class="form-control" name="deductions[${deductionIndex}][notes]" placeholder="Reason for deduction" maxlength="2000">
+                        </div>
+                        <div class="col-md-1">
+                            <button type="button" class="btn btn-outline-danger remove-deduction-row" title="Remove deduction">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                deductionIndex += 1;
+                deductionsRepeater.appendChild(row);
+            });
+
+            deductionsRepeater.addEventListener('click', function (event) {
+                const removeButton = event.target.closest('.remove-deduction-row');
+                if (removeButton) {
+                    removeButton.closest('.deduction-row').remove();
+                }
+            });
+        }
+
+        const additionalChargesRepeater = document.getElementById('additional-charges-repeater');
+        const addAdditionalChargeButton = document.getElementById('add-additional-charge-row');
+        let additionalChargeIndex = additionalChargesRepeater ? additionalChargesRepeater.querySelectorAll('.additional-charge-row').length : 0;
+
+        if (addAdditionalChargeButton && additionalChargesRepeater) {
+            addAdditionalChargeButton.addEventListener('click', function () {
+                const row = document.createElement('div');
+                row.className = 'deduction-row mb-2 additional-charge-row';
+                row.innerHTML = `
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">Type</label>
+                            <select class="form-control" name="additional_charges[${additionalChargeIndex}][type]" required>
+                                <option value="insurance_excess">Insurance Excess</option>
+                                <option value="miscellaneous_charges">Miscellaneous Charges</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Amount</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" class="form-control" name="additional_charges[${additionalChargeIndex}][amount]" min="0.01" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Notes</label>
+                            <input type="text" class="form-control" name="additional_charges[${additionalChargeIndex}][notes]" placeholder="Reason for damage (e.g. tyres, body repair)" maxlength="2000">
+                        </div>
+                        <div class="col-md-1">
+                            <button type="button" class="btn btn-outline-danger remove-additional-charge-row" title="Remove damage">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                additionalChargeIndex += 1;
+                additionalChargesRepeater.appendChild(row);
+            });
+
+            additionalChargesRepeater.addEventListener('click', function (event) {
+                const removeButton = event.target.closest('.remove-additional-charge-row');
+                if (removeButton) {
+                    removeButton.closest('.additional-charge-row').remove();
+                }
+            });
+        }
 
         const replacementVehicleFinancialFieldIds = ['agreed_rent', 'collection_type', 'rent_interval', 'deposit_amount', 'billing_anchor_date'];
         const replacementVehicleSectionIds = ['agreement-financial-section', 'agreement-discount-section', 'agreement-payment-section'];
@@ -1126,6 +1664,16 @@
             return String(statusSelect.value) === String(replacementVehicleStatusId);
         }
 
+        function isSwapStatusSelected() {
+            const statusSelect = document.getElementById('status_id');
+
+            if (!statusSelect || swapStatusId === null) {
+                return false;
+            }
+
+            return String(statusSelect.value) === String(swapStatusId);
+        }
+
         function setFieldRequired(fieldId, required) {
             const field = document.getElementById(fieldId);
 
@@ -1151,7 +1699,7 @@
 
             const driverId = driverSelect.value;
 
-            if (!driverId || isReplacementVehicleStatusSelected()) {
+            if (!driverId || isReplacementVehicleStatusSelected() || isSwapStatusSelected()) {
                 warning.style.display = 'none';
                 list.innerHTML = '';
 
@@ -1177,8 +1725,8 @@
             warning.style.display = 'block';
         }
 
-        function populateOriginalAgreementOptions() {
-            const parentSelect = document.getElementById('parent_agreement_id');
+        function populateOriginalAgreementOptions(selectId, selectedId) {
+            const parentSelect = document.getElementById(selectId || 'parent_agreement_id');
             const driverSelect = document.getElementById('driver_id');
 
             if (!parentSelect || !driverSelect) {
@@ -1186,7 +1734,14 @@
             }
 
             const driverId = driverSelect.value;
-            const currentValue = parentSelect.value || (selectedParentAgreementId != null ? String(selectedParentAgreementId) : '');
+            const preferredSelected = selectedId != null && selectedId !== ''
+                ? String(selectedId)
+                : null;
+            const currentValue = preferredSelected
+                || parentSelect.value
+                || (selectId === 'upgraded_from_agreement_id'
+                    ? (selectedSwapOriginalAgreementId != null ? String(selectedSwapOriginalAgreementId) : '')
+                    : (selectedParentAgreementId != null ? String(selectedParentAgreementId) : ''));
             const filtered = originalAgreements.filter(function (agreement) {
                 return String(agreement.driver_id) === String(driverId);
             });
@@ -1200,6 +1755,11 @@
 
                 filtered.forEach(function (agreement) {
                     const option = new Option(agreement.label, agreement.id, false, String(agreement.id) === currentValue);
+                    option.dataset.depositAmount = agreement.deposit_amount;
+                    option.dataset.agreedRent = agreement.agreed_rent;
+                    option.dataset.rentInterval = agreement.rent_interval || '';
+                    option.dataset.collectionType = agreement.collection_type || '';
+                    option.dataset.endDate = agreement.end_date || '';
                     $parentSelect.append(option);
                 });
 
@@ -1217,6 +1777,11 @@
                 const option = document.createElement('option');
                 option.value = agreement.id;
                 option.textContent = agreement.label;
+                option.dataset.depositAmount = agreement.deposit_amount;
+                option.dataset.agreedRent = agreement.agreed_rent;
+                option.dataset.rentInterval = agreement.rent_interval || '';
+                option.dataset.collectionType = agreement.collection_type || '';
+                option.dataset.endDate = agreement.end_date || '';
 
                 if (String(agreement.id) === currentValue) {
                     option.selected = true;
@@ -1226,17 +1791,58 @@
             });
         }
 
+        function applySwapOriginalAgreementDefaults() {
+            const swapSelect = document.getElementById('upgraded_from_agreement_id');
+            const depositInput = document.getElementById('deposit_amount');
+            const endDateInput = document.getElementById('end_date');
+            const rentIntervalSelect = document.getElementById('rent_interval');
+            const collectionTypeSelect = document.getElementById('collection_type');
+
+            if (!swapSelect || !swapSelect.value) {
+                return;
+            }
+
+            const option = swapSelect.options[swapSelect.selectedIndex];
+            if (!option) {
+                return;
+            }
+
+            if (depositInput && option.dataset.depositAmount != null) {
+                depositInput.value = option.dataset.depositAmount;
+            }
+
+            if (endDateInput && option.dataset.endDate) {
+                endDateInput.value = option.dataset.endDate;
+            }
+
+            if (rentIntervalSelect && option.dataset.rentInterval) {
+                setSelectValue(rentIntervalSelect, option.dataset.rentInterval);
+            }
+
+            if (collectionTypeSelect && option.dataset.collectionType) {
+                setSelectValue(collectionTypeSelect, option.dataset.collectionType);
+            }
+        }
+
         function toggleReplacementVehicleMode() {
             const isReplacementVehicle = isReplacementVehicleStatusSelected();
+            const isSwap = isSwapStatusSelected();
             const parentSection = document.getElementById('parent-agreement-section');
+            const swapSection = document.getElementById('swap-original-agreement-section');
             const financialSection = document.getElementById('agreement-financial-section');
             const discountSection = document.getElementById('agreement-discount-section');
             const paymentSection = document.getElementById('agreement-payment-section');
             const parentSelect = document.getElementById('parent_agreement_id');
+            const swapSelect = document.getElementById('upgraded_from_agreement_id');
+            const depositInput = document.getElementById('deposit_amount');
             const addPaymentCheckbox = document.getElementById('add_payment');
 
             if (parentSection) {
                 parentSection.style.display = isReplacementVehicle ? 'block' : 'none';
+            }
+
+            if (swapSection) {
+                swapSection.style.display = isSwap ? 'block' : 'none';
             }
 
             if (financialSection) {
@@ -1248,31 +1854,59 @@
             }
 
             if (paymentSection) {
-                paymentSection.style.display = isReplacementVehicle ? 'none' : 'block';
+                paymentSection.style.display = (isReplacementVehicle || isSwap) ? 'none' : 'block';
             }
 
             replacementVehicleFinancialFieldIds.forEach(function (fieldId) {
+                if (fieldId === 'deposit_amount' && (isSwap || isExistingSwapAgreement)) {
+                    setFieldRequired(fieldId, false);
+                    return;
+                }
+
                 setFieldRequired(fieldId, !isReplacementVehicle);
             });
 
             setReplacementVehicleSectionFieldsEnabled(!isReplacementVehicle);
 
+            if (depositInput) {
+                const lockDeposit = isSwap || isExistingSwapAgreement;
+                depositInput.readOnly = lockDeposit;
+                if (lockDeposit) {
+                    depositInput.classList.add('bg-light');
+                } else if (!isReplacementVehicle) {
+                    depositInput.classList.remove('bg-light');
+                }
+            }
+
             if (parentSelect) {
                 if (isReplacementVehicle) {
                     parentSelect.setAttribute('required', 'required');
-                    populateOriginalAgreementOptions();
+                    populateOriginalAgreementOptions('parent_agreement_id', selectedParentAgreementId);
                 } else {
                     parentSelect.removeAttribute('required');
                     setSelectValue(parentSelect, '');
                 }
             }
 
+            if (swapSelect) {
+                if (isSwap) {
+                    swapSelect.setAttribute('required', 'required');
+                    populateOriginalAgreementOptions('upgraded_from_agreement_id', selectedSwapOriginalAgreementId);
+                    applySwapOriginalAgreementDefaults();
+                } else {
+                    swapSelect.removeAttribute('required');
+                    if (!isExistingSwapAgreement) {
+                        setSelectValue(swapSelect, '');
+                    }
+                }
+            }
+
             if (addPaymentCheckbox) {
-                if (isReplacementVehicle) {
+                if (isReplacementVehicle || isSwap) {
                     addPaymentCheckbox.checked = false;
                 }
 
-                addPaymentCheckbox.disabled = isReplacementVehicle;
+                addPaymentCheckbox.disabled = isReplacementVehicle || isSwap;
 
                 toggleAgreementPaymentFields();
             }
@@ -1409,9 +2043,29 @@
             updateAgreementPaymentLimits();
         }
 
+        @php
+            $agreementBankAccountsForJs = ($bankAccounts ?? collect())->map(function ($account) {
+                return [
+                    'id' => $account->id,
+                    'bank_name' => $account->bank_name,
+                    'account_number' => $account->account_number,
+                ];
+            })->values();
+
+            $defaultCardBankAccountIdForJs = ($bankAccounts ?? collect())
+                ->firstWhere('account_number', \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER);
+            $defaultCardBankAccountIdForJs = $defaultCardBankAccountIdForJs
+                ? $defaultCardBankAccountIdForJs->id
+                : null;
+        @endphp
         const agreementPaymentMethods = @json($agreementPaymentMethods);
-        const agreementBankAccounts = @json(($bankAccounts ?? collect())->map(fn ($account) => ['id' => $account->id, 'bank_name' => $account->bank_name])->values());
+        const agreementBankAccounts = @json($agreementBankAccountsForJs);
+        const defaultCardBankAccountId = @json($defaultCardBankAccountIdForJs);
         const defaultAgreementPaymentDate = @json(now()->toDateString());
+
+        function requiresBankAccount(method) {
+            return method === 'Bank Transfer' || method === 'Card Payment';
+        }
 
         function money(value) {
             return '£' + Number(value || 0).toFixed(2);
@@ -1480,17 +2134,19 @@
             const methodSelect = row.querySelector('[data-payment-method]');
             const bankField = row.querySelector('[data-bank-account-field]');
             const bankSelect = row.querySelector('[data-bank-account-select]');
-            const isBankTransfer = methodSelect && methodSelect.value === 'Bank Transfer';
+            const needsBank = methodSelect && requiresBankAccount(methodSelect.value);
 
             if (bankField) {
-                bankField.classList.toggle('d-none', !isBankTransfer);
+                bankField.classList.toggle('d-none', !needsBank);
             }
 
             if (bankSelect) {
-                bankSelect.required = isBankTransfer && agreementBankAccounts.length > 0;
+                bankSelect.required = needsBank && agreementBankAccounts.length > 0;
 
-                if (!isBankTransfer) {
+                if (!needsBank) {
                     bankSelect.value = '';
+                } else if (methodSelect.value === 'Card Payment' && !bankSelect.value && defaultCardBankAccountId) {
+                    bankSelect.value = String(defaultCardBankAccountId);
                 }
             }
         }
@@ -1649,7 +2305,12 @@
                 updateDriverActiveAgreementWarning();
 
                 if (isReplacementVehicleStatusSelected()) {
-                    populateOriginalAgreementOptions();
+                    populateOriginalAgreementOptions('parent_agreement_id', selectedParentAgreementId);
+                }
+
+                if (isSwapStatusSelected()) {
+                    populateOriginalAgreementOptions('upgraded_from_agreement_id', selectedSwapOriginalAgreementId);
+                    applySwapOriginalAgreementDefaults();
                 }
             });
 
@@ -1658,14 +2319,24 @@
                     updateDriverActiveAgreementWarning();
 
                     if (isReplacementVehicleStatusSelected()) {
-                        populateOriginalAgreementOptions();
+                        populateOriginalAgreementOptions('parent_agreement_id', selectedParentAgreementId);
+                    }
+
+                    if (isSwapStatusSelected()) {
+                        populateOriginalAgreementOptions('upgraded_from_agreement_id', selectedSwapOriginalAgreementId);
+                        applySwapOriginalAgreementDefaults();
                     }
                 });
                 $('#status_id').on('change', function () {
                     toggleReplacementVehicleMode();
                     toggleClosingDateSection();
                 });
+                $('#upgraded_from_agreement_id').on('change', function () {
+                    applySwapOriginalAgreementDefaults();
+                });
             }
+
+            document.getElementById('upgraded_from_agreement_id')?.addEventListener('change', applySwapOriginalAgreementDefaults);
 
             document.getElementById('add_payment')?.addEventListener('change', toggleAgreementPaymentFields);
             document.getElementById('agreed_rent')?.addEventListener('input', function() {
@@ -1747,7 +2418,8 @@
             }
 
             window.fleetiqAgreementValidation = {
-                replacementVehicleStatusId: replacementVehicleStatusId
+                replacementVehicleStatusId: replacementVehicleStatusId,
+                swapStatusId: swapStatusId
             };
 
             const startDateInput = document.getElementById('start_date');

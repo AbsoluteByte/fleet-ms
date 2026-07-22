@@ -65,6 +65,7 @@ class InsuranceProviderController extends Controller
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'provider_name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
             'insurance_type' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0',
             'policy_number' => 'required|string|max:255',
@@ -121,6 +122,7 @@ class InsuranceProviderController extends Controller
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
             'provider_name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
             'insurance_type' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0',
             'policy_number' => 'required|string|max:255',

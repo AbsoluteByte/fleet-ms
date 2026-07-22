@@ -74,9 +74,9 @@ class ReportController extends Controller
             : null;
         $insuranceDateError = null;
         $insuranceRemovedInRange = collect();
-        $insuranceActivatedStillActive = collect();
-        $insuranceActivatedAndEnded = collect();
-        $insurancePreExisting = collect();
+        $insuranceActivatedInRange = collect();
+        $insuranceActivatedOrRemovedInRange = collect();
+        $insuranceActiveOnInsurance = collect();
 
         $reportCompanies = Company::query()
             ->where('tenant_id', $tenant->id)
@@ -106,14 +106,14 @@ class ReportController extends Controller
                 $insuranceRemovedInRange = $this->insuranceReportService->removedInRange(
                     $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
                 );
-                $insuranceActivatedStillActive = $this->insuranceReportService->activatedStillActive(
+                $insuranceActivatedInRange = $this->insuranceReportService->activatedInRange(
                     $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
                 );
-                $insuranceActivatedAndEnded = $this->insuranceReportService->activatedAndEndedInRange(
+                $insuranceActivatedOrRemovedInRange = $this->insuranceReportService->activatedOrRemovedInRange(
                     $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
                 );
-                $insurancePreExisting = $this->insuranceReportService->preExistingPolicies(
-                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                $insuranceActiveOnInsurance = $this->insuranceReportService->activeOnInsurance(
+                    $tenant->id, $insuranceCompanyId, $insuranceProviderId
                 );
             }
         }
@@ -168,9 +168,9 @@ class ReportController extends Controller
             'insuranceProviderId',
             'insuranceDateError',
             'insuranceRemovedInRange',
-            'insuranceActivatedStillActive',
-            'insuranceActivatedAndEnded',
-            'insurancePreExisting',
+            'insuranceActivatedInRange',
+            'insuranceActivatedOrRemovedInRange',
+            'insuranceActiveOnInsurance',
             'reportCompanies',
             'reportInsuranceProviders',
             'selectedInsuranceCompany',

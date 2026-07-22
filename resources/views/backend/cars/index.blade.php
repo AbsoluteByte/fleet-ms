@@ -60,7 +60,9 @@
                                         <th>Status</th>
                                         <th>PHV Council</th>
                                         <th>Insurance Status</th>
+                                        <th class="cars-available-from-col">Available From</th>
                                         <th>Actions</th>
+                                        <th>VIN</th>
                                     </tr>
                                     </thead>
                                     <tbody>
@@ -95,6 +97,9 @@
                                                 ->first();
                                             $phvExpiry = $latestPhv?->expiry_date;
                                             $phvExpiryIso = $phvExpiry ? $phvExpiry->format('Y-m-d') : '';
+                                            $terminationAgreement = $car->terminationNoticeAgreement();
+                                            $terminationNoticeIso = optional($terminationAgreement?->termination_notice_date)->format('Y-m-d') ?? '';
+                                            $terminationAvailableFromIso = optional($terminationAgreement?->termination_available_from_date)->format('Y-m-d') ?? '';
                                         @endphp
                                         <tr
                                             data-company="{{ $car->company->name }}"
@@ -113,6 +118,14 @@
                                             data-road-tax-missing="{{ $roadTaxExpiryIso === '' ? '1' : '0' }}"
                                             data-phv-expiry="{{ $phvExpiryIso }}"
                                             data-phv-missing="{{ $phvExpiryIso === '' ? '1' : '0' }}"
+                                            data-tracker-installed="{{ $car->tracker_installed ? '1' : '0' }}"
+                                            data-tracker-status="{{ $car->tracker_installed ? ($car->tracker_status ?? '') : '' }}"
+                                            data-dashcam-installed="{{ $car->dashcam_installed ? '1' : '0' }}"
+                                            data-dashcam-status="{{ $car->dashcam_installed ? ($car->dashcam_status ?? '') : '' }}"
+                                            data-tag-installed="{{ $car->tag_installed ? '1' : '0' }}"
+                                            data-tag-status="{{ $car->tag_installed ? ($car->tag_status ?? '') : '' }}"
+                                            data-termination-notice-date="{{ $terminationNoticeIso }}"
+                                            data-termination-available-from="{{ $terminationAvailableFromIso }}"
                                         >
                                             <td>
                                                 <strong>{{ $car->registration ?: '—' }}</strong>
@@ -142,20 +155,31 @@
                                                     </span>
                                                 @endif
                                             </td>
+                                            <td class="cars-available-from-col">
+                                                {{ $terminationAvailableFromIso ? \Carbon\Carbon::parse($terminationAvailableFromIso)->format('d M Y') : '—' }}
+                                            </td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <a href="{{ route('cars.show', $car) }}" class="btn btn-sm btn-outline-info">
+                                                    <a href="{{ route('cars.show', $car) }}"
+                                                       class="btn btn-sm btn-outline-info js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="View Car" aria-label="View Car">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
-                                                    <a href="{{ route('cars.edit', $car) }}" class="btn btn-sm btn-outline-warning">
+                                                    <a href="{{ route('cars.edit', $car) }}"
+                                                       class="btn btn-sm btn-outline-warning js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="Edit Car" aria-label="Edit Car">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
                                                     <span class="car-notifications-wrap">
                                                         <button type="button"
-                                                                class="btn btn-sm btn-outline-primary car-notifications-btn"
+                                                                class="btn btn-sm btn-outline-primary car-notifications-btn js-action-tooltip"
                                                                 data-notifications-url="{{ route('cars.notifications', $car) }}"
                                                                 data-registration="{{ $car->registration }}"
-                                                                title="View car notifications{{ $carNotificationCount > 0 ? ' (' . $carNotificationCount . ')' : '' }}">
+                                                                data-toggle="tooltip" data-placement="top"
+                                                                title="View Car Notifications{{ $carNotificationCount > 0 ? ' (' . $carNotificationCount . ')' : '' }}"
+                                                                aria-label="View Car Notifications">
                                                             <i class="fa fa-bell"></i>
                                                         </button>
                                                         @if($carNotificationCount > 0)
@@ -165,7 +189,9 @@
                                                     <form action="{{ route('cars.destroy', $car) }}" method="POST" style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger js-action-tooltip"
+                                                                data-toggle="tooltip" data-placement="top"
+                                                                title="Delete Car" aria-label="Delete Car"
                                                                 data-car-registration="{{ $car->registration }}"
                                                                 onclick="if (!confirm('Are you sure?')) { return false; } try { sessionStorage.setItem('fleetiq_deleted_car_registration', this.dataset.carRegistration || ''); } catch (e) {} return true;">
                                                             <i class="fa fa-trash"></i>
@@ -173,10 +199,11 @@
                                                     </form>
                                                 </div>
                                             </td>
+                                            <td>{{ $car->vin }}</td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted py-4">
+                                            <td colspan="10" class="text-center text-muted py-4">
                                                 <i class="fa fa-car fa-3x mb-3"></i>
                                                 <br>
                                                 No cars found. <a href="{{ route('cars.create') }}">Add your first car</a>
@@ -259,6 +286,22 @@
             </div>
 
             <div class="form-group">
+                <label class="d-block mb-50">Termination Notice</label>
+                <label class="small text-muted mb-25 d-block">Notice date between</label>
+                <div class="form-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsTerminationNoticeFrom">From</label>
+                        <input type="date" id="carsTerminationNoticeFrom" class="form-control cars-termination-notice-filter">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsTerminationNoticeTo">To</label>
+                        <input type="date" id="carsTerminationNoticeTo" class="form-control cars-termination-notice-filter">
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-50">Shows cars whose Active/Swap agreement has a termination notice in this range.</small>
+            </div>
+
+            <div class="form-group">
                 <label for="carsFilterModel">Make/Model</label>
                 <select id="carsFilterModel" class="form-control cars-advanced-filter" data-filter-key="model">
                     <option value="">All Models</option>
@@ -275,6 +318,60 @@
                     @foreach($filterColors as $color)
                         <option value="{{ $color }}">{{ $color }}</option>
                     @endforeach
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTrackerInstalled">Tracker</label>
+                <select id="carsFilterTrackerInstalled" class="form-control cars-advanced-filter" data-filter-key="trackerInstalled">
+                    <option value="">All</option>
+                    <option value="1">Installed</option>
+                    <option value="0">Uninstalled</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTrackerStatus">Tracker status</label>
+                <select id="carsFilterTrackerStatus" class="form-control cars-advanced-filter" data-filter-key="trackerStatus">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterDashcamInstalled">Dashcam</label>
+                <select id="carsFilterDashcamInstalled" class="form-control cars-advanced-filter" data-filter-key="dashcamInstalled">
+                    <option value="">All</option>
+                    <option value="1">Installed</option>
+                    <option value="0">Uninstalled</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterDashcamStatus">Dashcam status</label>
+                <select id="carsFilterDashcamStatus" class="form-control cars-advanced-filter" data-filter-key="dashcamStatus">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTagInstalled">Tag</label>
+                <select id="carsFilterTagInstalled" class="form-control cars-advanced-filter" data-filter-key="tagInstalled">
+                    <option value="">All</option>
+                    <option value="1">Installed</option>
+                    <option value="0">Uninstalled</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="carsFilterTagStatus">Tag status</label>
+                <select id="carsFilterTagStatus" class="form-control cars-advanced-filter" data-filter-key="tagStatus">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
                 </select>
             </div>
 
@@ -644,13 +741,21 @@
                 carStatus: '',
                 model: '',
                 color: '',
-                logBook: ''
+                logBook: '',
+                trackerInstalled: '',
+                trackerStatus: '',
+                dashcamInstalled: '',
+                dashcamStatus: '',
+                tagInstalled: '',
+                tagStatus: ''
             };
             const expiryFilters = {
                 mot: { from: '', to: '', includeMissing: false },
                 roadTax: { from: '', to: '', includeMissing: false },
                 phv: { from: '', to: '', includeMissing: false },
             };
+            const terminationNoticeFilter = { from: '', to: '' };
+            const availableFromColumnIndex = 7;
             const quickFilterLabels = {
                 available_by_phv: 'Available by PHV',
                 preparation_for_phvl: 'PHVL Preparation',
@@ -673,9 +778,23 @@
             }
             let quickFilter = '';
 
+            function initializeActionTooltips() {
+                $('.js-action-tooltip').tooltip({ container: 'body' });
+            }
+
             const dataTable = $('#dataTable').DataTable({
                 processing: true,
                 responsive: true,
+                columnDefs: [
+                    { targets: availableFromColumnIndex, visible: false },
+                    { targets: -1, visible: false, searchable: true }
+                ],
+            });
+
+            initializeActionTooltips();
+            dataTable.on('draw.dt responsive-display.dt', function () {
+                $('.tooltip').remove();
+                initializeActionTooltips();
             });
 
             const $filter = $('#dataTable_filter');
@@ -757,6 +876,37 @@
                 expiryFilters.phv.includeMissing = document.getElementById('carsIncludeMissingPhv').checked;
             }
 
+            function syncTerminationNoticeFilterFromForm() {
+                terminationNoticeFilter.from = document.getElementById('carsTerminationNoticeFrom').value;
+                terminationNoticeFilter.to = document.getElementById('carsTerminationNoticeTo').value;
+            }
+
+            function isTerminationNoticeFilterActive() {
+                return !!(terminationNoticeFilter.from || terminationNoticeFilter.to);
+            }
+
+            function passesTerminationNoticeFilter(row) {
+                if (!isTerminationNoticeFilterActive()) {
+                    return true;
+                }
+
+                const noticeDate = row.dataset.terminationNoticeDate || '';
+                if (!noticeDate) {
+                    return false;
+                }
+
+                return expiryInRange(noticeDate, terminationNoticeFilter.from, terminationNoticeFilter.to);
+            }
+
+            function toggleAvailableFromColumn(show) {
+                dataTable.column(availableFromColumnIndex).visible(show);
+            }
+
+            function drawCarsTable() {
+                toggleAvailableFromColumn(isTerminationNoticeFilterActive());
+                dataTable.draw();
+            }
+
             $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
                 if (settings.nTable.id !== 'dataTable') {
                     return true;
@@ -773,12 +923,43 @@
                     && (!advancedFilters.carStatus || row.dataset.fleetStatus === advancedFilters.carStatus)
                     && (!advancedFilters.model || row.dataset.model === advancedFilters.model)
                     && (!advancedFilters.color || row.dataset.color === advancedFilters.color)
+                    && passesAccessoryFilters(row)
                     && passesLogBookFilter(row)
                     && passesQuickFilter(row)
                     && passesExpiryFilter(row, expiryFilters.mot, 'motExpiry', 'motMissing')
                     && passesExpiryFilter(row, expiryFilters.roadTax, 'roadTaxExpiry', 'roadTaxMissing')
-                    && passesExpiryFilter(row, expiryFilters.phv, 'phvExpiry', 'phvMissing');
+                    && passesExpiryFilter(row, expiryFilters.phv, 'phvExpiry', 'phvMissing')
+                    && passesTerminationNoticeFilter(row);
             });
+
+            function passesAccessoryFilters(row) {
+                if (advancedFilters.trackerInstalled !== ''
+                    && row.dataset.trackerInstalled !== advancedFilters.trackerInstalled) {
+                    return false;
+                }
+                if (advancedFilters.trackerStatus
+                    && row.dataset.trackerStatus !== advancedFilters.trackerStatus) {
+                    return false;
+                }
+                if (advancedFilters.dashcamInstalled !== ''
+                    && row.dataset.dashcamInstalled !== advancedFilters.dashcamInstalled) {
+                    return false;
+                }
+                if (advancedFilters.dashcamStatus
+                    && row.dataset.dashcamStatus !== advancedFilters.dashcamStatus) {
+                    return false;
+                }
+                if (advancedFilters.tagInstalled !== ''
+                    && row.dataset.tagInstalled !== advancedFilters.tagInstalled) {
+                    return false;
+                }
+                if (advancedFilters.tagStatus
+                    && row.dataset.tagStatus !== advancedFilters.tagStatus) {
+                    return false;
+                }
+
+                return true;
+            }
 
             function passesLogBookFilter(row) {
                 if (advancedFilters.logBook !== 'awaiting') {
@@ -837,6 +1018,11 @@
                 dataTable.draw();
             });
 
+            $('.cars-termination-notice-filter').on('change input', function () {
+                syncTerminationNoticeFilterFromForm();
+                drawCarsTable();
+            });
+
             $('.cars-quick-filter').on('click', function () {
                 const selectedFilter = $(this).data('quick-filter');
                 quickFilter = quickFilter === selectedFilter ? '' : selectedFilter;
@@ -853,9 +1039,12 @@
                 expiryFilters.mot = { from: '', to: '', includeMissing: false };
                 expiryFilters.roadTax = { from: '', to: '', includeMissing: false };
                 expiryFilters.phv = { from: '', to: '', includeMissing: false };
+                $('#carsTerminationNoticeFrom, #carsTerminationNoticeTo').val('');
+                terminationNoticeFilter.from = '';
+                terminationNoticeFilter.to = '';
                 quickFilter = '';
                 updateQuickFilterButtons();
-                dataTable.draw();
+                drawCarsTable();
             });
 
             function formatYmd(date) {
@@ -952,6 +1141,16 @@
                 return label + ': ' + parts.join('; ');
             }
 
+            function getCarsExportHeaders() {
+                const headers = carsExportHeaders.slice();
+
+                if (isTerminationNoticeFilterActive()) {
+                    headers.splice(7, 0, 'Available From');
+                }
+
+                return headers;
+            }
+
             function buildCarsExportMeta() {
                 const lines = [];
                 const searchTerm = (dataTable.search() || '').trim();
@@ -984,12 +1183,42 @@
                     lines.push('Vehicle status: ' + selectedOptionText('carsFilterStatus'));
                 }
 
+                if (isTerminationNoticeFilterActive()) {
+                    const fromLabel = terminationNoticeFilter.from ? formatDisplayDate(terminationNoticeFilter.from) : 'any';
+                    const toLabel = terminationNoticeFilter.to ? formatDisplayDate(terminationNoticeFilter.to) : 'any';
+                    lines.push('Termination notice: ' + fromLabel + ' to ' + toLabel);
+                }
+
                 if (advancedFilters.model) {
                     lines.push('Make/Model: ' + advancedFilters.model);
                 }
 
                 if (advancedFilters.color) {
                     lines.push('Color: ' + advancedFilters.color);
+                }
+
+                if (advancedFilters.trackerInstalled !== '') {
+                    lines.push('Tracker: ' + (advancedFilters.trackerInstalled === '1' ? 'Installed' : 'Uninstalled'));
+                }
+
+                if (advancedFilters.trackerStatus) {
+                    lines.push('Tracker status: ' + (advancedFilters.trackerStatus === 'active' ? 'Active' : 'Inactive'));
+                }
+
+                if (advancedFilters.dashcamInstalled !== '') {
+                    lines.push('Dashcam: ' + (advancedFilters.dashcamInstalled === '1' ? 'Installed' : 'Uninstalled'));
+                }
+
+                if (advancedFilters.dashcamStatus) {
+                    lines.push('Dashcam status: ' + (advancedFilters.dashcamStatus === 'active' ? 'Active' : 'Inactive'));
+                }
+
+                if (advancedFilters.tagInstalled !== '') {
+                    lines.push('Tag: ' + (advancedFilters.tagInstalled === '1' ? 'Installed' : 'Uninstalled'));
+                }
+
+                if (advancedFilters.tagStatus) {
+                    lines.push('Tag status: ' + (advancedFilters.tagStatus === 'active' ? 'Active' : 'Inactive'));
                 }
 
                 [
@@ -1052,6 +1281,10 @@
                     row.push(formatDisplayDate(node.dataset.roadTaxExpiry || ''));
                     row.push(formatDisplayDate(node.dataset.phvExpiry || ''));
 
+                    if (isTerminationNoticeFilterActive()) {
+                        row.splice(7, 0, formatDisplayDate(node.dataset.terminationAvailableFrom || '') || '—');
+                    }
+
                     rows.push(row);
                 });
 
@@ -1061,6 +1294,7 @@
             function exportCarsCsv() {
                 const exportMeta = buildCarsExportMeta();
                 const bodyRows = collectCarsExportRows();
+                const exportHeaders = getCarsExportHeaders();
 
                 if (bodyRows.length === 0) {
                     alert('No records to export. Adjust your search or filters and try again.');
@@ -1072,7 +1306,7 @@
                     lines.push(csvEscape(line));
                 });
                 lines.push('');
-                lines.push(carsExportHeaders.map(csvEscape).join(','));
+                lines.push(exportHeaders.map(csvEscape).join(','));
                 bodyRows.forEach(function (row) {
                     lines.push(row.map(csvEscape).join(','));
                 });
@@ -1083,6 +1317,7 @@
             function exportCarsPdf() {
                 const exportMeta = buildCarsExportMeta();
                 const bodyRows = collectCarsExportRows();
+                const exportHeaders = getCarsExportHeaders();
 
                 if (bodyRows.length === 0) {
                     alert('No records to export. Adjust your search or filters and try again.');
@@ -1095,7 +1330,7 @@
                 }
 
                 const tableBody = [
-                    carsExportHeaders.map(function (header) {
+                    exportHeaders.map(function (header) {
                         return { text: header, style: 'tableHeader' };
                     })
                 ];
@@ -1130,7 +1365,7 @@
                         {
                             table: {
                                 headerRows: 1,
-                                widths: carsExportHeaders.map(function () { return '*'; }),
+                                widths: exportHeaders.map(function () { return '*'; }),
                                 body: tableBody
                             },
                             layout: 'lightHorizontalLines'

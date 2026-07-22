@@ -14,9 +14,11 @@ class Agreement extends Model
     public const PDF_END_TIME = '11:00';
 
     protected $fillable = [
-        'tenant_id', 'company_id', 'start_date', 'end_date', 'billing_anchor_date', 'driver_id',
+        'tenant_id', 'company_id', 'start_date', 'end_date', 'billing_anchor_date', 'driver_id', 'paying_company_name',
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
-        'deposit_amount', 'discount_type', 'discount_value', 'discount_notes', 'security_deposit', 'mileage_out', 'mileage_in',
+        'deposit_amount', 'discount_type', 'discount_value', 'discount_notes',
+        'discount_is_one_time', 'discount_started_at', 'discount_consumed_at', 'discount_consumed_invoice_id',
+        'security_deposit', 'mileage_out', 'mileage_in',
         'collection_type', 'auto_schedule_collections', 'next_collection_date',
         'condition_report', 'notes', 'status_id', 'parent_agreement_id', 'upgraded_from_agreement_id',
         'swap_reason', 'swap_phvl_issue_type', 'swap_phvl_issue_notes', 'swap_reason_notes',
@@ -47,6 +49,10 @@ class Agreement extends Model
         'agreed_rent' => 'decimal:2',
         'deposit_amount' => 'decimal:2',
         'discount_value' => 'decimal:2',
+        'discount_is_one_time' => 'boolean',
+        'discount_started_at' => 'datetime',
+        'discount_consumed_at' => 'datetime',
+        'discount_consumed_invoice_id' => 'integer',
         'security_deposit' => 'decimal:2',
         'auto_schedule_collections' => 'boolean',
 
@@ -84,6 +90,108 @@ class Agreement extends Model
         return $this->belongsTo(Status::class);
     }
 
+    public function depositRefund()
+    {
+        return $this->hasOne(DepositRefund::class);
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class, 'source_id')
+            ->whereIn('invoice_type', ['agreement', 'agreement_deposit', 'agreement_additional_charge']);
+    }
+
+    public function discountConsumedInvoice()
+    {
+        return $this->belongsTo(Invoice::class, 'discount_consumed_invoice_id');
+    }
+
+    public function hasConfiguredDiscount(): bool
+    {
+        return in_array($this->discount_type, ['percentage', 'fixed'], true)
+            && (float) $this->discount_value > 0;
+    }
+
+    public function hasPendingOneTimeDiscount(): bool
+    {
+        return $this->hasConfiguredDiscount()
+            && (bool) $this->discount_is_one_time
+            && $this->discount_consumed_invoice_id === null;
+    }
+
+    public function discountAmountFor(float $subtotal): float
+    {
+        $subtotal = round(max($subtotal, 0), 2);
+        if (! $this->hasConfiguredDiscount() || $subtotal <= 0) {
+            return 0;
+        }
+
+        if ($this->discount_type === 'percentage') {
+            return round(min($subtotal * ((float) $this->discount_value / 100), $subtotal), 2);
+        }
+
+        return round(min((float) $this->discount_value, $subtotal), 2);
+    }
+
+    public function getDiscountedRentAttribute(): float
+    {
+        $rent = round((float) $this->agreed_rent, 2);
+
+        return round(max($rent - $this->discountAmountFor($rent), 0), 2);
+    }
+
+    public function deductions()
+    {
+        return $this->hasMany(AgreementDeduction::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function additionalCharges()
+    {
+        return $this->hasMany(AgreementAdditionalCharge::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function getDeductionsTotalAttribute(): float
+    {
+        if ($this->relationLoaded('deductions')) {
+            return round((float) $this->deductions->sum('amount'), 2);
+        }
+
+        return round((float) $this->deductions()->sum('amount'), 2);
+    }
+
+    public function isClosedForDepositRefund(): bool
+    {
+        $name = strtolower((string) optional($this->status)->name);
+
+        return in_array($name, ['expired', 'terminated'], true);
+    }
+
+    public function canRequestDepositRefund(): bool
+    {
+        return $this->isClosedForDepositRefund()
+            && (float) $this->deposit_amount > 0
+            && ! $this->hasBeenUpgraded()
+            && ! $this->depositRefund()->exists();
+    }
+
+    /**
+     * @return null|'pending'|'posted'
+     */
+    public function depositRefundStatus(): ?string
+    {
+        $refund = $this->relationLoaded('depositRefund')
+            ? $this->depositRefund
+            : $this->depositRefund()->first();
+
+        if (! $refund) {
+            return null;
+        }
+
+        return $refund->isPosted()
+            ? DepositRefund::POSTING_STATUS_POSTED
+            : DepositRefund::POSTING_STATUS_PENDING;
+    }
+
     public function parentAgreement()
     {
         return $this->belongsTo(self::class, 'parent_agreement_id');
@@ -117,6 +225,27 @@ class Agreement extends Model
     public function isReplacementVehicle(): bool
     {
         return strcasecmp((string) optional($this->status)->name, 'Replacement Vehicle') === 0;
+    }
+
+    public function isSwapAgreement(): bool
+    {
+        return strcasecmp((string) optional($this->status)->name, 'Swap') === 0;
+    }
+
+    public function isBillableStatus(): bool
+    {
+        $name = strtolower(trim((string) optional($this->status)->name));
+
+        return in_array($name, ['active', 'swap'], true);
+    }
+
+    public function effectiveCloseDate(): ?Carbon
+    {
+        if ($this->closing_date) {
+            return $this->closing_date->copy();
+        }
+
+        return $this->end_date?->copy();
     }
 
     public function previousVehicleRegistration(): ?string
@@ -194,7 +323,7 @@ class Agreement extends Model
     public function scopeBillable($query)
     {
         return $query->whereHas('status', function ($statusQuery) {
-            $statusQuery->where('name', '!=', 'Replacement Vehicle');
+            $statusQuery->whereIn('name', ['Active', 'Swap']);
         });
     }
 
@@ -204,6 +333,8 @@ class Agreement extends Model
 
         return $query
             ->whereNull('parent_agreement_id')
+            ->whereNull('upgraded_from_agreement_id')
+            ->whereDoesntHave('upgradedToAgreement')
             ->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Active'))
             ->whereDate('start_date', '<=', $today)
             ->whereDate('end_date', '>=', $today);
@@ -214,20 +345,20 @@ class Agreement extends Model
         $today = now()->startOfDay();
 
         return $query
-            ->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Active'))
+            ->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
             ->whereDate('start_date', '<=', $today)
             ->whereDate('end_date', '>=', $today);
     }
 
     /**
-     * Active-status agreements assigned to a vehicle, including future start dates.
+     * Active/Swap-status agreements assigned to a vehicle, including future start dates.
      */
     public function scopeWithActiveAssignment($query)
     {
         $today = now()->startOfDay();
 
         return $query
-            ->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Active'))
+            ->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
             ->whereNull('termination_notice_date')
             ->whereDate('end_date', '>=', $today);
     }
@@ -422,6 +553,10 @@ class Agreement extends Model
 
     public function getTotalOutstandingAttribute()
     {
+        if ($this->invoices()->exists()) {
+            return round((float) $this->invoices()->sum('balance_amount'), 2);
+        }
+
         return $this->collections()
             ->whereIn('payment_status', ['pending', 'overdue'])
             ->sum('amount');
@@ -429,6 +564,10 @@ class Agreement extends Model
 
     public function getTotalPaidAttribute()
     {
+        if ($this->invoices()->exists()) {
+            return round((float) $this->invoices()->sum('paid_amount'), 2);
+        }
+
         return $this->collections()
             ->where('payment_status', 'paid')
             ->sum('amount_paid');

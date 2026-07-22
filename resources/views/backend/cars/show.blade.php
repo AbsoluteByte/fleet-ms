@@ -93,6 +93,141 @@
                                     @endif
                                 </div>
                             @endif
+                            <div class="col-12 mb-4">
+                                <h4 class="border-bottom pb-2 mb-3 mt-2">Accessories</h4>
+                                <style>
+                                    .car-accessory-view-card {
+                                        border: 1px solid #ebe9f1;
+                                        border-radius: 0.5rem;
+                                        padding: 1.25rem;
+                                        height: 100%;
+                                        background: #fff;
+                                    }
+                                    .car-accessory-view-card__title {
+                                        font-size: 1rem;
+                                        font-weight: 600;
+                                        margin-bottom: 1rem;
+                                        color: #5e5873;
+                                    }
+                                    .car-accessory-view-label {
+                                        display: block;
+                                        font-size: 0.85rem;
+                                        font-weight: 500;
+                                        color: #6e6b7b;
+                                        margin-bottom: 0.4rem;
+                                    }
+                                    .car-accessory-view-toggle {
+                                        display: inline-flex;
+                                        width: 100%;
+                                        border-radius: 0.428rem;
+                                        overflow: hidden;
+                                        border: 1px solid #7367f0;
+                                        margin-bottom: 0.85rem;
+                                        pointer-events: none;
+                                    }
+                                    .car-accessory-view-toggle__btn {
+                                        flex: 1 1 50%;
+                                        border: 0;
+                                        background: #fff;
+                                        color: #7367f0;
+                                        font-weight: 500;
+                                        font-size: 0.875rem;
+                                        padding: 0.65rem 0.75rem;
+                                        line-height: 1.2;
+                                        text-align: center;
+                                    }
+                                    .car-accessory-view-toggle__btn + .car-accessory-view-toggle__btn {
+                                        border-left: 1px solid #7367f0;
+                                    }
+                                    .car-accessory-view-toggle__btn.is-active {
+                                        background: #7367f0;
+                                        color: #fff;
+                                    }
+                                    .car-accessory-view-toggle--status {
+                                        border-color: #28c76f;
+                                    }
+                                    .car-accessory-view-toggle--status .car-accessory-view-toggle__btn {
+                                        color: #28c76f;
+                                    }
+                                    .car-accessory-view-toggle--status .car-accessory-view-toggle__btn + .car-accessory-view-toggle__btn {
+                                        border-left-color: #28c76f;
+                                    }
+                                    .car-accessory-view-toggle--status .car-accessory-view-toggle__btn.is-active {
+                                        background: #28c76f;
+                                        color: #fff;
+                                    }
+                                    .car-accessory-view-toggle--status.car-accessory-view-toggle--inactive .car-accessory-view-toggle__btn {
+                                        color: #ea5455;
+                                    }
+                                    .car-accessory-view-toggle--status.car-accessory-view-toggle--inactive {
+                                        border-color: #ea5455;
+                                    }
+                                    .car-accessory-view-toggle--status.car-accessory-view-toggle--inactive .car-accessory-view-toggle__btn + .car-accessory-view-toggle__btn {
+                                        border-left-color: #ea5455;
+                                    }
+                                    .car-accessory-view-toggle--status.car-accessory-view-toggle--inactive .car-accessory-view-toggle__btn.is-active {
+                                        background: #ea5455;
+                                        color: #fff;
+                                    }
+                                    .car-accessory-view-notes {
+                                        margin-top: 0.25rem;
+                                        padding: 0.75rem 0.9rem;
+                                        background: #f8f8f8;
+                                        border-radius: 0.428rem;
+                                        color: #6e6b7b;
+                                        white-space: pre-wrap;
+                                        min-height: 2.5rem;
+                                    }
+                                </style>
+                                <div class="row">
+                                    @foreach([
+                                        [
+                                            'title' => 'Tracker',
+                                            'icon' => 'fa-map-marker-alt',
+                                            'installed' => (bool) $car->tracker_installed,
+                                            'status' => $car->tracker_status === 'inactive' ? 'inactive' : 'active',
+                                            'notes' => $car->tracker_notes,
+                                        ],
+                                        [
+                                            'title' => 'Dashcam',
+                                            'icon' => 'fa-video',
+                                            'installed' => (bool) $car->dashcam_installed,
+                                            'status' => $car->dashcam_status === 'inactive' ? 'inactive' : 'active',
+                                            'notes' => $car->dashcam_notes,
+                                        ],
+                                        [
+                                            'title' => 'Tag',
+                                            'icon' => 'fa-tag',
+                                            'installed' => (bool) $car->tag_installed,
+                                            'status' => $car->tag_status === 'inactive' ? 'inactive' : 'active',
+                                            'notes' => $car->tag_notes,
+                                        ],
+                                    ] as $accessory)
+                                        <div class="col-lg-4 col-md-6 mb-2">
+                                            <div class="car-accessory-view-card">
+                                                <div class="car-accessory-view-card__title">
+                                                    <i class="fa {{ $accessory['icon'] }} text-primary mr-50"></i> {{ $accessory['title'] }}
+                                                </div>
+                                                <span class="car-accessory-view-label">Install status</span>
+                                                <div class="car-accessory-view-toggle" aria-label="{{ $accessory['title'] }} install status">
+                                                    <span class="car-accessory-view-toggle__btn {{ ! $accessory['installed'] ? 'is-active' : '' }}">Uninstalled</span>
+                                                    <span class="car-accessory-view-toggle__btn {{ $accessory['installed'] ? 'is-active' : '' }}">Installed</span>
+                                                </div>
+                                                @if($accessory['installed'])
+                                                    <span class="car-accessory-view-label">Status</span>
+                                                    <div class="car-accessory-view-toggle car-accessory-view-toggle--status {{ $accessory['status'] === 'inactive' ? 'car-accessory-view-toggle--inactive' : '' }}"
+                                                         aria-label="{{ $accessory['title'] }} status">
+                                                        <span class="car-accessory-view-toggle__btn {{ $accessory['status'] === 'inactive' ? 'is-active' : '' }}">Inactive</span>
+                                                        <span class="car-accessory-view-toggle__btn {{ $accessory['status'] === 'active' ? 'is-active' : '' }}">Active</span>
+                                                    </div>
+                                                    <span class="car-accessory-view-label">Notes</span>
+                                                    <div class="car-accessory-view-notes">{{ $accessory['notes'] ?: '—' }}</div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
                             @if($car->fleet_status === 'damaged' && $car->phvlSuspensionHistories->isNotEmpty())
                                 <div class="col-12 mb-4">
                                     <h4 class="border-bottom pb-2 mb-3 mt-2">PHVL suspension history</h4>

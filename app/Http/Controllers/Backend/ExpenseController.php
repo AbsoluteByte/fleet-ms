@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
-use App\Models\Expense;
 use App\Models\Car;
+use App\Models\Expense;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -13,7 +13,9 @@ use Illuminate\Support\Str;
 class ExpenseController extends Controller
 {
     protected $url = 'expenses.';
+
     protected $dir = 'backend.expenses.';
+
     protected $name = 'Expenses';
 
     public function __construct()
@@ -29,32 +31,33 @@ class ExpenseController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $expenses = Expense::where('tenant_id', $tenant->id)->with('car')->latest()->paginate(10);
-        return view($this->dir . 'index', compact('expenses'));
+        $expenses = Expense::where('tenant_id', $tenant->id)->carLinked()->with('car')->latest()->paginate(10);
+
+        return view($this->dir.'index', compact('expenses'));
     }
 
     public function create()
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
         $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'company'])->get();
-        return view($this->dir . 'create', compact('cars'));
-    }
 
+        return view($this->dir.'create', compact('cars'));
+    }
 
     public function store(Request $request)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -74,9 +77,9 @@ class ExpenseController extends Controller
                 $dims = getimagesize($file);
                 $width = $dims[0];
                 $height = $dims[1];
-                $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
+                $name = time().'-'.$width.'-'.$height.'.'.$file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time().'.'.$file->extension();
             }
             $path = public_path('uploads/expense_documents/');
             $file = $request->file('document');
@@ -84,12 +87,13 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-        // ✅ Add tenant_id automatically
         $validated['tenant_id'] = $tenant->id;
+        $validated['posting_status'] = Expense::POSTING_STATUS_PENDING;
+        $validated['created_by'] = Auth::id();
         Expense::create($validated);
 
         return redirect()->route('expenses.index')
-            ->with('success', 'Expense created successfully.');
+            ->with('success', 'Expense recorded. It will appear on the daily financial sheet until approval.');
     }
 
     public function show(Expense $expense)
@@ -102,6 +106,7 @@ class ExpenseController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
         $expense->load('car');
+
         return view('expenses.show', compact('expense'));
     }
 
@@ -109,7 +114,7 @@ class ExpenseController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -117,14 +122,14 @@ class ExpenseController extends Controller
         $model = Expense::where('tenant_id', $tenant->id)->findOrFail($id);
         $cars = Car::where('tenant_id', $tenant->id)->with(['carModel', 'company'])->get();
 
-        return view($this->dir . 'edit', compact('model', 'cars'));
+        return view($this->dir.'edit', compact('model', 'cars'));
     }
 
     public function update(Request $request, Expense $expense)
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -144,16 +149,16 @@ class ExpenseController extends Controller
                 $dims = getimagesize($file);
                 $width = $dims[0];
                 $height = $dims[1];
-                $name = time() . '-' . $width . '-' . $height . '.' . $file->extension();
+                $name = time().'-'.$width.'-'.$height.'.'.$file->extension();
             } else {
-                $name = time() . '.' . $file->extension();
+                $name = time().'.'.$file->extension();
             }
             $path = public_path('uploads/expense_documents/');
             $file = $request->file('document');
             $oldImage = $expense->document;
             if ($file->move($path, $name)) {
                 if ($oldImage) {
-                    $image_path = public_path('uploads/expense_documents/' . $oldImage);
+                    $image_path = public_path('uploads/expense_documents/'.$oldImage);
                     if (File::exists($image_path)) {
                         File::delete($image_path);
                     }
@@ -161,7 +166,6 @@ class ExpenseController extends Controller
                 $validated['document'] = $name;
             }
         }
-        // ✅ Ensure tenant_id stays the same
         $validated['tenant_id'] = $tenant->id;
         $expense->update($validated);
 
@@ -178,7 +182,7 @@ class ExpenseController extends Controller
             abort(403, 'Unauthorized access');
         }
         if ($expense) {
-            $image_path = public_path('uploads/expense_documents/' . $expense->document);
+            $image_path = public_path('uploads/expense_documents/'.$expense->document);
             if (File::exists($image_path)) {
                 File::delete($image_path);
             }

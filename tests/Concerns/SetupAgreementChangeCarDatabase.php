@@ -149,6 +149,10 @@ trait SetupAgreementChangeCarDatabase
             $table->string('discount_type')->nullable();
             $table->decimal('discount_value', 10, 2)->nullable();
             $table->text('discount_notes')->nullable();
+            $table->boolean('discount_is_one_time')->default(false);
+            $table->dateTime('discount_started_at')->nullable();
+            $table->dateTime('discount_consumed_at')->nullable();
+            $table->unsignedBigInteger('discount_consumed_invoice_id')->nullable();
             $table->boolean('using_own_insurance')->nullable()->default(false);
             $table->unsignedBigInteger('insurance_provider_id')->nullable();
             $table->string('own_insurance_provider_name')->nullable();
@@ -185,6 +189,12 @@ trait SetupAgreementChangeCarDatabase
             $table->decimal('balance_amount', 12, 2)->default(0);
             $table->string('status')->default('pending');
             $table->text('notes')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->boolean('auto_allocate')->default(true);
+            $table->unsignedBigInteger('allocation_source_id')->nullable();
+            $table->json('allocation_invoice_types')->nullable();
+            $table->json('pending_manual_allocations')->nullable();
             $table->timestamps();
         });
 
@@ -197,6 +207,12 @@ trait SetupAgreementChangeCarDatabase
             $table->date('payment_date')->nullable();
             $table->decimal('amount', 12, 2)->default(0);
             $table->text('notes')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->boolean('auto_allocate')->default(true);
+            $table->unsignedBigInteger('allocation_source_id')->nullable();
+            $table->json('allocation_invoice_types')->nullable();
+            $table->json('pending_manual_allocations')->nullable();
             $table->timestamps();
         });
 

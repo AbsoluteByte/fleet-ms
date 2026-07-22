@@ -10,10 +10,6 @@ use Illuminate\Support\Collection;
 
 class InsuranceDateRangeReportService
 {
-    public function __construct(
-        private readonly InsuranceStatusResolver $statusResolver,
-    ) {}
-
     /**
      * @return Collection<int, object>
      */
@@ -35,9 +31,11 @@ class InsuranceDateRangeReportService
     }
 
     /**
+     * Policies whose start_date falls in the selected range (whether still active or not).
+     *
      * @return Collection<int, object>
      */
-    public function activatedStillActive(
+    public function activatedInRange(
         int $tenantId,
         CarbonInterface $from,
         CarbonInterface $to,
@@ -49,6 +47,40 @@ class InsuranceDateRangeReportService
             ->whereDate('start_date', '>=', $from->toDateString())
             ->whereDate('start_date', '<=', $to->toDateString())
             ->orderBy('start_date')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (CarInsurance $policy) => $this->mapRow($policy));
+    }
+
+    /**
+     * Full merge of removed-in-range and activated-in-range (duplicates allowed).
+     *
+     * @return Collection<int, object>
+     */
+    public function activatedOrRemovedInRange(
+        int $tenantId,
+        CarbonInterface $from,
+        CarbonInterface $to,
+        ?int $companyId = null,
+        ?int $insuranceProviderId = null,
+    ): Collection {
+        return $this->removedInRange($tenantId, $from, $to, $companyId, $insuranceProviderId)
+            ->merge($this->activatedInRange($tenantId, $from, $to, $companyId, $insuranceProviderId))
+            ->values();
+    }
+
+    /**
+     * Currently active insurance policies. Date range is not applied.
+     *
+     * @return Collection<int, object>
+     */
+    public function activeOnInsurance(
+        int $tenantId,
+        ?int $companyId = null,
+        ?int $insuranceProviderId = null,
+    ): Collection {
+        return $this->baseQuery($tenantId, $companyId, $insuranceProviderId)
+            ->whereNotNull('start_date')
             ->orderBy('id')
             ->get()
             ->filter(function (CarInsurance $policy) {
@@ -61,56 +93,12 @@ class InsuranceDateRangeReportService
 
                 return $active && (int) $active->id === (int) $policy->id;
             })
+            ->sortBy([
+                fn ($policy) => strtolower((string) ($policy->car?->registration ?? '')),
+                fn ($policy) => optional($policy->start_date)->timestamp ?? 0,
+                fn ($policy) => $policy->id,
+            ])
             ->values()
-            ->map(fn (CarInsurance $policy) => $this->mapRow($policy));
-    }
-
-    /**
-     * @return Collection<int, object>
-     */
-    public function activatedAndEndedInRange(
-        int $tenantId,
-        CarbonInterface $from,
-        CarbonInterface $to,
-        ?int $companyId = null,
-        ?int $insuranceProviderId = null,
-    ): Collection {
-        $cancelledStatusIds = $this->statusResolver->cancelledStatusIds();
-
-        return $this->baseQuery($tenantId, $companyId, $insuranceProviderId)
-            ->whereNotNull('start_date')
-            ->whereNotNull('canceled_date')
-            ->whereIn('status_id', $cancelledStatusIds)
-            ->whereDate('start_date', '>=', $from->toDateString())
-            ->whereDate('start_date', '<=', $to->toDateString())
-            ->whereDate('canceled_date', '>=', $from->toDateString())
-            ->whereDate('canceled_date', '<=', $to->toDateString())
-            ->orderBy('start_date')
-            ->orderBy('id')
-            ->get()
-            ->map(fn (CarInsurance $policy) => $this->mapRow($policy));
-    }
-
-    /**
-     * @return Collection<int, object>
-     */
-    public function preExistingPolicies(
-        int $tenantId,
-        CarbonInterface $from,
-        CarbonInterface $to,
-        ?int $companyId = null,
-        ?int $insuranceProviderId = null,
-    ): Collection {
-        return $this->baseQuery($tenantId, $companyId, $insuranceProviderId)
-            ->whereNotNull('start_date')
-            ->whereDate('start_date', '<', $from->toDateString())
-            ->where(function ($q) use ($from) {
-                $q->whereNull('canceled_date')
-                    ->orWhereDate('canceled_date', '>', $from->toDateString());
-            })
-            ->orderBy('start_date')
-            ->orderBy('id')
-            ->get()
             ->map(fn (CarInsurance $policy) => $this->mapRow($policy));
     }
 
@@ -146,6 +134,7 @@ class InsuranceDateRangeReportService
         $car = $policy->car;
 
         return (object) [
+            'policy_id' => $policy->id,
             'car_id' => $car?->id,
             'registration' => $car?->registration ?? '—',
             'company' => $car?->company?->name ?? '—',

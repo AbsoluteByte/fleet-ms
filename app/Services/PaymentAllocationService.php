@@ -5,20 +5,29 @@ namespace App\Services;
 use App\Models\Driver;
 use App\Models\Invoice;
 use App\Models\Payment;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PaymentAllocationService
 {
-    public function createPayment(Driver $driver, array $paymentData, bool $autoManageInvoices, array $manualAllocations = []): Payment
-    {
-        return DB::transaction(function () use ($driver, $paymentData, $autoManageInvoices, $manualAllocations) {
-            $payment = $driver->payments()->create($paymentData);
+    public function createPayment(
+        Driver $driver,
+        array $paymentData,
+        bool $autoManageInvoices,
+        array $manualAllocations = [],
+        bool $postImmediately = false
+    ): Payment {
+        return DB::transaction(function () use ($driver, $paymentData, $autoManageInvoices, $manualAllocations, $postImmediately) {
+            $payment = $driver->payments()->create(array_merge([
+                'posting_status' => $postImmediately ? Payment::POSTING_STATUS_POSTED : Payment::POSTING_STATUS_PENDING,
+                'created_by' => Auth::id(),
+                'auto_allocate' => $autoManageInvoices,
+                'pending_manual_allocations' => $autoManageInvoices ? null : $manualAllocations,
+            ], $paymentData));
 
-            if ($autoManageInvoices) {
-                $this->autoAllocate($payment);
-            } else {
-                $this->manualAllocate($payment, $manualAllocations);
+            if ($postImmediately) {
+                $this->postPayment($payment);
             }
 
             return $payment->fresh(['driver', 'allocations.invoice']);
@@ -31,8 +40,34 @@ class PaymentAllocationService
     public function createPaymentForInvoices(Driver $driver, array $paymentData, int $sourceId, array $invoiceTypes): Payment
     {
         return DB::transaction(function () use ($driver, $paymentData, $sourceId, $invoiceTypes) {
-            $payment = $driver->payments()->create($paymentData);
-            $this->autoAllocateForSource($payment, $sourceId, $invoiceTypes);
+            $payment = $driver->payments()->create(array_merge([
+                'posting_status' => Payment::POSTING_STATUS_PENDING,
+                'created_by' => Auth::id(),
+                'auto_allocate' => false,
+                'allocation_source_id' => $sourceId,
+                'allocation_invoice_types' => $invoiceTypes,
+            ], $paymentData));
+
+            return $payment->fresh(['driver', 'allocations.invoice']);
+        });
+    }
+
+    public function postPayment(Payment $payment): Payment
+    {
+        if ($payment->isPosted()) {
+            return $payment;
+        }
+
+        return DB::transaction(function () use ($payment) {
+            $payment->update(['posting_status' => Payment::POSTING_STATUS_POSTED]);
+
+            if ($payment->allocation_source_id && is_array($payment->allocation_invoice_types)) {
+                $this->autoAllocateForSource($payment, $payment->allocation_source_id, $payment->allocation_invoice_types);
+            } elseif ($payment->auto_allocate) {
+                $this->autoAllocate($payment);
+            } elseif (is_array($payment->pending_manual_allocations)) {
+                $this->manualAllocate($payment, $payment->pending_manual_allocations);
+            }
 
             return $payment->fresh(['driver', 'allocations.invoice']);
         });
@@ -56,8 +91,12 @@ class PaymentAllocationService
                 break;
             }
 
-            $invoiceBalance = (float) $invoice->balance_amount;
+            $invoiceBalance = max((float) $invoice->balance_amount - $invoice->reserved_credit_amount, 0);
             $allocatedAmount = min($remainingAmount, $invoiceBalance);
+
+            if ($allocatedAmount <= 0) {
+                continue;
+            }
 
             $this->createAllocation($payment, $invoice, $allocatedAmount);
             $remainingAmount = round($remainingAmount - $allocatedAmount, 2);
@@ -87,8 +126,12 @@ class PaymentAllocationService
                 break;
             }
 
-            $invoiceBalance = (float) $invoice->balance_amount;
+            $invoiceBalance = max((float) $invoice->balance_amount - $invoice->reserved_credit_amount, 0);
             $allocatedAmount = min($remainingAmount, $invoiceBalance);
+
+            if ($allocatedAmount <= 0) {
+                continue;
+            }
 
             $this->createAllocation($payment, $invoice, $allocatedAmount);
             $remainingAmount = round($remainingAmount - $allocatedAmount, 2);
@@ -128,7 +171,11 @@ class PaymentAllocationService
                 ]);
             }
 
-            if ($amount > (float) $invoice->balance_amount) {
+            $availableInvoiceBalance = max(
+                (float) $invoice->balance_amount - $invoice->reserved_credit_amount,
+                0
+            );
+            if ($amount > $availableInvoiceBalance) {
                 throw ValidationException::withMessages([
                     "allocations.{$invoiceId}" => 'Allocation cannot be greater than invoice balance.',
                 ]);
@@ -151,10 +198,14 @@ class PaymentAllocationService
                 return;
             }
 
-            $remainingBalance = (float) $invoice->balance_amount;
+            $remainingBalance = max(
+                (float) $invoice->balance_amount - $invoice->reserved_credit_amount,
+                0
+            );
 
             $payments = Payment::query()
                 ->where('driver_id', $invoice->driver_id)
+                ->posted()
                 ->orderBy('payment_date')
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -165,8 +216,7 @@ class PaymentAllocationService
                     break;
                 }
 
-                $allocatedAmount = (float) $payment->allocations()->sum('allocated_amount');
-                $availableCredit = max((float) $payment->amount - $allocatedAmount, 0);
+                $availableCredit = $payment->spendable_credit_amount;
 
                 if ($availableCredit <= 0) {
                     continue;

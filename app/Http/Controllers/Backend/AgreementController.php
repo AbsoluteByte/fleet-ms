@@ -5,20 +5,23 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Mail\AgreementClientDocumentsMail;
 use App\Models\Agreement;
+use App\Models\AgreementAdditionalCharge;
 use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\Company;
 use App\Models\Driver;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Status;
 use App\Models\Tenant;
-use App\Services\AgreementInvoiceService;
-use App\Services\AgreementUpgradeService;
 use App\Services\AgreementClientDocumentsService;
+use App\Services\AgreementDepositSettlementService;
+use App\Services\AgreementInvoiceService;
 use App\Services\AgreementPdfService;
+use App\Services\AgreementUpgradeService;
 use App\Services\CarFleetComplianceService;
-use App\Services\DriverPersistenceService;
+use App\Services\DriverAgreementStatusService;
 use App\Services\PaymentAllocationService;
 // Add this
 use Carbon\Carbon;
@@ -61,11 +64,19 @@ class AgreementController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status', 'parentAgreement'])
+        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status', 'parentAgreement', 'depositRefund', 'deductions', 'upgradedToAgreement'])
             ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
             ->get();
+        $settlementService = app(AgreementDepositSettlementService::class);
+        $agreements->each(function (Agreement $agreement) use ($settlementService) {
+            if ($agreement->canRequestDepositRefund()) {
+                $agreement->setAttribute('deposit_settlement_preview', $settlementService->preview($agreement));
+            }
+        });
 
-        return view($this->dir.'index', compact('agreements'));
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+
+        return view($this->dir.'index', compact('agreements', 'bankAccounts'));
     }
 
     public function create(Request $request)
@@ -88,6 +99,7 @@ class AgreementController extends Controller
         $agreementPaymentAllowed = true;
         $originalAgreements = $this->originalAgreementsForForm($tenant);
         $replacementVehicleStatusId = $this->replacementVehicleStatusId();
+        $swapStatusId = $this->swapStatusId();
         $driversActiveAgreements = $this->driversActiveAgreementsForForm($tenant);
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
         $reservationPrefill = null;
@@ -116,7 +128,7 @@ class AgreementController extends Controller
             }
         }
 
-        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'driversActiveAgreements', 'bankAccounts', 'reservationPrefill', 'driverProfileIncomplete', 'missingDriverFields'));
+        return view($this->dir.'create', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'swapStatusId', 'driversActiveAgreements', 'bankAccounts', 'reservationPrefill', 'driverProfileIncomplete', 'missingDriverFields'));
     }
 
     public function store(Request $request)
@@ -133,11 +145,36 @@ class AgreementController extends Controller
             ->findOrFail($validated['driver_id']);
         $this->assertDriverProfileCompleteForAgreement($driver);
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $validated['status_id']);
+        $isSwap = $this->isSwapStatusId((int) $validated['status_id']);
         $this->assertEndDateOnOrAfterStartDate($validated);
-        $this->assertBillingAnchorDate($validated, $isReplacementVehicle);
+        $this->assertBillingAnchorDate($validated, $isReplacementVehicle || $isSwap);
 
         if ($isReplacementVehicle) {
             $this->assertReplacementVehicleParentAgreement($validated, $tenant);
+        }
+
+        if ($isSwap) {
+            $original = $this->assertSwapOriginalAgreement($validated, $tenant);
+            $carId = (int) $validated['car_id'];
+            $this->assertCarAvailableForNewAgreement($carId, $tenant, null, $original->id);
+
+            try {
+                $validated = $this->mergeInsuranceData($request, $validated);
+                $validated = $this->mergeMutualDetailSlipData($request, $validated);
+
+                $agreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($original, $validated);
+
+                app(DriverAgreementStatusService::class)->syncForAgreement($agreement);
+
+                return redirect()->route('agreements.show', $agreement)
+                    ->with('success', 'Vehicle swap agreement created successfully.');
+            } catch (ValidationException $e) {
+                throw $e;
+            } catch (\Exception $e) {
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'Error creating swap agreement: '.$e->getMessage());
+            }
         }
 
         $carId = (int) $validated['car_id'];
@@ -174,7 +211,7 @@ class AgreementController extends Controller
                 $validated = $this->mergeClosingData($validated);
                 $validated = $this->applyDiscountData($validated, $request);
                 $validated = $this->mergeReplacementVehicleData($validated);
-                unset($validated['reservation_id']);
+                unset($validated['reservation_id'], $validated['upgraded_from_agreement_id']);
                 $agreement = Agreement::create($validated);
                 $this->syncTerminatedCarAvailability($agreement);
 
@@ -202,7 +239,7 @@ class AgreementController extends Controller
                                 $driver,
                                 $paymentData,
                                 $agreement->id,
-                                ['agreement', 'agreement_deposit']
+                                ['agreement', 'agreement_deposit', 'agreement_additional_charge']
                             );
                         }
                     }
@@ -217,6 +254,8 @@ class AgreementController extends Controller
 
                 return $agreement;
             });
+
+            app(DriverAgreementStatusService::class)->syncForAgreement($agreement);
 
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement created successfully.');
@@ -241,7 +280,12 @@ class AgreementController extends Controller
         $agreement->load([
             'company', 'driver', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
             'status', 'insuranceProvider', 'terminationRecordedBy', 'parentAgreement.car', 'parentAgreement.driver',
-            'upgradedFromAgreement.car', 'upgradedToAgreement.car',
+            'upgradedFromAgreement.car', 'upgradedToAgreement.car', 'deductions', 'additionalCharges.invoice',
+            'discountConsumedInvoice',
+            'depositRefund.debtPayment', 'depositRefund.refundCreditPayment',
+            'invoices' => function ($query) {
+                $query->with('sourceAgreement')->orderByDesc('invoice_date')->orderByDesc('id');
+            },
             'collections' => function ($query) {
                 $query->orderBy('due_date');
             },
@@ -250,70 +294,66 @@ class AgreementController extends Controller
         // Update overdue collections
         $agreement->updateOverdueCollections();
 
-        $upgradeService = app(AgreementUpgradeService::class);
-        $canUpgradeCar = $upgradeService->canUpgrade($agreement);
-        $upgradePreview = $canUpgradeCar ? $upgradeService->upgradePreview($agreement) : null;
-
-        return view($this->dir.'show', compact('agreement', 'canUpgradeCar', 'upgradePreview'));
-    }
-
-    public function upgradeCars(Agreement $agreement)
-    {
-        $tenant = Auth::user()->currentTenant();
-
-        if ($agreement->tenant_id !== $tenant->id) {
-            abort(403, 'Unauthorized access to this agreement');
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+        $settlementPreview = $agreement->canRequestDepositRefund()
+            ? app(AgreementDepositSettlementService::class)->preview($agreement)
+            : null;
+        $settlementRemainingDebt = $settlementPreview['remaining_debt_amount'] ?? 0;
+        if ($agreement->depositRefund) {
+            $currentDriverDebt = round((float) Invoice::query()
+                ->where('driver_id', $agreement->driver_id)
+                ->where('balance_amount', '>', 0)
+                ->sum('balance_amount'), 2);
+            $settlementRemainingDebt = $agreement->depositRefund->isPending()
+                ? max($currentDriverDebt - (float) $agreement->depositRefund->debt_offset_amount, 0)
+                : $currentDriverDebt;
         }
 
-        $upgradeService = app(AgreementUpgradeService::class);
-
-        if (! $upgradeService->canUpgrade($agreement)) {
-            return response()->json(['message' => 'This agreement is not eligible for a car change.'], 422);
-        }
-
-        $cars = $upgradeService->availableCars($agreement)->map(function (Car $car) {
-            $insurance = $car->currentActiveInsurance();
-
-            return [
-                'id' => $car->id,
-                'registration' => $car->registration,
-                'model' => $car->carModel?->name,
-                'company' => $car->company?->name,
-                'has_active_insurance' => $car->isInsuranceCurrentlyActive(),
-                'insurance_provider' => $insurance?->insuranceProvider?->name,
-            ];
-        })->values();
-
-        return response()->json([
-            'cars' => $cars,
-            'preview' => $upgradeService->upgradePreview($agreement),
-        ]);
+        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt'));
     }
 
-    public function upgradeCar(Request $request, Agreement $agreement)
-    {
+    public function refundDeposit(
+        Request $request,
+        Agreement $agreement,
+        AgreementDepositSettlementService $settlementService,
+        PaymentAllocationService $paymentAllocationService
+    ) {
         $tenant = Auth::user()->currentTenant();
 
-        if ($agreement->tenant_id !== $tenant->id) {
+        if (! $tenant || $agreement->tenant_id !== $tenant->id) {
             abort(403, 'Unauthorized access to this agreement');
         }
 
         $validated = $request->validate([
-            'car_id' => 'required|exists:cars,id',
-            'agreed_rent' => 'required|numeric|min:0',
+            'payment_method' => 'nullable|in:Cash,Bank Transfer,Cheque,Card Payment,Direct Debit,Driver Credit',
+            'bank_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
+                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
+            'refund_date' => 'required|date',
+            'notes' => 'nullable|string|max:5000',
         ]);
 
-        try {
-            $newAgreement = app(AgreementUpgradeService::class)->upgrade($agreement, $validated);
+        $validated['bank_account_id'] = Payment::bankAccountIdForMethod(
+            $validated['payment_method'] ?? null,
+            $validated['bank_account_id'] ?? null
+        );
 
-            return redirect()->route('agreements.show', $newAgreement)
-                ->with('success', 'Car changed successfully. A new agreement has been created.');
-        } catch (ValidationException $e) {
-            throw $e;
-        } catch (\Exception $e) {
-            return redirect()->back()
-                ->with('error', 'Error changing car: '.$e->getMessage());
-        }
+        $settlementService->record($agreement, $validated, $paymentAllocationService);
+
+        return redirect()->back()
+            ->with('success', 'Deposit settlement recorded. It will appear on the daily financial sheet until approval.');
+    }
+
+    public function upgradeCars(Agreement $agreement)
+    {
+        abort(404);
+    }
+
+    public function upgradeCar(Request $request, Agreement $agreement)
+    {
+        abort(404);
     }
 
     public function edit(Agreement $agreement)
@@ -324,7 +364,7 @@ class AgreementController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
-        $model = $agreement->load('collections');
+        $model = $agreement->load(['collections', 'deductions', 'additionalCharges', 'depositRefund']);
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = Driver::where('tenant_id', $tenant->id)->active()->get();
         if ($agreement->driver_id && ! $drivers->contains('id', $agreement->driver_id)) {
@@ -340,11 +380,16 @@ class AgreementController extends Controller
         $canManageDiscount = $this->canManageDiscount();
         $agreementPaymentLimit = $this->unpaidAgreementInvoiceBalance($agreement);
         $agreementPaymentAllowed = $agreementPaymentLimit > 0 && ! $agreement->isReplacementVehicle();
-        $originalAgreements = $this->originalAgreementsForForm($tenant, $agreement->id, $agreement->parent_agreement_id);
+        $originalAgreements = $this->originalAgreementsForForm(
+            $tenant,
+            $agreement->id,
+            $agreement->parent_agreement_id ?? $agreement->upgraded_from_agreement_id
+        );
         $replacementVehicleStatusId = $this->replacementVehicleStatusId();
+        $swapStatusId = $this->swapStatusId();
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
 
-        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'bankAccounts'));
+        return view($this->dir.'edit', compact('model', 'companies', 'drivers', 'cars', 'statuses', 'canManageDiscount', 'agreementPaymentLimit', 'agreementPaymentAllowed', 'originalAgreements', 'replacementVehicleStatusId', 'swapStatusId', 'bankAccounts'));
     }
 
     public function update(Request $request, Agreement $agreement)
@@ -355,10 +400,33 @@ class AgreementController extends Controller
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this agreement');
+        }
         $validated = $this->validateAgreementRequest($request);
+        $shouldSyncDeductions = $request->boolean('deductions_present');
+        $shouldSyncAdditionalCharges = $request->boolean('additional_charges_present');
+        if ($shouldSyncDeductions) {
+            $this->assertDeductionsCanBeChanged($agreement, $validated['deductions'] ?? []);
+            $this->assertDeductionsWithinDeposit(
+                $validated['deductions'] ?? [],
+                (float) ($validated['deposit_amount'] ?? $agreement->deposit_amount)
+            );
+        }
+        if ($shouldSyncAdditionalCharges) {
+            $this->assertAdditionalChargesCanBeChanged($agreement, $validated['additional_charges'] ?? []);
+            $this->assertAdditionalChargesAllowed($agreement, $validated['additional_charges'] ?? []);
+        }
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $validated['status_id']);
+        $isSwap = $this->isSwapStatusId((int) $validated['status_id']);
         $this->assertEndDateOnOrAfterStartDate($validated);
-        $this->assertBillingAnchorDate($validated, $isReplacementVehicle);
+        $this->assertBillingAnchorDate($validated, $isReplacementVehicle || $isSwap);
+
+        if ($isSwap && ! $agreement->isUpgradedAgreement()) {
+            throw ValidationException::withMessages([
+                'status_id' => ['Swap status can only be used when creating a new vehicle swap agreement.'],
+            ]);
+        }
 
         if ($isReplacementVehicle) {
             $this->assertReplacementVehicleParentAgreement($validated, $tenant, $agreement);
@@ -383,8 +451,11 @@ class AgreementController extends Controller
         }
 
         try {
-            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant, $agreementPaymentData, $isReplacementVehicle) {
+            $previousDriverId = $agreement->driver_id;
+
+            $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant, $agreementPaymentData, $isReplacementVehicle, $shouldSyncDeductions, $shouldSyncAdditionalCharges) {
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
+                $wasClosingStatus = $this->isClosingStatusId((int) $agreement->status_id);
 
                 $validated = $this->mergeInsuranceData($request, $validated, $agreement);
                 $validated = $this->mergeMutualDetailSlipData($request, $validated, $agreement);
@@ -396,7 +467,27 @@ class AgreementController extends Controller
                 $validated = $this->mergeClosingData($validated);
                 $validated = $this->applyDiscountData($validated, $request, $agreement);
                 $validated = $this->mergeReplacementVehicleData($validated);
+                if ($agreement->upgraded_from_agreement_id) {
+                    $validated['upgraded_from_agreement_id'] = $agreement->upgraded_from_agreement_id;
+                    $validated['deposit_amount'] = $agreement->deposit_amount;
+                }
                 $agreement->update($validated);
+                if (
+                    ! $wasClosingStatus
+                    && $this->isClosingStatusId((int) $agreement->status_id)
+                    && $agreement->closing_date
+                ) {
+                    app(AgreementInvoiceService::class)->reconcileFinalInvoice(
+                        $agreement,
+                        $agreement->closing_date
+                    );
+                }
+                if ($shouldSyncDeductions) {
+                    $this->syncDeductions($agreement, $validated['deductions'] ?? []);
+                }
+                if ($shouldSyncAdditionalCharges) {
+                    $this->syncAdditionalCharges($agreement, $validated['additional_charges'] ?? []);
+                }
                 $this->syncTerminatedCarAvailability($agreement);
 
                 if (! $isReplacementVehicle) {
@@ -429,7 +520,7 @@ class AgreementController extends Controller
                                 $driver,
                                 $paymentData,
                                 $agreement->id,
-                                ['agreement', 'agreement_deposit']
+                                ['agreement', 'agreement_deposit', 'agreement_additional_charge']
                             );
                         }
                     }
@@ -437,6 +528,8 @@ class AgreementController extends Controller
 
                 return $agreement;
             });
+
+            app(DriverAgreementStatusService::class)->syncForAgreement($updatedAgreement->fresh(), $previousDriverId);
 
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement updated successfully.');
@@ -555,6 +648,7 @@ class AgreementController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
         $isReplacementVehicle = $this->isReplacementVehicleStatusId((int) $request->input('status_id'));
+        $isSwap = $this->isSwapStatusId((int) $request->input('status_id'));
 
         $rules = [
             'reservation_id' => [
@@ -566,6 +660,7 @@ class AgreementController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'required|date',
             'driver_id' => 'required|exists:drivers,id',
+            'paying_company_name' => 'nullable|string|max:255',
             'car_id' => 'required|exists:cars,id',
             'mileage_out' => 'nullable|integer|min:0',
             'mileage_in' => 'nullable|integer|min:0',
@@ -585,6 +680,16 @@ class AgreementController extends Controller
             'termination_notice_date' => 'nullable|date',
             'termination_available_from_date' => 'nullable|date',
             'termination_notes' => 'nullable|string',
+            'deductions_present' => 'nullable|boolean',
+            'deductions' => 'nullable|array',
+            'deductions.*.amount' => 'required|numeric|min:0.01',
+            'deductions.*.notes' => 'nullable|string|max:2000',
+            'additional_charges_present' => 'nullable|boolean',
+            'additional_charges' => 'nullable|array',
+            'additional_charges.*.id' => 'nullable|integer|exists:agreement_additional_charges,id',
+            'additional_charges.*.type' => 'required|in:insurance_excess,miscellaneous_charges',
+            'additional_charges.*.amount' => 'required|numeric|min:0.01',
+            'additional_charges.*.notes' => 'nullable|string|max:2000',
             'closing_date' => [
                 $this->isClosingStatusId((int) $request->input('status_id')) ? 'required' : 'nullable',
                 'date',
@@ -593,6 +698,18 @@ class AgreementController extends Controller
 
         if ($isReplacementVehicle) {
             $rules['parent_agreement_id'] = 'required|exists:agreements,id';
+        } elseif ($isSwap) {
+            $rules = array_merge($rules, [
+                'upgraded_from_agreement_id' => 'required|exists:agreements,id',
+                'agreed_rent' => 'required|numeric|min:0',
+                'rent_interval' => 'nullable|string',
+                'deposit_amount' => 'nullable|numeric|min:0',
+                'collection_type' => 'nullable|in:weekly,monthly,static',
+                'discount_type' => 'nullable|in:percentage,fixed',
+                'discount_value' => 'nullable|numeric|min:0',
+                'discount_notes' => 'nullable|string',
+                'discount_is_one_time' => 'nullable|boolean',
+            ]);
         } else {
             $rules = array_merge($rules, [
                 'agreed_rent' => 'required|numeric|min:0',
@@ -601,6 +718,7 @@ class AgreementController extends Controller
                 'discount_type' => 'nullable|in:percentage,fixed',
                 'discount_value' => 'nullable|numeric|min:0',
                 'discount_notes' => 'nullable|string',
+                'discount_is_one_time' => 'nullable|boolean',
                 'collection_type' => 'required|in:weekly,monthly,static',
                 'auto_schedule_collections' => 'boolean',
                 'billing_anchor_date' => 'nullable|date',
@@ -623,6 +741,193 @@ class AgreementController extends Controller
         }
 
         return $request->validate($rules);
+    }
+
+    private function assertDeductionsWithinDeposit(array $deductions, float $depositAmount): void
+    {
+        $total = round(array_sum(array_map(
+            fn (array $deduction): float => (float) ($deduction['amount'] ?? 0),
+            $deductions
+        )), 2);
+
+        if ($total > round($depositAmount, 2)) {
+            throw ValidationException::withMessages([
+                'deductions' => 'Total deductions cannot exceed the configured deposit amount.',
+            ]);
+        }
+    }
+
+    private function assertDeductionsCanBeChanged(Agreement $agreement, array $deductions): void
+    {
+        if (! $agreement->depositRefund()->exists()) {
+            return;
+        }
+
+        $saved = $agreement->deductions()
+            ->get()
+            ->map(fn ($deduction): array => [
+                'amount' => number_format((float) $deduction->amount, 2, '.', ''),
+                'notes' => trim((string) $deduction->notes),
+            ])
+            ->values()
+            ->all();
+        $submitted = collect($deductions)
+            ->filter(fn (array $deduction): bool => (float) ($deduction['amount'] ?? 0) > 0)
+            ->map(fn (array $deduction): array => [
+                'amount' => number_format((float) $deduction['amount'], 2, '.', ''),
+                'notes' => trim((string) ($deduction['notes'] ?? '')),
+            ])
+            ->values()
+            ->all();
+
+        if ($saved !== $submitted) {
+            throw ValidationException::withMessages([
+                'deductions' => 'Deductions cannot be changed after a deposit settlement has been recorded.',
+            ]);
+        }
+    }
+
+    private function syncDeductions(Agreement $agreement, array $deductions): void
+    {
+        if ($agreement->depositRefund()->exists()) {
+            return;
+        }
+
+        $agreement->deductions()->delete();
+
+        foreach (array_values($deductions) as $sortOrder => $deduction) {
+            if ((float) ($deduction['amount'] ?? 0) <= 0) {
+                continue;
+            }
+
+            $agreement->deductions()->create([
+                'tenant_id' => $agreement->tenant_id,
+                'amount' => round((float) $deduction['amount'], 2),
+                'notes' => filled($deduction['notes'] ?? null) ? trim((string) $deduction['notes']) : null,
+                'sort_order' => $sortOrder,
+                'created_by' => Auth::id(),
+            ]);
+        }
+    }
+
+    private function assertAdditionalChargesCanBeChanged(Agreement $agreement, array $charges): void
+    {
+        $saved = $agreement->additionalCharges()
+            ->get()
+            ->mapWithKeys(fn (AgreementAdditionalCharge $charge): array => [
+                $charge->id => [
+                    'type' => (string) $charge->type,
+                    'amount' => number_format((float) $charge->amount, 2, '.', ''),
+                    'notes' => trim((string) $charge->notes),
+                ],
+            ])
+            ->all();
+
+        $submittedIds = [];
+        foreach ($charges as $charge) {
+            if ((float) ($charge['amount'] ?? 0) <= 0) {
+                continue;
+            }
+
+            $chargeId = isset($charge['id']) ? (int) $charge['id'] : null;
+            if ($chargeId) {
+                $submittedIds[] = $chargeId;
+
+                if (! isset($saved[$chargeId])) {
+                    throw ValidationException::withMessages([
+                        'additional_charges' => 'One or more damages are invalid for this agreement.',
+                    ]);
+                }
+
+                $submitted = [
+                    'type' => (string) ($charge['type'] ?? ''),
+                    'amount' => number_format((float) $charge['amount'], 2, '.', ''),
+                    'notes' => trim((string) ($charge['notes'] ?? '')),
+                ];
+
+                if ($saved[$chargeId] !== $submitted) {
+                    throw ValidationException::withMessages([
+                        'additional_charges' => 'Damages cannot be changed after an invoice has been created.',
+                    ]);
+                }
+            }
+        }
+
+        $missingIds = array_diff(array_keys($saved), $submittedIds);
+        if ($missingIds !== []) {
+            throw ValidationException::withMessages([
+                'additional_charges' => 'Damages cannot be removed after an invoice has been created.',
+            ]);
+        }
+    }
+
+    private function assertAdditionalChargesAllowed(Agreement $agreement, array $charges): void
+    {
+        $hasNewCharge = collect($charges)->contains(function (array $charge): bool {
+            return (float) ($charge['amount'] ?? 0) > 0 && empty($charge['id']);
+        });
+
+        if (! $hasNewCharge) {
+            return;
+        }
+
+        if (! $agreement->driver_id) {
+            throw ValidationException::withMessages([
+                'additional_charges' => 'Damages require an assigned driver.',
+            ]);
+        }
+
+        if (! $agreement->isBillableStatus()) {
+            throw ValidationException::withMessages([
+                'additional_charges' => 'Damages can only be added while the agreement is active.',
+            ]);
+        }
+
+        $today = now()->startOfDay();
+        if (
+            ! $agreement->start_date
+            || ! $agreement->end_date
+            || $agreement->start_date->copy()->startOfDay()->gt($today)
+            || $agreement->end_date->copy()->startOfDay()->lt($today)
+        ) {
+            throw ValidationException::withMessages([
+                'additional_charges' => 'Damages can only be added during the hire period.',
+            ]);
+        }
+    }
+
+    private function syncAdditionalCharges(Agreement $agreement, array $charges): void
+    {
+        $invoiceService = app(AgreementInvoiceService::class);
+
+        foreach (array_values($charges) as $sortOrder => $chargeData) {
+            if ((float) ($chargeData['amount'] ?? 0) <= 0) {
+                continue;
+            }
+
+            $chargeId = isset($chargeData['id']) ? (int) $chargeData['id'] : null;
+
+            if ($chargeId) {
+                AgreementAdditionalCharge::query()
+                    ->where('agreement_id', $agreement->id)
+                    ->whereKey($chargeId)
+                    ->update(['sort_order' => $sortOrder]);
+
+                continue;
+            }
+
+            $charge = $agreement->additionalCharges()->create([
+                'tenant_id' => $agreement->tenant_id,
+                'type' => (string) ($chargeData['type'] ?? AgreementAdditionalCharge::TYPE_MISCELLANEOUS_CHARGES),
+                'amount' => round((float) $chargeData['amount'], 2),
+                'notes' => filled($chargeData['notes'] ?? null) ? trim((string) $chargeData['notes']) : null,
+                'sort_order' => $sortOrder,
+                'created_by' => Auth::id(),
+            ]);
+
+            $invoice = $invoiceService->createAdditionalChargeInvoice($agreement->fresh(), $charge);
+            $charge->update(['invoice_id' => $invoice->id]);
+        }
     }
 
     private function isReplacementVehicleStatusId(?int $statusId): bool
@@ -652,6 +957,66 @@ class AgreementController extends Controller
             ->value('id');
     }
 
+    private function isSwapStatusId(?int $statusId): bool
+    {
+        if (! $statusId) {
+            return false;
+        }
+
+        $swapStatusId = $this->swapStatusId();
+
+        if ($swapStatusId !== null && $statusId === $swapStatusId) {
+            return true;
+        }
+
+        return Status::query()
+            ->where('id', $statusId)
+            ->where('type', 'agreement')
+            ->where('name', 'Swap')
+            ->exists();
+    }
+
+    private function swapStatusId(): ?int
+    {
+        return Status::query()
+            ->where('type', 'agreement')
+            ->where('name', 'Swap')
+            ->value('id');
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function assertSwapOriginalAgreement(array $validated, Tenant $tenant): Agreement
+    {
+        $originalId = (int) ($validated['upgraded_from_agreement_id'] ?? 0);
+
+        $original = Agreement::query()
+            ->with('status')
+            ->where('tenant_id', $tenant->id)
+            ->find($originalId);
+
+        if (! $original) {
+            throw ValidationException::withMessages([
+                'upgraded_from_agreement_id' => ['The selected original agreement could not be found.'],
+            ]);
+        }
+
+        if ((int) $original->driver_id !== (int) $validated['driver_id']) {
+            throw ValidationException::withMessages([
+                'upgraded_from_agreement_id' => ['The original agreement must belong to the same driver.'],
+            ]);
+        }
+
+        if (! app(AgreementUpgradeService::class)->canUpgrade($original)) {
+            throw ValidationException::withMessages([
+                'upgraded_from_agreement_id' => ['This agreement is not eligible for a vehicle swap.'],
+            ]);
+        }
+
+        return $original;
+    }
+
     private function originalAgreementsForForm(Tenant $tenant, ?int $excludeAgreementId = null, ?int $alwaysIncludeAgreementId = null)
     {
         $agreements = Agreement::query()
@@ -679,6 +1044,11 @@ class AgreementController extends Controller
                 return [
                     'id' => $agreement->id,
                     'driver_id' => $agreement->driver_id,
+                    'deposit_amount' => (float) $agreement->deposit_amount,
+                    'agreed_rent' => (float) $agreement->agreed_rent,
+                    'rent_interval' => $agreement->rent_interval,
+                    'collection_type' => $agreement->collection_type,
+                    'end_date' => $agreement->end_date?->format('Y-m-d'),
                     'label' => sprintf(
                         '#%d — %s — %s (%s to %s)',
                         $agreement->id,
@@ -770,7 +1140,9 @@ class AgreementController extends Controller
     private function mergeReplacementVehicleData(array $validated): array
     {
         if (! $this->isReplacementVehicleStatusId((int) ($validated['status_id'] ?? 0))) {
-            $validated['parent_agreement_id'] = null;
+            if (! $this->isSwapStatusId((int) ($validated['status_id'] ?? 0))) {
+                $validated['parent_agreement_id'] = null;
+            }
 
             return $validated;
         }
@@ -783,6 +1155,11 @@ class AgreementController extends Controller
         $validated['discount_type'] = null;
         $validated['discount_value'] = null;
         $validated['discount_notes'] = null;
+        $validated['discount_is_one_time'] = false;
+        $validated['discount_started_at'] = null;
+        $validated['discount_consumed_at'] = null;
+        $validated['discount_consumed_invoice_id'] = null;
+        $validated['upgraded_from_agreement_id'] = null;
 
         return $validated;
     }
@@ -1087,6 +1464,7 @@ class AgreementController extends Controller
     private function prepareAgreementPaymentData(array $validated, Request $request, bool $isReplacementVehicle = false): array
     {
         $paymentData = [];
+        $tenant = Auth::user()->currentTenant();
 
         if ($isReplacementVehicle && $request->boolean('add_payment')) {
             throw ValidationException::withMessages([
@@ -1100,17 +1478,19 @@ class AgreementController extends Controller
                     continue;
                 }
 
-                if (($paymentRow['payment_method'] ?? '') === 'Bank Transfer' && empty($paymentRow['bank_account_id'])) {
+                $rowMethod = $paymentRow['payment_method'] ?? '';
+                if (Payment::requiresBankAccount($rowMethod) && empty($paymentRow['bank_account_id'])) {
                     throw ValidationException::withMessages([
-                        "agreement_payments.{$index}.bank_account_id" => 'Bank account is required for bank transfer payments.',
+                        "agreement_payments.{$index}.bank_account_id" => 'Bank account is required for bank transfer and card payments.',
                     ]);
                 }
 
                 $paymentData[] = [
                     'payment_method' => $paymentRow['payment_method'] ?? null,
-                    'bank_account_id' => ($paymentRow['payment_method'] ?? '') === 'Bank Transfer'
-                        ? ($paymentRow['bank_account_id'] ?? null)
-                        : null,
+                    'bank_account_id' => Payment::bankAccountIdForMethod(
+                        $rowMethod,
+                        $paymentRow['bank_account_id'] ?? null
+                    ),
                     'payment_date' => $paymentRow['payment_date'] ?? null,
                     'amount' => round((float) $paymentRow['amount'], 2),
                     'notes' => $paymentRow['notes'] ?? null,
@@ -1154,7 +1534,7 @@ class AgreementController extends Controller
     {
         return round((float) Invoice::query()
             ->where('source_id', $agreement->id)
-            ->whereIn('invoice_type', ['agreement', 'agreement_deposit'])
+            ->whereIn('invoice_type', ['agreement', 'agreement_deposit', 'agreement_additional_charge'])
             ->where('balance_amount', '>', 0)
             ->sum('balance_amount'), 2);
     }
@@ -1165,6 +1545,10 @@ class AgreementController extends Controller
             $validated['discount_type'] = $existing?->discount_type;
             $validated['discount_value'] = $existing?->discount_value;
             $validated['discount_notes'] = $existing?->discount_notes;
+            $validated['discount_is_one_time'] = (bool) ($existing?->discount_is_one_time ?? false);
+            $validated['discount_started_at'] = $existing?->discount_started_at;
+            $validated['discount_consumed_at'] = $existing?->discount_consumed_at;
+            $validated['discount_consumed_invoice_id'] = $existing?->discount_consumed_invoice_id;
 
             return $validated;
         }
@@ -1179,6 +1563,11 @@ class AgreementController extends Controller
         if (! in_array($discountType, ['percentage', 'fixed'], true) || $discountValue === null || $discountValue === '') {
             $validated['discount_type'] = null;
             $validated['discount_value'] = null;
+            $validated['discount_notes'] = null;
+            $validated['discount_is_one_time'] = false;
+            $validated['discount_started_at'] = null;
+            $validated['discount_consumed_at'] = null;
+            $validated['discount_consumed_invoice_id'] = null;
 
             return $validated;
         }
@@ -1193,6 +1582,23 @@ class AgreementController extends Controller
 
         $validated['discount_type'] = $discountType;
         $validated['discount_value'] = round($discountValue, 2);
+        $validated['discount_is_one_time'] = $request->boolean('discount_is_one_time');
+
+        $configurationChanged = ! $existing
+            || $existing->discount_type !== $validated['discount_type']
+            || round((float) $existing->discount_value, 2) !== $validated['discount_value']
+            || (string) $existing->discount_notes !== (string) $validated['discount_notes']
+            || (bool) $existing->discount_is_one_time !== $validated['discount_is_one_time'];
+
+        if ($configurationChanged) {
+            $validated['discount_started_at'] = now();
+            $validated['discount_consumed_at'] = null;
+            $validated['discount_consumed_invoice_id'] = null;
+        } else {
+            $validated['discount_started_at'] = $existing->discount_started_at ?? now();
+            $validated['discount_consumed_at'] = $existing->discount_consumed_at;
+            $validated['discount_consumed_invoice_id'] = $existing->discount_consumed_invoice_id;
+        }
 
         return $validated;
     }

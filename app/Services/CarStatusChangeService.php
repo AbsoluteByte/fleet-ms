@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\CarStatusHistory;
@@ -29,7 +28,6 @@ class CarStatusChangeService
         'available_for_rent',
         Car::FLEET_STATUS_NON_COMPLIANT,
         'reserved',
-        'vehicle_swap',
         'damaged',
         'written_off',
         'stolen',
@@ -76,10 +74,6 @@ class CarStatusChangeService
 
                 case 'reserved':
                     [$reservationId, $statusData] = $this->applyReserved($request, $tenant, $car);
-                    break;
-
-                case 'vehicle_swap':
-                    [$vehicleSwapId, $statusData] = $this->applyVehicleSwap($request, $tenant, $car);
                     break;
 
                 case 'damaged':
@@ -269,72 +263,6 @@ class CarStatusChangeService
         ]);
 
         return [$reservation->id, $snapshot];
-    }
-
-    /**
-     * @return array{0: int, 1: array<string, mixed>}
-     */
-    private function applyVehicleSwap(Request $request, Tenant $tenant, Car $car): array
-    {
-        $request->validate([
-            'swapped_with_car_id' => ['required', Rule::in([(string) $car->id])],
-        ]);
-
-        $validated = $request->validate([
-            'old_car_id' => [
-                'required',
-                Rule::exists('cars', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
-                Rule::notIn([$car->id]),
-            ],
-            'agreed_rent' => 'required|numeric|min:0',
-            'reason_for_swap' => ['required', Rule::in(array_keys(VehicleSwap::reasonLabels()))],
-            'phvl_issue_type' => [
-                Rule::requiredIf(fn () => $request->input('reason_for_swap') === VehicleSwap::REASON_PHVL_ISSUES),
-                'nullable',
-                Rule::in(array_keys(VehicleSwap::phvlIssueTypeLabels())),
-            ],
-            'phvl_issue_notes' => [
-                Rule::requiredIf(fn () => in_array($request->input('phvl_issue_type'), [
-                    VehicleSwap::PHVL_FAILED,
-                    VehicleSwap::PHVL_DOCUMENTATION,
-                ], true)),
-                'nullable',
-                'string',
-            ],
-            'reason_notes' => [
-                Rule::requiredIf(fn () => $request->input('reason_for_swap') === VehicleSwap::REASON_OTHERS),
-                'nullable',
-                'string',
-            ],
-        ]);
-
-        $validated = $this->sanitizeSwapReasonPayload($validated);
-
-        $agreement = Agreement::activeAgreementForCar($tenant->id, (int) $validated['old_car_id']);
-        $upgradeService = app(AgreementUpgradeService::class);
-
-        if (! $agreement || ! $upgradeService->canUpgrade($agreement)) {
-            throw ValidationException::withMessages([
-                'old_car_id' => ['The old vehicle must have an active agreement eligible for a car change.'],
-            ]);
-        }
-
-        $newAgreement = $upgradeService->upgrade($agreement, [
-            'car_id' => $car->id,
-            'agreed_rent' => (float) $validated['agreed_rent'],
-            'swap_reason' => $validated['reason_for_swap'],
-            'swap_phvl_issue_type' => $validated['phvl_issue_type'] ?? null,
-            'swap_phvl_issue_notes' => $validated['phvl_issue_notes'] ?? null,
-            'swap_reason_notes' => $validated['reason_notes'] ?? null,
-        ]);
-
-        return [
-            null,
-            array_merge($validated, [
-                'agreement_id' => $newAgreement->id,
-                'swapped_with_car_id' => $car->id,
-            ]),
-        ];
     }
 
     /**

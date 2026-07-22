@@ -4,9 +4,20 @@
     $paymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
     $amountPaidValue = old('amount_paid', $reservationModel->amount_paid ?? '');
     $showPaymentFields = (float) $amountPaidValue > 0 || filled($selectedPaymentMethod);
+    $defaultCardBankAccountId = ($bankAccounts ?? collect())->firstWhere(
+        'account_number',
+        \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER
+    )?->id;
+    $selectedBankAccountId = old(
+        'bank_account_id',
+        $reservationModel->bank_account_id
+            ?? ($selectedPaymentMethod === 'Card Payment' ? $defaultCardBankAccountId : null)
+    );
+    $needsBankAccount = in_array($selectedPaymentMethod, ['Bank Transfer', 'Card Payment'], true);
 @endphp
 
-<div id="reservation-payment-fields" class="col-12 {{ $showPaymentFields ? '' : 'd-none' }}">
+<div id="reservation-payment-fields" class="col-12 {{ $showPaymentFields ? '' : 'd-none' }}"
+     data-default-card-bank-id="{{ $defaultCardBankAccountId ?? '' }}">
     <div class="row">
         <div class="col-md-6 form-group">
             <label for="reservation_payment_method">Payment method <span class="text-danger">*</span></label>
@@ -27,11 +38,11 @@
         <div class="col-md-6 form-group">
             @include('backend.payments.partials.bank-account-select', [
                 'bankAccounts' => $bankAccounts ?? collect(),
-                'selected' => old('bank_account_id', $reservationModel->bank_account_id ?? null),
+                'selected' => $selectedBankAccountId,
                 'name' => 'bank_account_id',
                 'id' => 'reservation_bank_account_id',
                 'errorKey' => 'bank_account_id',
-                'wrapperClass' => 'bank-account-field' . ($selectedPaymentMethod === 'Bank Transfer' ? '' : ' d-none'),
+                'wrapperClass' => 'bank-account-field' . ($needsBankAccount ? '' : ' d-none'),
             ])
         </div>
     </div>
@@ -46,6 +57,11 @@
             var bankAccountField = paymentFields ? paymentFields.querySelector('[data-bank-account-field]') : null;
             var bankAccountSelect = paymentFields ? paymentFields.querySelector('[data-bank-account-select]') : null;
             var hasBankAccounts = {{ ($bankAccounts ?? collect())->isNotEmpty() ? 'true' : 'false' }};
+            var defaultCardBankId = paymentFields ? (paymentFields.getAttribute('data-default-card-bank-id') || '') : '';
+
+            function requiresBankAccount(method) {
+                return method === 'Bank Transfer' || method === 'Card Payment';
+            }
 
             function parseAmountPaid() {
                 if (!amountPaidInput) {
@@ -60,13 +76,15 @@
                     return;
                 }
 
-                var isBankTransfer = paymentMethodSelect.value === 'Bank Transfer';
-                bankAccountField.classList.toggle('d-none', !isBankTransfer);
+                var needsBank = requiresBankAccount(paymentMethodSelect.value);
+                bankAccountField.classList.toggle('d-none', !needsBank);
 
                 if (bankAccountSelect) {
-                    bankAccountSelect.required = isBankTransfer && hasBankAccounts && parseAmountPaid() > 0;
-                    if (!isBankTransfer) {
+                    bankAccountSelect.required = needsBank && hasBankAccounts && parseAmountPaid() > 0;
+                    if (!needsBank) {
                         bankAccountSelect.value = '';
+                    } else if (paymentMethodSelect.value === 'Card Payment' && !bankAccountSelect.value && defaultCardBankId) {
+                        bankAccountSelect.value = defaultCardBankId;
                     }
                 }
             }
@@ -92,7 +110,10 @@
                 }
 
                 if (bankAccountField) {
-                    bankAccountField.classList.toggle('d-none', !showFields || paymentMethodSelect.value !== 'Bank Transfer');
+                    bankAccountField.classList.toggle(
+                        'd-none',
+                        !showFields || !requiresBankAccount(paymentMethodSelect ? paymentMethodSelect.value : '')
+                    );
                 }
 
                 toggleBankAccountField();

@@ -227,6 +227,11 @@
                                                             {{ $notification['vehicle'] }}
                                                         </span>
                                                     @endif
+                                                    @if(!empty($notification['paying_company']))
+                                                        <span class="badge badge-light-primary mr-50 mb-50">
+                                                            Pays via: {{ $notification['paying_company'] }}
+                                                        </span>
+                                                    @endif
                                                     @if(isset($notification['amount']))
                                                         <span class="badge badge-light-{{ $notification['color'] }} mr-50 mb-50 font-weight-bold">
                                                             <i class="feather icon-pound-sign font-small-2"></i>
@@ -310,6 +315,11 @@
                                                         <span class="badge badge-light-secondary mr-50 mb-50">
                                                             <i class="feather icon-truck font-small-2"></i>
                                                             {{ $notification['vehicle'] }}
+                                                        </span>
+                                                    @endif
+                                                    @if(!empty($notification['paying_company']))
+                                                        <span class="badge badge-light-primary mr-50 mb-50">
+                                                            Pays via: {{ $notification['paying_company'] }}
                                                         </span>
                                                     @endif
                                                     @if(isset($notification['driver']))

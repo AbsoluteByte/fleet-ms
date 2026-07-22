@@ -49,6 +49,28 @@ return [
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
+        'samore' => [
+            'transport' => 'smtp',
+            'scheme' => env('SAMORE_MAIL_SCHEME', env('MAIL_SCHEME')),
+            'host' => env('SAMORE_MAIL_HOST', env('MAIL_HOST', '127.0.0.1')),
+            'port' => env('SAMORE_MAIL_PORT', env('MAIL_PORT', 2525)),
+            'username' => env('SAMORE_MAIL_USERNAME'),
+            'password' => env('SAMORE_MAIL_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+        ],
+
+        'proactive' => [
+            'transport' => 'smtp',
+            'scheme' => env('PROACTIVE_MAIL_SCHEME', env('MAIL_SCHEME')),
+            'host' => env('PROACTIVE_MAIL_HOST', env('MAIL_HOST', '127.0.0.1')),
+            'port' => env('PROACTIVE_MAIL_PORT', env('MAIL_PORT', 2525)),
+            'username' => env('PROACTIVE_MAIL_USERNAME'),
+            'password' => env('PROACTIVE_MAIL_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],

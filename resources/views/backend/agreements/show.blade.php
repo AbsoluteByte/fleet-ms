@@ -8,6 +8,21 @@
         .btn-group > form .btn {
             border-radius: 0 !important;
         }
+        .agreement-discount-summary {
+            padding: 14px;
+            border: 1px solid rgba(115, 103, 240, .22);
+            border-radius: 8px;
+            background: linear-gradient(135deg, #fbfaff 0%, #f5f3ff 100%);
+            color: #5e5873;
+        }
+        .agreement-discount-summary__notes {
+            padding: 8px 10px;
+            border-left: 3px solid #7367f0;
+            border-radius: 0 5px 5px 0;
+            background: rgba(255, 255, 255, .72);
+            color: #6e6b7b;
+            font-size: 12px;
+        }
     </style>
 @endpush
 
@@ -43,11 +58,39 @@
                     Preview Client Documents Email
                 </a>
             @endif
-            @if($canUpgradeCar)
-                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#changeCarModal">
-                    <i class="fa fa-exchange me-2"></i>
-                    Change Car
-                </button>
+            @php
+                $refundStatus = $agreement->depositRefundStatus();
+                $showRefundBtn = $refundStatus !== null || $agreement->canRequestDepositRefund();
+            @endphp
+            @if($showRefundBtn)
+                @if($refundStatus === 'pending')
+                    <button type="button" class="btn btn-outline-secondary" disabled style="opacity: .45;"
+                            title="Deposit refund pending daily financial sheet approval">
+                        <i class="fa fa-undo me-2"></i>
+                        Refund Deposit
+                    </button>
+                @elseif($refundStatus === 'posted')
+                    <button type="button" class="btn btn-outline-secondary" disabled style="opacity: .45;"
+                            title="Deposit already refunded">
+                        <i class="fa fa-undo me-2"></i>
+                        Refund Deposit
+                    </button>
+                @else
+                    <button type="button" class="btn btn-outline-success"
+                            data-toggle="modal"
+                            data-target="#refundDepositModal"
+                            data-refund-deposit-btn
+                            data-action="{{ route('agreements.refund-deposit', $agreement) }}"
+                            data-amount="{{ number_format((float) ($settlementPreview['refund_amount'] ?? 0), 2, '.', '') }}"
+                            data-gross-deposit="{{ number_format((float) ($settlementPreview['gross_deposit_amount'] ?? 0), 2, '.', '') }}"
+                            data-deductions="{{ number_format((float) ($settlementPreview['deductions_amount'] ?? 0), 2, '.', '') }}"
+                            data-driver-outstanding="{{ number_format((float) ($settlementPreview['driver_outstanding_amount'] ?? 0), 2, '.', '') }}"
+                            data-debt-offset="{{ number_format((float) ($settlementPreview['debt_offset_amount'] ?? 0), 2, '.', '') }}"
+                            data-remaining-debt="{{ number_format((float) ($settlementPreview['remaining_debt_amount'] ?? 0), 2, '.', '') }}">
+                        <i class="fa fa-undo me-2"></i>
+                        Refund Deposit
+                    </button>
+                @endif
             @endif
             <a href="{{ route('agreements.edit', $agreement) }}" class="btn btn-warning">
                 <i class="fa fa-edit me-2"></i>
@@ -68,7 +111,7 @@
                 <div class="card-header" style="position: static; width: 100%; z-index: unset;">
                     <h5 class="card-title mb-0">Agreement Information</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="margin-top: 0px;">
                     <div class="row">
                         <div class="col-md-6">
                             <table class="table table-borderless">
@@ -80,6 +123,12 @@
                                     <td><strong>Driver:</strong></td>
                                     <td>{{ $agreement->driver->selectOptionLabel() }}</td>
                                 </tr>
+                                @if($agreement->paying_company_name)
+                                    <tr>
+                                        <td><strong>Paying company:</strong></td>
+                                        <td>{{ $agreement->paying_company_name }}</td>
+                                    </tr>
+                                @endif
                                 <tr>
                                     <td><strong>Vehicle:</strong></td>
                                     <td>{{ $agreement->car->registration }} - {{ $agreement->car->carModel->name }}</td>
@@ -359,7 +408,7 @@
                 <div class="card-header" style="position: static; width: 100%; z-index: unset;">
                     <h5 class="card-title mb-0">Financial Summary</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="margin-top: 0px;">
                     <div class="mb-3">
                         <h6 class="text-success">Total Paid</h6>
                         <h4 class="text-success">£{{ number_format($agreement->total_paid, 2) }}</h4>
@@ -367,6 +416,160 @@
                     <div class="mb-3">
                         <h6 class="text-danger">Outstanding</h6>
                         <h4 class="text-danger">£{{ number_format($agreement->total_outstanding, 2) }}</h4>
+                    </div>
+                    @if($agreement->hasConfiguredDiscount())
+                        <div class="agreement-discount-summary mb-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <h6 class="mb-0"><i class="fa fa-tag mr-1"></i> Discount</h6>
+                                <span class="badge {{ $agreement->discount_is_one_time ? 'badge-primary' : 'badge-light-primary' }}">
+                                    {{ $agreement->discount_is_one_time ? 'One-time' : 'Recurring' }}
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Discount</span>
+                                <strong>
+                                    {{ $agreement->discount_type === 'percentage'
+                                        ? rtrim(rtrim(number_format((float) $agreement->discount_value, 2), '0'), '.').'%' 
+                                        : '£'.number_format((float) $agreement->discount_value, 2) }}
+                                </strong>
+                            </div>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Discount given from</span>
+                                <strong>
+                                    {{ ($agreement->discount_started_at ?? $agreement->updated_at ?? $agreement->created_at)?->format('M d, Y') }}
+                                </strong>
+                            </div>
+                            <div class="d-flex justify-content-between small">
+                                <span>Rent after discount</span>
+                                <strong class="text-success">£{{ number_format($agreement->discounted_rent, 2) }}</strong>
+                            </div>
+                            @if($agreement->discount_notes)
+                                <div class="agreement-discount-summary__notes mt-2">{{ $agreement->discount_notes }}</div>
+                            @endif
+                            @if($agreement->discount_is_one_time)
+                                <div class="mt-2 pt-2 border-top">
+                                    @if($agreement->hasPendingOneTimeDiscount())
+                                        <span class="badge badge-warning">Pending next rent invoice</span>
+                                    @elseif($agreement->discountConsumedInvoice)
+                                        <span class="badge badge-success">Applied</span>
+                                        <div class="small mt-1">
+                                            Invoice
+                                            <strong>{{ $agreement->discountConsumedInvoice->invoice_no ?: '#'.$agreement->discountConsumedInvoice->id }}</strong>
+                                            on {{ $agreement->discount_consumed_at?->format('M d, Y') }}
+                                        </div>
+                                    @else
+                                        <span class="badge badge-secondary">Consumed</span>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+                    <div class="border-top pt-3 mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <strong>Deposit Amount</strong>
+                            <strong>£{{ number_format((float) $agreement->deposit_amount, 2) }}</strong>
+                        </div>
+
+                        <h6 class="mb-2">Deductions</h6>
+                        @forelse($agreement->deductions as $deduction)
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>{{ $deduction->notes ?: 'Deduction' }}</span>
+                                <span class="text-danger">−£{{ number_format((float) $deduction->amount, 2) }}</span>
+                            </div>
+                        @empty
+                            <p class="small text-muted mb-1">No deductions.</p>
+                        @endforelse
+                        <div class="d-flex justify-content-between border-top pt-1">
+                            <span>Deduction total</span>
+                            <strong>£{{ number_format($agreement->deductions_total, 2) }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <strong>Remaining Deposit</strong>
+                            <strong class="text-success">
+                                £{{ number_format(max((float) $agreement->deposit_amount - $agreement->deductions_total, 0), 2) }}
+                            </strong>
+                        </div>
+
+                        <h6 class="mb-2 mt-3">Damages</h6>
+                        @forelse($agreement->additionalCharges as $charge)
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>
+                                    <strong>{{ $charge->typeLabel() }}</strong>
+                                    @if($charge->notes)
+                                        — {{ $charge->notes }}
+                                    @endif
+                                    @if($charge->invoice)
+                                        <span class="text-muted">({{ $charge->invoice->invoice_no ?: '#'.$charge->invoice->id }})</span>
+                                    @endif
+                                </span>
+                                <span class="text-danger">£{{ number_format((float) $charge->amount, 2) }}</span>
+                            </div>
+                        @empty
+                            <p class="small text-muted mb-1">No damages recorded.</p>
+                        @endforelse
+                        @if($agreement->additionalCharges->isNotEmpty())
+                            <div class="d-flex justify-content-between border-top pt-1">
+                                <span>Damages total</span>
+                                <strong>£{{ number_format((float) $agreement->additionalCharges->sum('amount'), 2) }}</strong>
+                            </div>
+                        @endif
+
+                        @if($agreement->hasBeenUpgraded())
+                            <div class="alert alert-info py-2 mt-3 mb-0">
+                                Deposit transferred to
+                                <a href="{{ route('agreements.show', $agreement->upgradedToAgreement) }}">
+                                    agreement #{{ $agreement->upgradedToAgreement->id }}
+                                </a>.
+                            </div>
+                        @elseif($agreement->depositRefund)
+                            @php($refund = $agreement->depositRefund)
+                            <div class="mt-3 pt-2 border-top">
+                                @if($refund->isPending())
+                                    <span class="badge badge-warning mb-2">Refund pending</span>
+                                @else
+                                    <span class="badge badge-success mb-2">Refund completed — £{{ number_format((float) $refund->amount, 2) }}</span>
+                                @endif
+                                <div class="d-flex justify-content-between small">
+                                    <span>Refund amount</span>
+                                    <strong>£{{ number_format((float) $refund->amount, 2) }}</strong>
+                                </div>
+                                @if($refund->isPosted() && $refund->refund_date)
+                                    <div class="d-flex justify-content-between small mt-1">
+                                        <span>Refund date</span>
+                                        <strong>{{ $refund->refund_date->format('M d, Y') }}</strong>
+                                    </div>
+                                @endif
+                                @if((float) $refund->debt_offset_amount > 0)
+                                    <div class="d-flex justify-content-between small">
+                                        <span>{{ $refund->isPosted() ? 'Debt cleared from deposit' : 'Debt offset pending' }}</span>
+                                        <strong>£{{ number_format((float) $refund->debt_offset_amount, 2) }}</strong>
+                                    </div>
+                                @endif
+                                @if((float) $settlementRemainingDebt > 0)
+                                    <div class="d-flex justify-content-between small text-danger">
+                                        <span>Remaining driver debt</span>
+                                        <strong>£{{ number_format((float) $settlementRemainingDebt, 2) }}</strong>
+                                    </div>
+                                @endif
+                            </div>
+                        @elseif($settlementPreview)
+                            <div class="mt-3 pt-2 border-top">
+                                <div class="d-flex justify-content-between small">
+                                    <span>Applied to driver debt</span>
+                                    <strong>£{{ number_format((float) $settlementPreview['debt_offset_amount'], 2) }}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <strong>Refund Amount</strong>
+                                    <strong class="text-success">£{{ number_format((float) $settlementPreview['refund_amount'], 2) }}</strong>
+                                </div>
+                                @if((float) $settlementPreview['remaining_debt_amount'] > 0)
+                                    <div class="d-flex justify-content-between small text-danger">
+                                        <span>Remaining driver debt</span>
+                                        <strong>£{{ number_format((float) $settlementPreview['remaining_debt_amount'], 2) }}</strong>
+                                    </div>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                     @if($agreement->next_collection_date)
                         <div class="mb-3">
@@ -377,6 +580,7 @@
                 </div>
             </div>
         </div>
+        @include('backend.agreements.partials.invoices', ['agreement' => $agreement])
         <!-- E-Signature Status Card -->
         <div class="col-xl-4 mt-4">
             <div class="card">
@@ -559,73 +763,6 @@
         </div>
     </div>
 
-    @if($canUpgradeCar)
-        <div class="modal fade" id="changeCarModal" tabindex="-1" role="dialog" aria-labelledby="changeCarModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg" role="document">
-                <div class="modal-content">
-                    <form method="POST" action="{{ route('agreements.upgrade-car', $agreement) }}" id="changeCarForm">
-                        @csrf
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="changeCarModalLabel">Change Car</h5>
-                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                <span aria-hidden="true">&times;</span>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="alert alert-info">
-                                The current agreement will be closed and a new agreement will be created.
-                                Deposit carries over from the current agreement (no new deposit invoice).
-                                Billing stays aligned to the original cycle (next anchor:
-                                <strong>{{ \Carbon\Carbon::parse($upgradePreview['next_anchor'])->format('M d, Y') }}</strong>).
-                            </div>
-
-                            <div class="form-group">
-                                <label for="change_car_id">Select Vehicle *</label>
-                                <select name="car_id" id="change_car_id" class="form-control select-search" required>
-                                    <option value="">Loading available vehicles...</option>
-                                </select>
-                                <div id="changeCarLoadError" class="text-danger small mt-1 d-none"></div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="change_agreed_rent">Agreed Rent *</label>
-                                <div class="input-group">
-                                    <div class="input-group-prepend">
-                                        <span class="input-group-text">£</span>
-                                    </div>
-                                    <input type="number" name="agreed_rent" id="change_agreed_rent"
-                                           class="form-control @error('agreed_rent') is-invalid @enderror"
-                                           step="0.01" min="0" required
-                                           value="{{ old('agreed_rent', $agreement->agreed_rent) }}">
-                                </div>
-                                <small class="form-text text-muted">Current rent: £{{ number_format($agreement->agreed_rent, 2) }}. You may enter a higher or lower amount.</small>
-                                @error('agreed_rent')
-                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                @enderror
-                            </div>
-
-                            <div class="card bg-light">
-                                <div class="card-body py-2">
-                                    <h6 class="mb-1">Estimated first-period adjustment</h6>
-                                    <p class="mb-0" id="changeCarAdjustmentPreview">
-                                        Enter a new agreed rent to see the estimated invoice or credit.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary" id="changeCarSubmitBtn">
-                                <i class="fa fa-check mr-50"></i>
-                                Change &amp; Create Agreement
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    @endif
-
     <!-- Payment Modal -->
     <div class="modal fade" id="paymentModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog" role="document">
@@ -667,13 +804,12 @@
             </div>
         </div>
     </div>
+
+    @include('backend.agreements.partials.refund-deposit-modal', ['bankAccounts' => $bankAccounts ?? collect()])
 @endsection
 
 @section('js')
     <script>
-        const upgradePreview = @json($upgradePreview);
-        const currentAgreedRent = {{ (float) $agreement->agreed_rent }};
-
         function showPaymentModal(collectionId, remainingAmount) {
             const form = document.getElementById('paymentForm');
             const amountInput = document.getElementById('amount_paid');
@@ -704,142 +840,5 @@
                     });
             }
         }
-
-        function formatMoney(amount) {
-            return '£' + Number(amount).toFixed(2);
-        }
-
-        function calculateChangeCarAdjustment(newRent) {
-            if (!upgradePreview || isNaN(newRent)) {
-                return null;
-            }
-
-            const rentDiff = newRent - currentAgreedRent;
-            const amount = (rentDiff / upgradePreview.period_days) * upgradePreview.remaining_days;
-
-            return {
-                amount: amount,
-                rentDiff: rentDiff,
-                type: amount > 0 ? 'invoice' : (amount < 0 ? 'credit' : 'none'),
-            };
-        }
-
-        function updateChangeCarAdjustmentPreview() {
-            const previewEl = document.getElementById('changeCarAdjustmentPreview');
-            const rentInput = document.getElementById('change_agreed_rent');
-
-            if (!previewEl || !rentInput || !upgradePreview) {
-                return;
-            }
-
-            const newRent = parseFloat(rentInput.value || '0');
-            const adjustment = calculateChangeCarAdjustment(newRent);
-
-            if (!adjustment || isNaN(newRent)) {
-                previewEl.textContent = 'Enter a new agreed rent to see the estimated invoice or credit.';
-                return;
-            }
-
-            if (upgradePreview.remaining_days === 0) {
-                previewEl.innerHTML = 'Change is on a billing anchor day, so no immediate adjustment will be made. The first full rent invoice will be on the next billing date.';
-                return;
-            }
-
-            if (adjustment.type === 'none') {
-                previewEl.innerHTML = 'Rent is unchanged. No immediate invoice or credit. The next full rent invoice will be on the billing anchor date.';
-                return;
-            }
-
-            if (adjustment.type === 'credit') {
-                previewEl.innerHTML = `
-                    Rent difference: <strong>${formatMoney(adjustment.rentDiff)}</strong> per period<br>
-                    Remaining days until next billing anchor: <strong>${upgradePreview.remaining_days}</strong><br>
-                    Estimated driver credit: <strong>${formatMoney(Math.abs(adjustment.amount))}</strong> (visible on driver payments)
-                `;
-                return;
-            }
-
-            previewEl.innerHTML = `
-                Rent difference: <strong>${formatMoney(adjustment.rentDiff)}</strong> per period<br>
-                Remaining days until next billing anchor: <strong>${upgradePreview.remaining_days}</strong><br>
-                Estimated proration invoice: <strong>${formatMoney(adjustment.amount)}</strong>
-            `;
-        }
-
-        function loadChangeCars() {
-            const carSelect = document.getElementById('change_car_id');
-            const errorEl = document.getElementById('changeCarLoadError');
-
-            if (!carSelect) {
-                return;
-            }
-
-            carSelect.innerHTML = '<option value="">Loading available vehicles...</option>';
-            errorEl.classList.add('d-none');
-            errorEl.textContent = '';
-
-            fetch(`{{ route('agreements.upgrade-cars', $agreement) }}`, {
-                headers: {
-                    'Accept': 'application/json',
-                },
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Unable to load available vehicles.');
-                    }
-
-                    return response.json();
-                })
-                .then(data => {
-                    const cars = data.cars || [];
-
-                    if (cars.length === 0) {
-                        carSelect.innerHTML = '<option value="">No eligible vehicles available</option>';
-                        return;
-                    }
-
-                    carSelect.innerHTML = '<option value="">Select a vehicle</option>';
-                    cars.forEach(car => {
-                        const option = document.createElement('option');
-                        option.value = car.id;
-                        option.textContent = `${car.registration} - ${car.model || 'Unknown model'}${car.company ? ` (${car.company})` : ''}`;
-                        carSelect.appendChild(option);
-                    });
-
-                    if (window.jQuery && window.jQuery.fn.select2) {
-                        const $carSelect = window.jQuery(carSelect);
-                        if ($carSelect.hasClass('select2-hidden-accessible')) {
-                            $carSelect.select2('destroy');
-                        }
-                        if (window.initBackendSelect2) {
-                            window.initBackendSelect2(carSelect.parentElement);
-                        }
-                    }
-                })
-                .catch(error => {
-                    carSelect.innerHTML = '<option value="">Unable to load vehicles</option>';
-                    errorEl.textContent = error.message;
-                    errorEl.classList.remove('d-none');
-                });
-        }
-
-        jQuery(document).ready(function () {
-            const changeCarModal = jQuery('#changeCarModal');
-            const rentInput = document.getElementById('change_agreed_rent');
-
-            if (rentInput) {
-                rentInput.addEventListener('input', updateChangeCarAdjustmentPreview);
-                updateChangeCarAdjustmentPreview();
-            }
-
-            if (changeCarModal.length) {
-                changeCarModal.on('show.bs.modal', loadChangeCars);
-            }
-
-            @if($errors->has('car_id') || $errors->has('agreed_rent'))
-                changeCarModal.modal('show');
-                loadChangeCars();
-            @endif
-        });
     </script>
 @endsection

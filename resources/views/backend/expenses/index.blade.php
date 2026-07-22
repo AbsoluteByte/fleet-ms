@@ -36,18 +36,24 @@
                                             <td>
                                                 <div class="btn-group" role="group">
                                                     <a href="{{ route('expenses.show', $expense) }}"
-                                                       class="btn btn-sm btn-outline-info">
+                                                       class="btn btn-sm btn-outline-info js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="View Expense" aria-label="View Expense">
                                                         <i class="fa fa-eye"></i>
                                                     </a>
                                                     <a href="{{ route('expenses.edit', $expense) }}"
-                                                       class="btn btn-sm btn-outline-warning">
+                                                       class="btn btn-sm btn-outline-warning js-action-tooltip"
+                                                       data-toggle="tooltip" data-placement="top"
+                                                       title="Edit Expense" aria-label="Edit Expense">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
                                                     <form action="{{ route('expenses.destroy', $expense) }}" method="POST"
                                                           style="display: inline;">
                                                         @csrf
                                                         @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger js-action-tooltip"
+                                                                data-toggle="tooltip" data-placement="top"
+                                                                title="Delete Expense" aria-label="Delete Expense"
                                                                 onclick="return confirm('Are you sure?')">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
@@ -83,9 +89,19 @@
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
     <script>
         $(document).ready(function () {
-            $('#dataTable').DataTable({
+            function initializeActionTooltips() {
+                $('.js-action-tooltip').tooltip({ container: 'body' });
+            }
+
+            const dataTable = $('#dataTable').DataTable({
                 processing: true,
                 responsive: true,
+            });
+
+            initializeActionTooltips();
+            dataTable.on('draw.dt responsive-display.dt', function () {
+                $('.tooltip').remove();
+                initializeActionTooltips();
             });
         });
     </script>

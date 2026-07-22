@@ -37,7 +37,17 @@ class DriverController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $drivers = Driver::where('tenant_id', $tenant->id)->get();
+        $drivers = Driver::query()
+            ->where('tenant_id', $tenant->id)
+            ->withMax(['payments as last_posted_payment_date' => function ($query) {
+                $query->posted();
+            }], 'payment_date')
+            ->with(['agreements' => function ($query) {
+                $query->currentlyActive()->select('id', 'driver_id', 'end_date');
+            }])
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
 
         return view($this->dir.'index', compact('drivers'));
     }

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Services\DriverPersistenceService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class Driver extends Model
@@ -21,6 +22,7 @@ class Driver extends Model
         'phd_card_document', 'dvla_license_summary', 'misc_document',
         'proof_of_address_document', 'is_invited', 'invited_at',
         'invitation_token', 'invitation_accepted_at', 'user_id', 'is_active',
+        'payment_follow_up_notes', 'payment_remind_at', 'payment_reminder_dismissed_at',
         'createdBy', 'updatedBy',
     ];
 
@@ -32,6 +34,8 @@ class Driver extends Model
         'invitation_accepted_at' => 'datetime',
         'is_invited' => 'boolean',
         'is_active' => 'boolean',
+        'payment_remind_at' => 'datetime',
+        'payment_reminder_dismissed_at' => 'datetime',
     ];
 
     public function scopeActive($query)
@@ -71,6 +75,11 @@ class Driver extends Model
     public function payments()
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function creditTransactions()
+    {
+        return $this->hasMany(DriverCreditTransaction::class);
     }
 
     public function reservations()
@@ -215,7 +224,9 @@ class Driver extends Model
 
     public function activeInvoices()
     {
-        return $this->invoices()->where('balance_amount', '>', 0);
+        return $this->invoices()
+            ->where('balance_amount', '>', 0)
+            ->where('status', '!=', 'cancelled');
     }
 
     public function overdueInvoices()
@@ -230,13 +241,13 @@ class Driver extends Model
 
     public function getTotalPaidAttribute()
     {
-        return (float) $this->payments()->sum('amount');
+        return (float) $this->payments()->posted()->sum('amount');
     }
 
     public function getTotalAllocatedAttribute()
     {
         return (float) PaymentAllocation::whereHas('payment', function ($query) {
-            $query->where('driver_id', $this->id);
+            $query->where('driver_id', $this->id)->posted();
         })->sum('allocated_amount');
     }
 
@@ -247,7 +258,38 @@ class Driver extends Model
 
     public function getCreditAmountAttribute()
     {
-        return max($this->total_paid - $this->total_allocated, 0);
+        $refundedCredit = Schema::hasTable('driver_credit_transaction_lines')
+            ? DriverCreditTransactionLine::query()
+                ->whereHas('transaction', function ($query) {
+                    $query->where('driver_id', $this->id)
+                        ->where('kind', DriverCreditTransaction::KIND_REFUND)
+                        ->where('posting_status', DriverCreditTransaction::STATUS_POSTED);
+                })
+                ->where('status', DriverCreditTransactionLine::STATUS_CONSUMED)
+                ->sum('amount')
+            : 0;
+
+        return round(max($this->total_paid - $this->total_allocated - (float) $refundedCredit, 0), 2);
+    }
+
+    public function getReservedCreditAmountAttribute(): float
+    {
+        if (! Schema::hasTable('driver_credit_transaction_lines')) {
+            return 0.0;
+        }
+
+        return round((float) DriverCreditTransactionLine::query()
+            ->whereHas('transaction', function ($query) {
+                $query->where('driver_id', $this->id)
+                    ->where('posting_status', DriverCreditTransaction::STATUS_PENDING);
+            })
+            ->where('status', DriverCreditTransactionLine::STATUS_RESERVED)
+            ->sum('amount'), 2);
+    }
+
+    public function getAvailableCreditAmountAttribute(): float
+    {
+        return round(max($this->credit_amount - $this->reserved_credit_amount, 0), 2);
     }
 
     // Get overdue payments
@@ -269,5 +311,36 @@ class Driver extends Model
     public function missingProfileFieldLabels(): array
     {
         return app(DriverPersistenceService::class)->missingProfileFieldLabels($this);
+    }
+
+    public function hasPaymentFollowUpNote(): bool
+    {
+        return filled($this->payment_follow_up_notes);
+    }
+
+    public function hasPaymentReminder(): bool
+    {
+        return $this->payment_remind_at !== null;
+    }
+
+    public function isPaymentReminderDue(): bool
+    {
+        if (! $this->payment_remind_at || $this->payment_remind_at->gt(now())) {
+            return false;
+        }
+
+        return $this->payment_reminder_dismissed_at === null
+            || $this->payment_reminder_dismissed_at->lt($this->payment_remind_at);
+    }
+
+    public function scopeWithDuePaymentReminder($query)
+    {
+        return $query
+            ->whereNotNull('payment_remind_at')
+            ->where('payment_remind_at', '<=', now())
+            ->where(function ($inner) {
+                $inner->whereNull('payment_reminder_dismissed_at')
+                    ->orWhereColumn('payment_reminder_dismissed_at', '<', 'payment_remind_at');
+            });
     }
 }

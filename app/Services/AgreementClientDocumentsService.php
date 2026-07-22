@@ -71,6 +71,7 @@ class AgreementClientDocumentsService
         foreach ($map as $label => $filename) {
             if (! $filename || ! is_string($filename)) {
                 $missingDocuments[] = $label;
+
                 continue;
             }
 
@@ -224,6 +225,7 @@ class AgreementClientDocumentsService
     ): void {
         if (! $fullPath || ! is_file($fullPath)) {
             $missingDocuments[] = $label;
+
             return;
         }
 

@@ -31,6 +31,9 @@ class Car extends Model
         'phvl_suspension_status', 'phvl_suspension_status_date',
         'log_book_applied', 'log_book_applied_date', 'logbook_notes', 'old_log_book',
         'log_book_applied_by',
+        'tracker_installed', 'tracker_status', 'tracker_notes',
+        'dashcam_installed', 'dashcam_status', 'dashcam_notes',
+        'tag_installed', 'tag_status', 'tag_notes',
         'sorn_applied', 'sorn_applied_at', 'sorn_applied_by', 'sorn_document',
         'fleet_status', 'available_from_date',
         'createdBy', 'updatedBy',
@@ -43,6 +46,9 @@ class Car extends Model
         'log_book_applied_date' => 'date',
         'old_log_book' => 'array',
         'v5_document' => 'array',
+        'tracker_installed' => 'boolean',
+        'dashcam_installed' => 'boolean',
+        'tag_installed' => 'boolean',
         'sorn_applied' => 'boolean',
         'sorn_applied_at' => 'datetime',
         'available_from_date' => 'date',
@@ -85,6 +91,14 @@ class Car extends Model
     public function agreements()
     {
         return $this->hasMany(Agreement::class);
+    }
+
+    public function terminationNoticeAgreement(): ?Agreement
+    {
+        return $this->agreements
+            ->filter(fn (Agreement $agreement) => $agreement->isBillableStatus() && filled($agreement->termination_notice_date))
+            ->sortByDesc(fn (Agreement $agreement) => [$agreement->termination_notice_date, $agreement->id])
+            ->first();
     }
 
     public function claims()

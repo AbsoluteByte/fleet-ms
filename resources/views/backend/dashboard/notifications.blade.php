@@ -155,6 +155,23 @@
                 </div>
             </div>
         </div>
+
+        {{-- Agreement Notifications --}}
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="card text-center cursor-pointer" onclick="filterNotifications('agreement_notifications')">
+                <div class="card-content">
+                    <div class="card-body py-1">
+                        <div class="avatar bg-rgba-info p-50 m-0 mb-1">
+                            <div class="avatar-content">
+                                <i class="feather icon-file-text text-info font-large-1"></i>
+                            </div>
+                        </div>
+                        <h2 class="text-bold-700">{{ $summary['agreement_notifications'] ?? 0 }}</h2>
+                        <p class="mb-0 font-small-3">Agreements</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     {{-- Filter Tabs - FLEET ONLY (NO PAYMENT TABS) --}}
@@ -166,7 +183,7 @@
                         <a class="nav-link active" href="javascript:void(0)" onclick="filterNotifications('')">
                             All Fleet
                             <span class="badge badge-pill badge-light ml-50">
-                                {{ $summary['insurance_applied'] + $summary['expiring_insurance'] + $summary['expiring_phv'] + $summary['expiring_mot'] + $summary['expiring_road_tax'] + $summary['expiring_driver_licenses'] + $summary['expiring_phd_licenses'] }}
+                                {{ $summary['insurance_applied'] + $summary['expiring_insurance'] + $summary['expiring_phv'] + $summary['expiring_mot'] + $summary['expiring_road_tax'] + $summary['expiring_driver_licenses'] + $summary['expiring_phd_licenses'] + ($summary['agreement_notifications'] ?? 0) }}
                             </span>
                         </a>
                     </li>
@@ -210,6 +227,12 @@
                         <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('phd_license_expiry')">
                             PHD License
                             <span class="badge badge-pill badge-secondary ml-50">{{ $summary['expiring_phd_licenses'] }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('agreement_notifications')">
+                            Agreements
+                            <span class="badge badge-pill badge-info ml-50">{{ $summary['agreement_notifications'] ?? 0 }}</span>
                         </a>
                     </li>
                 </ul>
@@ -360,6 +383,11 @@
                             <i class="feather icon-user"></i> ${row.driver}
                         </span>`;
                             }
+                            if (row.paying_company) {
+                                html += `<span class="badge badge-light-primary ml-50">
+                            Pays via: ${row.paying_company}
+                        </span>`;
+                            }
                             return html || '-';
                         }
                     },
@@ -468,7 +496,10 @@
             road_tax_expiry: 'Road Tax',
             road_tax_missing: 'Road Tax Missing',
             driver_license_expiry: 'Driver License',
-            phd_license_expiry: 'PHD License'
+            phd_license_expiry: 'PHD License',
+            agreement_end_date: 'Agreement End Date',
+            agreement_termination_notice: 'Termination Notice',
+            agreement_notifications: 'Agreements'
         };
         const fleetFilterLabels = {
             '': 'All Fleet',
@@ -478,7 +509,10 @@
             mot_expiry: 'MOT',
             road_tax_expiry: 'Road Tax',
             driver_license_expiry: 'Driver License',
-            phd_license_expiry: 'PHD License'
+            phd_license_expiry: 'PHD License',
+            agreement_end_date: 'Agreement End Date',
+            agreement_termination_notice: 'Termination Notice',
+            agreement_notifications: 'Agreements'
         };
 
         function fleetExportFilename(extension) {
@@ -492,6 +526,9 @@
             }
             if (row.driver) {
                 parts.push(row.driver);
+            }
+            if (row.paying_company) {
+                parts.push('Pays via: ' + row.paying_company);
             }
             return parts.length ? parts.join(' / ') : '—';
         }

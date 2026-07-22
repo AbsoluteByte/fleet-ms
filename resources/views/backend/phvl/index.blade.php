@@ -3,6 +3,10 @@
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
     <style>
+        .navbar-floating .header-navbar-shadow {
+            height: 105px !important;
+        }
+
         #phvlTable.table {
             min-width: 1500px;
         }

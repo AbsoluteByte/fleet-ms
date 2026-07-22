@@ -9,6 +9,8 @@ class BankAccount extends Model
 {
     use HasFactory;
 
+    public const DEFAULT_CARD_ACCOUNT_NUMBER = '56069230';
+
     protected $fillable = [
         'tenant_id',
         'company_id',
@@ -17,6 +19,19 @@ class BankAccount extends Model
         'createdBy',
         'updatedBy',
     ];
+
+    public static function defaultForCardPayment(int $tenantId): ?self
+    {
+        return static::query()
+            ->where('tenant_id', $tenantId)
+            ->where('account_number', self::DEFAULT_CARD_ACCOUNT_NUMBER)
+            ->first();
+    }
+
+    public static function defaultForCardPaymentId(int $tenantId): ?int
+    {
+        return static::defaultForCardPayment($tenantId)?->id;
+    }
 
     public function company()
     {

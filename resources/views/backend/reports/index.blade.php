@@ -154,6 +154,7 @@
                                         <p class="text-muted small mb-1">
                                             Showing insurance activity from {{ \Carbon\Carbon::parse($insuranceFrom)->format('d M, Y') }}
                                             to {{ \Carbon\Carbon::parse($insuranceTo)->format('d M, Y') }}.
+                                            The <strong>Active on insurance</strong> tab lists currently active policies (date range not applied).
                                             @if($selectedInsuranceCompany)
                                                 Company: <strong>{{ $selectedInsuranceCompany->name }}</strong>.
                                             @endif
@@ -171,20 +172,20 @@
                                             </li>
                                             <li class="nav-item">
                                                 <a class="nav-link" id="reports-insurance-active-tab" data-toggle="pill" href="#reports-insurance-active-pane" role="tab">
-                                                    Activated &amp; still active
-                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedStillActive->count() }}</span>
+                                                    Activated in range
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedInRange->count() }}</span>
                                                 </a>
                                             </li>
                                             <li class="nav-item">
                                                 <a class="nav-link" id="reports-insurance-ended-tab" data-toggle="pill" href="#reports-insurance-ended-pane" role="tab">
                                                     Activated &amp; ended in range
-                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedAndEnded->count() }}</span>
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActivatedOrRemovedInRange->count() }}</span>
                                                 </a>
                                             </li>
                                             <li class="nav-item">
                                                 <a class="nav-link" id="reports-insurance-preexisting-tab" data-toggle="pill" href="#reports-insurance-preexisting-pane" role="tab">
-                                                    Pre-existing policies
-                                                    <span class="badge badge-light ml-25">{{ $insurancePreExisting->count() }}</span>
+                                                    Active on insurance
+                                                    <span class="badge badge-light ml-25">{{ $insuranceActiveOnInsurance->count() }}</span>
                                                 </a>
                                             </li>
                                         </ul>
@@ -193,9 +194,9 @@
                                             @php
                                                 $insuranceSubTabs = [
                                                     'removed' => ['id' => 'reportsInsuranceRemovedTable', 'pane' => 'reports-insurance-removed-pane', 'tab' => 'reports-insurance-removed-tab', 'rows' => $insuranceRemovedInRange, 'active' => true],
-                                                    'active' => ['id' => 'reportsInsuranceActiveTable', 'pane' => 'reports-insurance-active-pane', 'tab' => 'reports-insurance-active-tab', 'rows' => $insuranceActivatedStillActive, 'active' => false],
-                                                    'ended' => ['id' => 'reportsInsuranceEndedTable', 'pane' => 'reports-insurance-ended-pane', 'tab' => 'reports-insurance-ended-tab', 'rows' => $insuranceActivatedAndEnded, 'active' => false],
-                                                    'preexisting' => ['id' => 'reportsInsurancePreExistingTable', 'pane' => 'reports-insurance-preexisting-pane', 'tab' => 'reports-insurance-preexisting-tab', 'rows' => $insurancePreExisting, 'active' => false],
+                                                    'active' => ['id' => 'reportsInsuranceActiveTable', 'pane' => 'reports-insurance-active-pane', 'tab' => 'reports-insurance-active-tab', 'rows' => $insuranceActivatedInRange, 'active' => false],
+                                                    'ended' => ['id' => 'reportsInsuranceEndedTable', 'pane' => 'reports-insurance-ended-pane', 'tab' => 'reports-insurance-ended-tab', 'rows' => $insuranceActivatedOrRemovedInRange, 'active' => false],
+                                                    'preexisting' => ['id' => 'reportsInsurancePreExistingTable', 'pane' => 'reports-insurance-preexisting-pane', 'tab' => 'reports-insurance-preexisting-tab', 'rows' => $insuranceActiveOnInsurance, 'active' => false],
                                                 ];
                                             @endphp
 
@@ -358,10 +359,38 @@
                         <div class="dropdown-menu dropdown-menu-right" id="reportsMotMonthMenu" aria-labelledby="reportsMotMonthPickerBtn"></div>
                     </div>
                 </div>
-                <label class="small text-muted mb-25 d-block" for="reportsMotExpiringFrom">From</label>
-                <input type="date" id="reportsMotExpiringFrom" class="form-control mb-1">
-                <label class="small text-muted mb-25 d-block" for="reportsMotExpiringTo">To</label>
-                <input type="date" id="reportsMotExpiringTo" class="form-control">
+                <div class="form-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="reportsMotExpiringFrom">From</label>
+                        <input type="date" id="reportsMotExpiringFrom" class="form-control">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="reportsMotExpiringTo">To</label>
+                        <input type="date" id="reportsMotExpiringTo" class="form-control">
+                    </div>
+                </div>
+            </div>
+            <div class="form-group reports-expiring-month-group">
+                <div class="reports-expiring-label-row d-flex justify-content-between align-items-center mb-1">
+                    <label class="mb-0">MOT Start</label>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary reports-month-picker-btn" id="reportsMotStartMonthPickerBtn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Pick month">
+                            <i class="fa fa-calendar" aria-hidden="true"></i>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right" id="reportsMotStartMonthMenu" aria-labelledby="reportsMotStartMonthPickerBtn"></div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="reportsMotStartFrom">From</label>
+                        <input type="date" id="reportsMotStartFrom" class="form-control">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="reportsMotStartTo">To</label>
+                        <input type="date" id="reportsMotStartTo" class="form-control">
+                    </div>
+                </div>
+                <small class="text-muted">Filters by MOT test date.</small>
             </div>
             <div class="form-group">
                 <div class="custom-control custom-checkbox">
@@ -610,7 +639,7 @@
                 setReportsExportVisible(false);
             }
 
-            const motFilters = { company: '', from: '', to: '', includeMissing: false };
+            const motFilters = { company: '', from: '', to: '', startFrom: '', startTo: '', includeMissing: false };
             const phvlFilters = { company: '', from: '', to: '', includeMissing: false };
 
             function parseDateYmd(value) {
@@ -636,24 +665,45 @@
                 return !!(filters.from || filters.to || filters.includeMissing);
             }
 
+            function isStartFilterActive(filters) {
+                return !!(filters.startFrom || filters.startTo);
+            }
+
             function isAnyFilterActive(filters) {
-                return !!filters.company || isExpiryFilterActive(filters);
+                return !!filters.company || isExpiryFilterActive(filters) || isStartFilterActive(filters);
+            }
+
+            function reportRowNode(settings, dataIndex) {
+                const aoData = settings.aoData[dataIndex];
+                return aoData ? aoData.nTr : null;
             }
 
             function applyReportRowFilter(settings, dataIndex, tableApi, filters, expiryKey, missingKey) {
                 if (!isAnyFilterActive(filters)) return true;
-                const row = tableApi.row(dataIndex).node();
+                const row = reportRowNode(settings, dataIndex);
                 if (!row) return true;
-                if (filters.company && row.dataset.company !== filters.company) return false;
+
+                const company = row.getAttribute('data-company') || '';
+                if (filters.company && company !== filters.company) return false;
+
+                if (isStartFilterActive(filters)) {
+                    const testIso = row.getAttribute('data-mot-test-date') || '';
+                    if (!expiryInRange(testIso, filters.startFrom, filters.startTo)) {
+                        return false;
+                    }
+                }
+
                 if (!isExpiryFilterActive(filters)) return true;
 
-                const isMissing = row.dataset[missingKey] === '1';
-                const expiryIso = row.dataset[expiryKey] || '';
+                const missingAttr = missingKey === 'motMissing' ? 'data-mot-missing' : 'data-phv-missing';
+                const expiryAttr = expiryKey === 'motExpiry' ? 'data-mot-expiry' : 'data-phv-expiry';
+                const missing = row.getAttribute(missingAttr) === '1';
+                const expiryIso = row.getAttribute(expiryAttr) || '';
                 const hasDateRange = !!(filters.from || filters.to);
 
-                if (filters.includeMissing && isMissing) return true;
+                if (filters.includeMissing && missing) return true;
                 if (hasDateRange && expiryInRange(expiryIso, filters.from, filters.to)) return true;
-                if (!hasDateRange && filters.includeMissing) return isMissing;
+                if (!hasDateRange && filters.includeMissing) return missing;
                 return false;
             }
 
@@ -751,6 +801,8 @@
                 motFilters.company = document.getElementById('reportsMotsFilterCompany').value;
                 motFilters.from = document.getElementById('reportsMotExpiringFrom').value;
                 motFilters.to = document.getElementById('reportsMotExpiringTo').value;
+                motFilters.startFrom = document.getElementById('reportsMotStartFrom').value;
+                motFilters.startTo = document.getElementById('reportsMotStartTo').value;
                 motFilters.includeMissing = document.getElementById('reportsIncludeMissingMot').checked;
                 closeAllFilterPanels();
                 motsDataTable.draw();
@@ -769,10 +821,14 @@
                 document.getElementById('reportsMotsFilterCompany').value = '';
                 document.getElementById('reportsMotExpiringFrom').value = '';
                 document.getElementById('reportsMotExpiringTo').value = '';
+                document.getElementById('reportsMotStartFrom').value = '';
+                document.getElementById('reportsMotStartTo').value = '';
                 document.getElementById('reportsIncludeMissingMot').checked = false;
                 motFilters.company = '';
                 motFilters.from = '';
                 motFilters.to = '';
+                motFilters.startFrom = '';
+                motFilters.startTo = '';
                 motFilters.includeMissing = false;
                 motsDataTable.draw();
             });
@@ -876,7 +932,9 @@
                 $dropdown.find('[data-toggle="dropdown"]').attr('aria-expanded', 'false');
             }
 
-            function buildMonthPickerMenu(menuEl, fromInputId, toInputId, filtersObj, tableApi) {
+            function buildMonthPickerMenu(menuEl, fromInputId, toInputId, filtersObj, tableApi, fromKey, toKey) {
+                fromKey = fromKey || 'from';
+                toKey = toKey || 'to';
                 menuEl.innerHTML = '';
                 getUpcomingFourMonths().forEach(function (month) {
                     const btn = document.createElement('button');
@@ -886,8 +944,8 @@
                     btn.addEventListener('click', function () {
                         document.getElementById(fromInputId).value = month.from;
                         document.getElementById(toInputId).value = month.to;
-                        filtersObj.from = month.from;
-                        filtersObj.to = month.to;
+                        filtersObj[fromKey] = month.from;
+                        filtersObj[toKey] = month.to;
                         tableApi.draw();
                         closeDropdownMenu(menuEl);
                     });
@@ -901,6 +959,15 @@
                 'reportsMotExpiringTo',
                 motFilters,
                 motsDataTable
+            );
+            buildMonthPickerMenu(
+                document.getElementById('reportsMotStartMonthMenu'),
+                'reportsMotStartFrom',
+                'reportsMotStartTo',
+                motFilters,
+                motsDataTable,
+                'startFrom',
+                'startTo'
             );
             buildMonthPickerMenu(
                 document.getElementById('reportsPhvlMonthMenu'),
@@ -1077,9 +1144,9 @@
 
                     const subTabLabels = {
                         removed: 'Removed in range',
-                        active: 'Activated and still active',
+                        active: 'Activated in range',
                         ended: 'Activated and ended in range',
-                        preexisting: 'Pre-existing policies'
+                        preexisting: 'Active on insurance'
                     };
                     const label = subTabLabels[activeInsuranceSubTab] || 'Insurance';
                     const filePrefix = 'insurance-' + activeInsuranceSubTab + '-report';

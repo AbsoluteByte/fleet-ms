@@ -144,7 +144,8 @@
                     (data.summary.expiring_mot || 0) +
                     (data.summary.expiring_road_tax || 0) +
                     (data.summary.expiring_driver_licenses || 0) +
-                    (data.summary.expiring_phd_licenses || 0);
+                    (data.summary.expiring_phd_licenses || 0) +
+                    (data.summary.agreement_notifications || 0);
             }
 
             // Alternative: If notifications array is available, use its length
@@ -201,6 +202,7 @@
                             <h6 class="text-${colorClass} media-heading mb-1">${notification.title}</h6>
                             <small class="notification-text">${notification.simple_message}</small>
                             ${notification.vehicle ? `<div class="notification-vehicle mt-1">${notification.vehicle}</div>` : ''}
+                            ${notification.paying_company ? `<div class="notification-paying-company mt-1">Pays via: ${notification.paying_company}</div>` : ''}
                             ${notification.amount ? `<div class="notification-amount mt-1">${notification.amount}</div>` : ''}
                             <small class="d-block mt-1">
                                 <time class="media-meta text-muted">${notification.time_ago}</time>
@@ -260,6 +262,8 @@
                 'road_tax_missing': 'due-soon',
                 'driver_license_expiry': 'insurance-expiry',
                 'phd_license_expiry': 'insurance-expiry',
+                'agreement_end_date': 'due-soon',
+                'agreement_termination_notice': 'due-soon',
                 'default': ''
             };
             return classes[type] || classes.default;

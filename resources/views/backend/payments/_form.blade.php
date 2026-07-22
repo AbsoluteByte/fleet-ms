@@ -35,6 +35,15 @@
                 @php
                     $selectedPaymentMethod = old('payment_method', $model->payment_method ?? '');
                     $paymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
+                    $defaultCardBankAccountId = ($bankAccounts ?? collect())->firstWhere(
+                        'account_number',
+                        \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER
+                    )?->id;
+                    $selectedBankAccountId = old(
+                        'bank_account_id',
+                        $model->bank_account_id
+                            ?? ($selectedPaymentMethod === 'Card Payment' ? $defaultCardBankAccountId : null)
+                    );
                 @endphp
                 <select name="payment_method" id="payment_method"
                         class="form-control @error('payment_method') is-invalid @enderror" required>
@@ -53,7 +62,7 @@
             <div class="col-md-6 mb-2">
                 @include('backend.payments.partials.bank-account-select', [
                     'bankAccounts' => $bankAccounts ?? collect(),
-                    'selected' => old('bank_account_id', $model->bank_account_id ?? null),
+                    'selected' => $selectedBankAccountId,
                     'name' => 'bank_account_id',
                     'id' => 'bank_account_id',
                     'errorKey' => 'bank_account_id',
@@ -117,6 +126,7 @@
                         <tr>
                             <th>Invoice No</th>
                             <th>Vehicle</th>
+                            <th>Pays via</th>
                             <th>Invoice Date</th>
                             <th>Due Date</th>
                             <th>Balance</th>
@@ -129,6 +139,7 @@
                             <tr data-invoice-balance="{{ $invoice->balance_amount }}">
                                 <td>{{ $invoice->invoice_no }}</td>
                                 <td>{{ $invoice->vehicleRegistrationLabel() }}</td>
+                                <td>{{ $invoice->payingCompanyNameLabel() ?? '—' }}</td>
                                 <td>{{ optional($invoice->invoice_date)->format('d M Y') }}</td>
                                 <td>{{ optional($invoice->due_date)->format('d M Y') }}</td>
                                 <td>£{{ number_format($invoice->balance_amount, 2) }}</td>
@@ -276,14 +287,18 @@
                     return;
                 }
 
-                const isBankTransfer = paymentMethodSelect.value === 'Bank Transfer';
-                bankAccountField.classList.toggle('d-none', !isBankTransfer);
+                const needsBank = paymentMethodSelect.value === 'Bank Transfer'
+                    || paymentMethodSelect.value === 'Card Payment';
+                const defaultCardBankId = @json($defaultCardBankAccountId ?? null);
+                bankAccountField.classList.toggle('d-none', !needsBank);
 
                 if (bankAccountSelect) {
-                    bankAccountSelect.required = isBankTransfer && {{ ($bankAccounts ?? collect())->isNotEmpty() ? 'true' : 'false' }};
+                    bankAccountSelect.required = needsBank && {{ ($bankAccounts ?? collect())->isNotEmpty() ? 'true' : 'false' }};
 
-                    if (!isBankTransfer) {
+                    if (!needsBank) {
                         bankAccountSelect.value = '';
+                    } else if (paymentMethodSelect.value === 'Card Payment' && !bankAccountSelect.value && defaultCardBankId) {
+                        bankAccountSelect.value = String(defaultCardBankId);
                     }
                 }
             }

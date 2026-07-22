@@ -39,6 +39,19 @@
                     @enderror
                 </div>
 
+                {{-- Email Address --}}
+                <div class="col-md-6 mb-3">
+                    <label for="email" class="form-label fw-bold">Email Address</label>
+                    <input type="email" name="email" id="email"
+                           class="form-control @error('email') is-invalid @enderror"
+                           value="{{ old('email') ?? ($model->email ?? '') }}"
+                           placeholder="provider@example.com">
+                    @error('email')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    <small class="form-text text-muted">Optional. Used for fleet add/remove insurance notifications.</small>
+                </div>
+
                 {{-- Insurance Type --}}
                 <div class="col-md-6 mb-3">
                     <label for="insurance_type" class="form-label fw-bold">Insurance Type <span class="text-danger">*</span></label>

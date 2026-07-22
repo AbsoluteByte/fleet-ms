@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Car;
 use App\Models\CarPhvlSuspensionHistory;
-use App\Models\CarStatusHistory;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;

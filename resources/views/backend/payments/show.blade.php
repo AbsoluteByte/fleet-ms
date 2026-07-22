@@ -2,7 +2,13 @@
 
 @section('content')
     @php
-        $creditAmount = max(($summary['total_paid'] ?? 0) - ($summary['total_allocated'] ?? 0), 0);
+        $creditAmount = $driver->credit_amount;
+        $availableCredit = $creditPreview['available_credit'] ?? 0;
+        $payingCompanyNames = $invoices
+            ->map(fn ($invoice) => $invoice->payingCompanyNameLabel())
+            ->filter()
+            ->unique()
+            ->values();
     @endphp
 
     <div class="row">
@@ -13,8 +19,20 @@
                     <div>
                         <h4 class="card-title mb-0">{{ $driver->selectOptionLabel() ?: 'Driver' }}</h4>
                         <small class="text-muted">{{ $driver->email }} {{ $driver->phone_number ? ' | '.$driver->phone_number : '' }}</small>
+                        @if($payingCompanyNames->isNotEmpty())
+                            <small class="text-muted d-block">Pays via: {{ $payingCompanyNames->implode(', ') }}</small>
+                        @endif
                     </div>
                     <div>
+                        @if($availableCredit > 0 && ($creditPreview['outstanding'] ?? 0) <= 0)
+                            <button type="button" class="btn btn-success btn-sm" data-toggle="modal" data-target="#refundDriverCreditModal">
+                                <i class="fa fa-undo"></i> Refund Credit
+                            </button>
+                        @elseif($availableCredit > 0 && ($creditPreview['outstanding'] ?? 0) > 0)
+                            <button type="button" class="btn btn-success btn-sm" data-toggle="modal" data-target="#applyDriverCreditModal">
+                                <i class="fa fa-check-circle"></i> Apply Credit to Invoices
+                            </button>
+                        @endif
                         <a href="{{ route('payments.create', ['driver_id' => $driver->id]) }}" class="btn btn-primary btn-sm">
                             <i class="fa fa-plus"></i> Add Payment
                         </a>
@@ -46,11 +64,21 @@
                         </div>
                         <div class="col-md-3 mb-1">
                             <div class="payment-summary-card border-primary">
-                                <span>Total Paid</span>
+                                <span>Total Paid (Posted)</span>
                                 <strong>£{{ number_format($summary['total_paid'], 2) }}</strong>
                             </div>
                         </div>
                     </div>
+                    @if(($summary['total_pending'] ?? 0) > 0)
+                        <div class="alert alert-info mt-1">
+                            £{{ number_format($summary['total_pending'], 2) }} pending daily financial sheet approval.
+                        </div>
+                    @endif
+                    @if($driver->reserved_credit_amount > 0)
+                        <div class="alert alert-warning mt-1">
+                            £{{ number_format($driver->reserved_credit_amount, 2) }} credit is reserved and pending daily financial sheet approval.
+                        </div>
+                    @endif
 
                     <div class="alert {{ $summary['total_due'] > 0 ? 'alert-warning' : ($creditAmount > 0 ? 'alert-success' : 'alert-info') }} mb-0">
                         @if($summary['total_due'] > 0)
@@ -120,11 +148,16 @@
                                     <tbody>
                                     @forelse($payments as $payment)
                                         <tr>
-                                            <td><strong>{{ $payment->payment_no }}</strong></td>
+                                            <td>
+                                                <strong>{{ $payment->payment_no }}</strong>
+                                                @if($payment->isPending())
+                                                    <span class="badge badge-warning ml-50">Pending approval</span>
+                                                @endif
+                                            </td>
                                             <td>{{ optional($payment->payment_date)->format('d M Y') }}</td>
                                             <td>
                                                 {{ $payment->payment_method }}
-                                                @if($payment->payment_method === 'Bank Transfer' && $payment->bankAccount)
+                                                @if(\App\Models\Payment::requiresBankAccount($payment->payment_method) && $payment->bankAccount)
                                                     <div class="text-muted small">{{ $payment->bankAccount->bank_name }}</div>
                                                 @endif
                                             </td>
@@ -165,6 +198,96 @@
     </div>
 
     @include('backend.payments.partials.notes-modal')
+
+    <div class="modal fade" id="refundDriverCreditModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <form method="POST" action="{{ route('payments.credit.refund', $driver) }}">
+                    @csrf
+                    <div class="modal-header">
+                        <h5 class="modal-title">Refund Driver Credit</h5>
+                        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            The full available credit will remain reserved until Daily Financial Sheet approval.
+                        </div>
+                        <div class="form-group">
+                            <label>Refund Amount</label>
+                            <input type="text" class="form-control" value="£{{ number_format($availableCredit, 2) }}" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="credit_refund_method">Payment Method <span class="text-danger">*</span></label>
+                            <select name="payment_method" id="credit_refund_method" class="form-control" required>
+                                <option value="">Select method</option>
+                                @foreach(['Cash', 'Bank Transfer', 'Cheque', 'Card Payment', 'Direct Debit'] as $method)
+                                    <option value="{{ $method }}">{{ $method }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @include('backend.payments.partials.bank-account-select', [
+                            'bankAccounts' => $bankAccounts,
+                            'name' => 'bank_account_id',
+                            'id' => 'credit_refund_bank_account_id',
+                            'wrapperClass' => 'credit-refund-bank-field d-none form-group',
+                        ])
+                        <div class="form-group">
+                            <label for="credit_refund_date">Refund Date <span class="text-danger">*</span></label>
+                            <input type="date" name="request_date" id="credit_refund_date" class="form-control"
+                                   value="{{ now()->toDateString() }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="credit_refund_notes">Notes</label>
+                            <textarea name="notes" id="credit_refund_notes" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">Submit for Approval</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="applyDriverCreditModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <form method="POST" action="{{ route('payments.credit.apply', $driver) }}">
+                    @csrf
+                    <div class="modal-header">
+                        <h5 class="modal-title">Apply Credit to Invoices</h5>
+                        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="credit-application-preview">
+                            <div><span>Available credit</span><strong>£{{ number_format($availableCredit, 2) }}</strong></div>
+                            <div><span>Outstanding invoices</span><strong>£{{ number_format($creditPreview['outstanding'], 2) }}</strong></div>
+                            <div class="credit-application-preview__total">
+                                <span>Apply oldest-first</span><strong>£{{ number_format($creditPreview['application_amount'], 2) }}</strong>
+                            </div>
+                            <div><span>Remaining credit</span><strong>£{{ number_format($creditPreview['remaining_credit'], 2) }}</strong></div>
+                            <div><span>Remaining debt</span><strong>£{{ number_format($creditPreview['remaining_debt'], 2) }}</strong></div>
+                        </div>
+                        <p class="text-muted mt-1">Invoices will update only after Daily Financial Sheet approval.</p>
+                        <div class="form-group">
+                            <label for="credit_application_date">Application Date <span class="text-danger">*</span></label>
+                            <input type="date" name="request_date" id="credit_application_date" class="form-control"
+                                   value="{{ now()->toDateString() }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="credit_application_notes">Notes</label>
+                            <textarea name="notes" id="credit_application_notes" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">Submit for Approval</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @section('css')
@@ -188,6 +311,27 @@
             margin-top: .25rem;
             font-size: 1.25rem;
         }
+
+        .credit-application-preview {
+            padding: 12px 14px;
+            border: 1px solid rgba(115, 103, 240, .2);
+            border-radius: 8px;
+            background: rgba(115, 103, 240, .05);
+        }
+
+        .credit-application-preview > div {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+
+        .credit-application-preview__total {
+            margin: 5px 0;
+            padding: 9px 0 !important;
+            color: #7367f0;
+            border-top: 1px solid rgba(115, 103, 240, .2);
+            border-bottom: 1px solid rgba(115, 103, 240, .2);
+        }
     </style>
 @endsection
 
@@ -208,6 +352,26 @@
 
             activateTabFromHash();
             window.addEventListener('hashchange', activateTabFromHash);
+
+            var refundMethod = document.getElementById('credit_refund_method');
+            var refundBankField = document.querySelector('.credit-refund-bank-field');
+            var refundBankSelect = refundBankField ? refundBankField.querySelector('select') : null;
+            function toggleCreditRefundBank() {
+                var needsBank = refundMethod && (refundMethod.value === 'Bank Transfer' || refundMethod.value === 'Card Payment');
+                if (refundBankField) {
+                    refundBankField.classList.toggle('d-none', !needsBank);
+                }
+                if (refundBankSelect) {
+                    refundBankSelect.required = !!needsBank;
+                    if (!needsBank) {
+                        refundBankSelect.value = '';
+                    }
+                }
+            }
+            if (refundMethod) {
+                refundMethod.addEventListener('change', toggleCreditRefundBank);
+                toggleCreditRefundBank();
+            }
 
             document.querySelectorAll('.edit-payment-notes-btn').forEach(function (button) {
                 button.addEventListener('click', function () {

@@ -10,7 +10,7 @@ class InsuranceProvider extends Model
     use HasFactory;
 
     protected $fillable = [
-        'company_id', 'provider_name', 'insurance_type',
+        'company_id', 'provider_name', 'email', 'insurance_type',
         'amount',
         'policy_number', 'expiry_date', 'status_id', 'tenant_id', 'createdBy', 'updatedBy',
     ];

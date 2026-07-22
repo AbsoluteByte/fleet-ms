@@ -15,6 +15,15 @@
         return String(FV.fieldValue(statusEl)) === String(cfg.replacementVehicleStatusId);
     }
 
+    function isSwap(form) {
+        var cfg = global.fleetiqAgreementValidation || {};
+        var statusEl = FV.findField(form, 'status_id');
+        if (!statusEl || cfg.swapStatusId == null) {
+            return false;
+        }
+        return String(FV.fieldValue(statusEl)) === String(cfg.swapStatusId);
+    }
+
     function usingOwnInsurance(form) {
         var clientRadio = form.querySelector('#using_own_insurance_client');
         return clientRadio && clientRadio.checked;
@@ -41,6 +50,9 @@
 
         if (isReplacementVehicle(form)) {
             FV.requiredField(errors, form, 'parent_agreement_id', 'Original agreement');
+        } else if (isSwap(form)) {
+            FV.requiredField(errors, form, 'upgraded_from_agreement_id', 'Original agreement');
+            FV.requiredField(errors, form, 'agreed_rent', 'Agreed rent');
         } else {
             FV.requiredField(errors, form, 'agreed_rent', 'Agreed rent');
             FV.requiredField(errors, form, 'rent_interval', 'Rent interval');

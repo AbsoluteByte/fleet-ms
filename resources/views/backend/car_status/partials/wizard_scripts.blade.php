@@ -1,11 +1,5 @@
-@php use App\Models\VehicleSwap; @endphp
 <script>
     $(document).ready(function () {
-        const SWAP_REASON_PHVL = @json(VehicleSwap::REASON_PHVL_ISSUES);
-        const SWAP_REASON_OTHERS = @json(VehicleSwap::REASON_OTHERS);
-        const PHVL_FAILED = @json(VehicleSwap::PHVL_FAILED);
-        const PHVL_DOCUMENTATION = @json(VehicleSwap::PHVL_DOCUMENTATION);
-
         const $form = $('#fleet-status-form');
         const oldTarget = String($form.data('old-target') || '').trim();
         const isEditMode = String($form.data('edit-mode') || '0') === '1';
@@ -81,40 +75,6 @@
         $('#fleet_rsv_agreed_rent, #fleet_rsv_agreed_advance, #fleet_rsv_amount_paid').on('input change', function () {
             refreshBalance('fleet_rsv');
         });
-        $('#fleet_swap_agreed_rent, #fleet_swap_agreed_advance, #fleet_swap_amount_paid').on('input change', function () {
-            refreshBalance('fleet_swap');
-        });
-
-        function toggleSwapReasonSections() {
-            const reason = String($('#fleet_swap_reason_for_swap').val() || '');
-            const phvlWrap = $('#fleet_swap_phvl_issue_type_wrap');
-            const phvlNotesWrap = $('#fleet_swap_phvl_issue_notes_wrap');
-            const othersWrap = $('#fleet_swap_reason_notes_wrap');
-
-            phvlWrap.toggleClass('d-none', reason !== SWAP_REASON_PHVL);
-            othersWrap.toggleClass('d-none', reason !== SWAP_REASON_OTHERS);
-
-            if (reason !== SWAP_REASON_PHVL) {
-                phvlNotesWrap.addClass('d-none');
-                return;
-            }
-            toggleFleetSwapPhvlNotes();
-        }
-
-        function toggleFleetSwapPhvlNotes() {
-            const reason = String($('#fleet_swap_reason_for_swap').val() || '');
-            const phvlNotesWrap = $('#fleet_swap_phvl_issue_notes_wrap');
-            if (reason !== SWAP_REASON_PHVL) {
-                phvlNotesWrap.addClass('d-none');
-                return;
-            }
-            const t = String($('#fleet_swap_phvl_issue_type').val() || '');
-            const needsNotes = t === PHVL_FAILED || t === PHVL_DOCUMENTATION;
-            phvlNotesWrap.toggleClass('d-none', !needsNotes);
-        }
-
-        $('#fleet_swap_reason_for_swap').on('change', toggleSwapReasonSections);
-        $('#fleet_swap_phvl_issue_type').on('change', toggleFleetSwapPhvlNotes);
 
         function toggleDamagedPhvlDate() {
             const fault = String($('#fleet_damaged_fault_type').val() || '');
@@ -283,14 +243,10 @@
                 alert('Please select a car and a target status.');
                 return;
             }
-            $('#fleet_hidden_swapped_with_car_id').val(status === 'vehicle_swap' ? String(carId) : '');
             $('#fleet_step1').addClass('d-none');
             $('#fleet_step2').removeClass('d-none');
             showPanel(status);
             refreshBalance('fleet_rsv');
-            refreshBalance('fleet_swap');
-            toggleSwapReasonSections();
-            toggleFleetSwapPhvlNotes();
             toggleDamagedFault();
             toggleWrittenFault();
             updateStep2Summary();
@@ -315,15 +271,10 @@
                     $(this).find(':input:not([type="file"])').prop('disabled', !isActivePanel);
                 });
             } else {
-                $('#fleet_hidden_swapped_with_car_id').prop('disabled', false);
                 $('.fleet-status-panel').each(function () {
                     const hidden = $(this).hasClass('d-none');
                     $(this).find(':input:not([type="file"])').prop('disabled', hidden);
                 });
-                const ts = $('#fleet_target_status').val();
-                if (ts !== 'vehicle_swap') {
-                    $('#fleet_hidden_swapped_with_car_id').prop('disabled', true);
-                }
             }
 
             return true;
@@ -332,14 +283,8 @@
         if (oldTarget) {
             $('#fleet_step2').removeClass('d-none');
             maybeApplyPrefillStatusData();
-            $('#fleet_hidden_swapped_with_car_id').val(
-                oldTarget === 'vehicle_swap' ? String($('#fleet_wizard_car_id').val() || '') : ''
-            );
             showPanel(oldTarget);
             refreshBalance('fleet_rsv');
-            refreshBalance('fleet_swap');
-            toggleSwapReasonSections();
-            toggleFleetSwapPhvlNotes();
             toggleDamagedFault();
             toggleWrittenFault();
             updateStep2Summary();
