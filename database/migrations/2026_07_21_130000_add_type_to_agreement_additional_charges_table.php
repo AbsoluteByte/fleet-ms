@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasColumn('agreement_additional_charges', 'type')) {
+            return;
+        }
+
         Schema::table('agreement_additional_charges', function (Blueprint $table) {
             $table->string('type', 50)
                 ->default('miscellaneous_charges')
@@ -17,6 +21,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! Schema::hasColumn('agreement_additional_charges', 'type')) {
+            return;
+        }
+
         Schema::table('agreement_additional_charges', function (Blueprint $table) {
             $table->dropColumn('type');
         });
