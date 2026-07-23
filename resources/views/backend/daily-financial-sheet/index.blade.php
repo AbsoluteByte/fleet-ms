@@ -29,6 +29,9 @@
                                             <a href="{{ route('daily-financial-sheet.show', $openDate) }}" class="btn btn-sm btn-primary">
                                                 Review Sheet
                                             </a>
+                                            <a href="{{ route('daily-financial-sheet.pdf', $openDate) }}" class="btn btn-sm btn-outline-primary">
+                                                Export PDF
+                                            </a>
                                         </td>
                                     </tr>
                                 @empty
@@ -66,6 +69,9 @@
                                         <td>
                                             <a href="{{ route('daily-financial-sheet.show', $approvedSheet->sheet_date->toDateString()) }}" class="btn btn-sm btn-outline-info">
                                                 View
+                                            </a>
+                                            <a href="{{ route('daily-financial-sheet.pdf', $approvedSheet->sheet_date->toDateString()) }}" class="btn btn-sm btn-outline-primary">
+                                                Export PDF
                                             </a>
                                         </td>
                                     </tr>

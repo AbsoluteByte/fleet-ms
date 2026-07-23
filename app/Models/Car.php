@@ -17,6 +17,8 @@ class Car extends Model
 
     public const FLEET_STATUS_NON_COMPLIANT = 'non_compliant';
 
+    public const FLEET_STATUS_ON_RENT = 'on_rent';
+
     public const FLEET_STATUS_WRITTEN_OFF = 'written_off';
 
     public const FLEET_STATUS_STOLEN = 'stolen';
@@ -223,6 +225,7 @@ class Car extends Model
         return [
             self::FLEET_STATUS_PREPARATION_FOR_PHVL => 'PHVL Preparation',
             self::FLEET_STATUS_AVAILABLE_FOR_RENT => 'Available for Rent',
+            self::FLEET_STATUS_ON_RENT => 'On Rent',
             self::FLEET_STATUS_NON_COMPLIANT => 'Non-Compliant',
             'reserved' => 'Reserved',
             'vehicle_swap' => 'Vehicle Swap',
@@ -452,6 +455,7 @@ class Car extends Model
         return [
             self::FLEET_STATUS_PREPARATION_FOR_PHVL,
             self::FLEET_STATUS_NON_COMPLIANT,
+            self::FLEET_STATUS_ON_RENT,
             'damaged',
             'written_off',
             'stolen',

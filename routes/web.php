@@ -191,8 +191,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::resource('claims', App\Http\Controllers\Backend\ClaimController::class);
     Route::resource('penalties', App\Http\Controllers\Backend\PenaltyController::class);
     Route::get('daily-financial-sheet', [App\Http\Controllers\Backend\DailyFinancialSheetController::class, 'index'])->name('daily-financial-sheet.index');
+    Route::get('daily-financial-sheet/{date}/pdf', [App\Http\Controllers\Backend\DailyFinancialSheetController::class, 'pdf'])->name('daily-financial-sheet.pdf')->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
     Route::get('daily-financial-sheet/{date}', [App\Http\Controllers\Backend\DailyFinancialSheetController::class, 'show'])->name('daily-financial-sheet.show')->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
     Route::post('daily-financial-sheet/{date}/approve', [App\Http\Controllers\Backend\DailyFinancialSheetController::class, 'approve'])->name('daily-financial-sheet.approve')->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
+    Route::post('daily-financial-sheet/{date}/reject', [App\Http\Controllers\Backend\DailyFinancialSheetController::class, 'reject'])->name('daily-financial-sheet.reject')->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
 
     Route::get('daily-expenses', [App\Http\Controllers\Backend\DailyExpenseController::class, 'index'])->name('daily-expenses.index');
     Route::get('daily-expenses/create', [App\Http\Controllers\Backend\DailyExpenseController::class, 'create'])->name('daily-expenses.create');

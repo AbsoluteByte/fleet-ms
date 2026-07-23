@@ -90,6 +90,52 @@ class DailyFinancialSheetController extends Controller
         ));
     }
 
+    public function pdf(string $date, DailyFinancialSheetService $service)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        $sheetDate = Carbon::parse($date)->toDateString();
+        $sheet = $service->sheetForDate($tenant->id, $sheetDate);
+        if ($sheet) {
+            $sheet->loadMissing('approvedByUser');
+        }
+        $entries = $service->entriesForDate($tenant->id, $sheetDate);
+        $isApproved = $sheet?->isApproved() ?? false;
+        $hasPending = $entries->where('posting_status', 'pending')->isNotEmpty();
+        $pendingTotals = $hasPending
+            ? $service->computeTotals($entries, pendingOnly: true)
+            : null;
+        $totals = $isApproved && $sheet
+            ? [
+                'cash_in' => (float) $sheet->cash_in,
+                'cash_out' => (float) $sheet->cash_out,
+                'net_cash' => round((float) $sheet->cash_in - (float) $sheet->cash_out, 2),
+                'bank_in' => $sheet->bank_in_json ?? [],
+                'bank_out' => $sheet->bank_out_json ?? [],
+            ]
+            : $service->computeTotals($entries, pendingOnly: true);
+
+        $pdf = \PDF::loadView($this->dir.'pdf', compact(
+            'sheetDate',
+            'sheet',
+            'entries',
+            'totals',
+            'pendingTotals',
+            'isApproved',
+            'hasPending'
+        ));
+        $pdf->setPaper('A4', 'landscape');
+
+        $filename = 'Daily_Financial_Sheet_'.$sheetDate.'.pdf';
+
+        return $pdf->download($filename);
+    }
+
     public function approve(Request $request, string $date, DailyFinancialSheetService $service)
     {
         abort_unless($this->canApprove(), 403);
@@ -138,6 +184,51 @@ class DailyFinancialSheetController extends Controller
 
         return redirect()->route('daily-financial-sheet.show', $sheetDate)
             ->with('success', $message);
+    }
+
+    public function reject(Request $request, string $date, DailyFinancialSheetService $service)
+    {
+        abort_unless($this->canApprove(), 403);
+
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        $validated = $request->validate([
+            'entry_ids' => 'nullable|array',
+            'entry_ids.*' => [
+                'string',
+                'regex:/^(payment|expense|deposit-refund|driver-credit)-\d+$/',
+            ],
+            'reject_mode' => ['nullable', Rule::in(['all', 'selected'])],
+        ]);
+
+        $sheetDate = Carbon::parse($date)->toDateString();
+
+        $entryIds = null;
+        if (($validated['reject_mode'] ?? 'all') === 'selected') {
+            $entryIds = $validated['entry_ids'] ?? [];
+            if ($entryIds === []) {
+                return redirect()->route('daily-financial-sheet.show', $sheetDate)
+                    ->withErrors(['entry_ids' => 'Select at least one pending entry to reject.'])
+                    ->withInput();
+            }
+        }
+
+        $count = $service->rejectEntries(
+            $tenant->id,
+            $sheetDate,
+            (int) Auth::id(),
+            $entryIds
+        );
+
+        return redirect()->route('daily-financial-sheet.show', $sheetDate)
+            ->with('success', $count === 1
+                ? '1 pending entry rejected and removed from the sheet.'
+                : "{$count} pending entries rejected and removed from the sheet.");
     }
 
     private function canApprove(): bool

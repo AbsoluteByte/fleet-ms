@@ -528,6 +528,180 @@ class DailyFinancialSheetService
     }
 
     /**
+     * Reject (discard) pending sheet entries for a date.
+     *
+     * When $entryIds is null or empty, all pending entries are rejected.
+     * Deposit-refund selections expand to include linked settlement payments.
+     *
+     * @param  list<string>|null  $entryIds  Keys like payment-12, expense-3, deposit-refund-5
+     * @return int Number of pending entry records discarded
+     */
+    public function rejectEntries(
+        int $tenantId,
+        string $date,
+        int $actorId,
+        ?array $entryIds = null
+    ): int {
+        $entries = $this->entriesForDate($tenantId, $date);
+        $pendingEntries = $entries
+            ->where('posting_status', Payment::POSTING_STATUS_PENDING)
+            ->values();
+
+        if ($pendingEntries->isEmpty()) {
+            throw ValidationException::withMessages([
+                'date' => 'There are no pending entries to reject for this date.',
+            ]);
+        }
+
+        $selectedIds = $this->normalizeSelectedEntryIds($entryIds);
+        if ($selectedIds !== []) {
+            $allPendingIds = $pendingEntries->pluck('id')->all();
+            $invalidSelected = array_values(array_diff($selectedIds, $allPendingIds));
+            if ($invalidSelected !== []) {
+                throw ValidationException::withMessages([
+                    'entry_ids' => 'One or more selected entries are not pending for this date.',
+                ]);
+            }
+
+            $selectedIds = $this->expandSettlementEntryIds($tenantId, $date, $selectedIds);
+            $pendingEntries = $pendingEntries
+                ->filter(fn (array $entry) => in_array($entry['id'], $selectedIds, true))
+                ->values();
+
+            if ($pendingEntries->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'entry_ids' => 'Select at least one pending entry to reject.',
+                ]);
+            }
+        } else {
+            $selectedIds = $this->expandSettlementEntryIds(
+                $tenantId,
+                $date,
+                $pendingEntries->pluck('id')->all()
+            );
+        }
+
+        $paymentIds = $this->idsOfType(
+            collect($selectedIds)->map(fn (string $id) => ['id' => $id]),
+            'payment'
+        );
+        $expenseIds = $this->idsOfType($pendingEntries, 'expense');
+        $refundIds = $this->idsOfType($pendingEntries, 'deposit-refund');
+        $creditTransactionIds = $this->idsOfType($pendingEntries, 'driver-credit');
+
+        return DB::transaction(function () use (
+            $tenantId,
+            $date,
+            $actorId,
+            $paymentIds,
+            $expenseIds,
+            $refundIds,
+            $creditTransactionIds
+        ) {
+            $rejectedCount = 0;
+            $deletedPaymentIds = [];
+
+            if ($refundIds !== []) {
+                $refunds = DepositRefund::query()
+                    ->pending()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('refund_date', $date)
+                    ->whereIn('id', $refundIds)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($refunds as $refund) {
+                    $linkedPaymentIds = array_values(array_filter([
+                        $refund->debt_payment_id ? (int) $refund->debt_payment_id : null,
+                        $refund->refund_credit_payment_id ? (int) $refund->refund_credit_payment_id : null,
+                    ]));
+
+                    $refund->update([
+                        'debt_payment_id' => null,
+                        'refund_credit_payment_id' => null,
+                    ]);
+
+                    foreach ($linkedPaymentIds as $linkedPaymentId) {
+                        $payment = Payment::query()
+                            ->whereKey($linkedPaymentId)
+                            ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenantId))
+                            ->lockForUpdate()
+                            ->first();
+
+                        if ($payment) {
+                            $this->paymentAllocationService->deletePayment($payment, $this, $actorId);
+                            $deletedPaymentIds[] = $linkedPaymentId;
+                        }
+                    }
+
+                    $refund->delete();
+                    $rejectedCount++;
+                }
+            }
+
+            $remainingPaymentIds = array_values(array_diff($paymentIds, $deletedPaymentIds));
+            if ($remainingPaymentIds !== []) {
+                $payments = Payment::query()
+                    ->pending()
+                    ->whereIn('id', $remainingPaymentIds)
+                    ->whereDate('payment_date', $date)
+                    ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenantId))
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($payments as $payment) {
+                    $this->paymentAllocationService->deletePayment($payment, $this, $actorId);
+                    $rejectedCount++;
+                }
+            }
+
+            if ($expenseIds !== []) {
+                $expenses = Expense::query()
+                    ->pending()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('date', $date)
+                    ->whereIn('id', $expenseIds)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($expenses as $expense) {
+                    $expense->delete();
+                    $rejectedCount++;
+                }
+            }
+
+            if ($creditTransactionIds !== []) {
+                $creditTransactions = DriverCreditTransaction::query()
+                    ->pending()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('request_date', $date)
+                    ->whereIn('id', $creditTransactionIds)
+                    ->lockForUpdate()
+                    ->get();
+
+                if ($creditTransactions->count() !== count($creditTransactionIds)) {
+                    throw ValidationException::withMessages([
+                        'entry_ids' => 'One or more credit transactions are no longer pending.',
+                    ]);
+                }
+
+                foreach ($creditTransactions as $creditTransaction) {
+                    $this->driverCreditService->cancelPending($creditTransaction);
+                    $rejectedCount++;
+                }
+            }
+
+            if ($rejectedCount === 0) {
+                throw ValidationException::withMessages([
+                    'entry_ids' => 'No pending entries were rejected.',
+                ]);
+            }
+
+            return $rejectedCount;
+        });
+    }
+
+    /**
      * @param  list<string>|null  $entryIds
      * @return list<string>
      */

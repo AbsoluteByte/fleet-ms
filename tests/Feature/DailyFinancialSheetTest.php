@@ -320,6 +320,119 @@ class DailyFinancialSheetTest extends TestCase
         $this->assertEquals(100, (float) $sheet->cash_in);
     }
 
+    public function test_non_approver_cannot_reject_entries(): void
+    {
+        $date = now()->toDateString();
+        $this->createPendingPayment($date, 100);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->post(route('daily-financial-sheet.reject', $date));
+
+        $response->assertForbidden();
+        $this->assertDatabaseCount('payments', 1);
+    }
+
+    public function test_approver_can_reject_pending_payment(): void
+    {
+        $date = now()->toDateString();
+        $payment = $this->createPendingPayment($date, 100);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $response = $this->post(route('daily-financial-sheet.reject', $date), [
+            'reject_mode' => 'selected',
+            'entry_ids' => ['payment-'.$payment->id],
+        ]);
+
+        $response->assertRedirect(route('daily-financial-sheet.show', $date));
+        $response->assertSessionHas('success');
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('daily_financial_sheets', 0);
+    }
+
+    public function test_approver_can_reject_pending_expense(): void
+    {
+        $date = now()->toDateString();
+        $expense = Expense::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'type' => 'MOT',
+            'date' => $date,
+            'description' => 'Fuel',
+            'amount' => 40,
+            'payment_method' => 'Cash',
+            'posting_status' => Expense::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+        ]);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $response = $this->post(route('daily-financial-sheet.reject', $date), [
+            'reject_mode' => 'selected',
+            'entry_ids' => ['expense-'.$expense->id],
+        ]);
+
+        $response->assertRedirect(route('daily-financial-sheet.show', $date));
+        $this->assertDatabaseCount('expenses', 0);
+    }
+
+    public function test_reject_selected_leaves_other_pending_entries(): void
+    {
+        $date = now()->toDateString();
+        $first = $this->createPendingPayment($date, 60);
+        $second = $this->createPendingPayment($date, 40);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $response = $this->post(route('daily-financial-sheet.reject', $date), [
+            'reject_mode' => 'selected',
+            'entry_ids' => ['payment-'.$first->id],
+        ]);
+
+        $response->assertRedirect(route('daily-financial-sheet.show', $date));
+        $this->assertDatabaseMissing('payments', ['id' => $first->id]);
+        $this->assertDatabaseHas('payments', [
+            'id' => $second->id,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+        ]);
+    }
+
+    public function test_approver_can_reject_pending_driver_credit(): void
+    {
+        $date = now()->toDateString();
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 50,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->employee->id,
+        ]);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $transaction = app(DriverCreditService::class)->requestRefund($this->driver, [
+            'request_date' => $date,
+            'payment_method' => 'Cash',
+            'notes' => 'Refund credit',
+        ]);
+
+        $response = $this->post(route('daily-financial-sheet.reject', $date), [
+            'reject_mode' => 'selected',
+            'entry_ids' => ['driver-credit-'.$transaction->id],
+        ]);
+
+        $response->assertRedirect(route('daily-financial-sheet.show', $date));
+        $this->assertDatabaseMissing('driver_credit_transactions', ['id' => $transaction->id]);
+        $this->assertDatabaseCount('driver_credit_transaction_lines', 0);
+    }
+
     public function test_approved_sheet_appears_in_history(): void
     {
         $date = now()->toDateString();
@@ -644,6 +757,71 @@ class DailyFinancialSheetTest extends TestCase
 
         $sheet = DailyFinancialSheet::query()->first();
         $this->assertEquals(0, (float) $sheet->cash_in);
+    }
+
+    public function test_can_export_pending_sheet_as_pdf(): void
+    {
+        $date = now()->toDateString();
+        $this->createInvoice(100);
+        $this->createPendingPayment($date, 100);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->get(route('daily-financial-sheet.pdf', $date));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+        $response->assertHeader(
+            'content-disposition',
+            'attachment; filename=Daily_Financial_Sheet_'.$date.'.pdf'
+        );
+    }
+
+    public function test_can_export_approved_sheet_as_pdf(): void
+    {
+        $date = now()->toDateString();
+        $this->createInvoice(100);
+        $this->createPendingPayment($date, 100);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date));
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->get(route('daily-financial-sheet.pdf', $date));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+    }
+
+    public function test_can_export_partially_approved_sheet_as_pdf(): void
+    {
+        $date = now()->toDateString();
+        $this->createInvoice(60);
+        $this->createInvoice(40);
+        $first = $this->createPendingPayment($date, 60);
+        $this->createPendingPayment($date, 40);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date), [
+            'approve_mode' => 'selected',
+            'entry_ids' => ['payment-'.$first->id],
+        ]);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->get(route('daily-financial-sheet.pdf', $date));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $response->getContent());
     }
 
     private function createPendingPayment(string $date, float $amount): Payment

@@ -20,7 +20,7 @@ use App\Services\AgreementDepositSettlementService;
 use App\Services\AgreementInvoiceService;
 use App\Services\AgreementPdfService;
 use App\Services\AgreementUpgradeService;
-use App\Services\CarFleetComplianceService;
+use App\Services\CarFleetRentStatusService;
 use App\Services\DriverAgreementStatusService;
 use App\Services\PaymentAllocationService;
 // Add this
@@ -88,7 +88,7 @@ class AgreementController extends Controller
                 ->with('error', 'No active company found!');
         }
         $companies = Company::where('tenant_id', $tenant->id)->get();
-        $drivers = Driver::where('tenant_id', $tenant->id)->active()->get();
+        $drivers = $this->driversForAgreementForm($tenant->id);
         $cars = $this->carsForAgreementForm($tenant);
         $model = new Agreement;
         $statuses = Status::where('type', 'agreement')->get();
@@ -165,6 +165,8 @@ class AgreementController extends Controller
                 $agreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($original, $validated);
 
                 app(DriverAgreementStatusService::class)->syncForAgreement($agreement);
+
+                app(CarFleetRentStatusService::class)->syncForAgreement($agreement, null, Auth::id());
 
                 return redirect()->route('agreements.show', $agreement)
                     ->with('success', 'Vehicle swap agreement created successfully.');
@@ -256,6 +258,8 @@ class AgreementController extends Controller
             });
 
             app(DriverAgreementStatusService::class)->syncForAgreement($agreement);
+
+            app(CarFleetRentStatusService::class)->syncForAgreement($agreement, null, Auth::id());
 
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement created successfully.');
@@ -366,14 +370,7 @@ class AgreementController extends Controller
         }
         $model = $agreement->load(['collections', 'deductions', 'additionalCharges', 'depositRefund']);
         $companies = Company::where('tenant_id', $tenant->id)->get();
-        $drivers = Driver::where('tenant_id', $tenant->id)->active()->get();
-        if ($agreement->driver_id && ! $drivers->contains('id', $agreement->driver_id)) {
-            $currentDriver = Driver::where('tenant_id', $tenant->id)->find($agreement->driver_id);
-            if ($currentDriver) {
-                $drivers->push($currentDriver);
-                $drivers = $drivers->sortBy(fn (Driver $driver) => $driver->first_name.' '.$driver->last_name)->values();
-            }
-        }
+        $drivers = $this->driversForAgreementForm($tenant->id);
         $cars = $this->carsForAgreementForm($tenant, $agreement->car_id, $agreement->id);
         $statuses = Status::where('type', 'agreement')->get();
 
@@ -452,6 +449,7 @@ class AgreementController extends Controller
 
         try {
             $previousDriverId = $agreement->driver_id;
+            $previousCarId = (int) $agreement->car_id;
 
             $updatedAgreement = DB::transaction(function () use ($validated, $request, $agreement, $tenant, $agreementPaymentData, $isReplacementVehicle, $shouldSyncDeductions, $shouldSyncAdditionalCharges) {
                 $oldAutoSchedule = $agreement->auto_schedule_collections;
@@ -530,6 +528,12 @@ class AgreementController extends Controller
             });
 
             app(DriverAgreementStatusService::class)->syncForAgreement($updatedAgreement->fresh(), $previousDriverId);
+
+            app(CarFleetRentStatusService::class)->syncForAgreement(
+                $updatedAgreement->fresh(),
+                $previousCarId ?: null,
+                Auth::id()
+            );
 
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement updated successfully.');
@@ -1060,6 +1064,18 @@ class AgreementController extends Controller
                 ];
             })
             ->values();
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Driver>
+     */
+    private function driversForAgreementForm(int $tenantId)
+    {
+        return Driver::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
     }
 
     /**
@@ -1714,26 +1730,7 @@ class AgreementController extends Controller
             'updatedBy' => Auth::id(),
         ]);
 
-        $stillRented = in_array(
-            $car->id,
-            Agreement::rentedCarIdsForTenant($agreement->tenant_id),
-            true
-        );
-
-        if ($stillRented) {
-            return;
-        }
-
-        $car = $car->fresh();
-        $car->load(['mots', 'roadTaxes', 'phvs']);
-
-        if (in_array($car->fleet_status, [
-            Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
-            Car::FLEET_STATUS_NON_COMPLIANT,
-            Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
-        ], true)) {
-            app(CarFleetComplianceService::class)->syncFleetStatusForCar($car, Auth::id());
-        }
+        app(CarFleetRentStatusService::class)->syncForCar($car->fresh(), Auth::id());
     }
 
     public function payCollection(Request $request, Agreement $agreement, $collectionId)

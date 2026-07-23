@@ -8,6 +8,7 @@
                         <h4 class="card-title">{{ $plural }}</h4>
                         <div class="float-right">
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="available_by_phv">Available by PHV</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="on_rent">On Rent</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="preparation_for_phvl">PHVL Preparation</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="damaged">Damaged</button>
                             <button type="button" class="btn btn-outline-primary btn-sm cars-quick-filter" data-quick-filter="non_compliant">Non-Compliant</button>
@@ -754,6 +755,7 @@
             const availableFromColumnIndex = 7;
             const quickFilterLabels = {
                 available_by_phv: 'Available by PHV',
+                on_rent: 'On Rent',
                 preparation_for_phvl: 'PHVL Preparation',
                 damaged: 'Damaged',
                 non_compliant: 'Non-Compliant',

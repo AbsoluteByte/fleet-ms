@@ -16,9 +16,14 @@
                             <span class="badge badge-warning">Pending Approval</span>
                         @endif
                     </div>
-                    <a href="{{ route('daily-financial-sheet.index') }}" class="btn btn-secondary btn-sm">
-                        <i class="fa fa-arrow-left"></i> Back
-                    </a>
+                    <div class="d-flex align-items-center" style="gap: 0.5rem;">
+                        <a href="{{ route('daily-financial-sheet.pdf', $sheetDate) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fa fa-file-pdf-o"></i> Export PDF
+                        </a>
+                        <a href="{{ route('daily-financial-sheet.index') }}" class="btn btn-secondary btn-sm">
+                            <i class="fa fa-arrow-left"></i> Back
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body" style="margin-top: 0;">
                     @include('alerts')
@@ -92,9 +97,12 @@
                         </div>
                     @endif
 
-                    <form method="POST" action="{{ route('daily-financial-sheet.approve', $sheetDate) }}" id="dfsApproveForm">
+                    <form method="POST" action="{{ route('daily-financial-sheet.approve', $sheetDate) }}" id="dfsApproveForm"
+                          data-approve-action="{{ route('daily-financial-sheet.approve', $sheetDate) }}"
+                          data-reject-action="{{ route('daily-financial-sheet.reject', $sheetDate) }}">
                         @csrf
                         <input type="hidden" name="approve_mode" id="dfsApproveMode" value="all">
+                        <input type="hidden" name="reject_mode" id="dfsRejectMode" value="all">
 
                         <div class="table-responsive">
                             <table class="table table-bordered table-striped">
@@ -115,7 +123,7 @@
                                     <th>Amount</th>
                                     <th>Status</th>
                                     @if($canApprove)
-                                        <th style="width: 100px;">Action</th>
+                                        <th style="width: 160px; white-space: nowrap;">Action</th>
                                     @endif
                                 </tr>
                                 </thead>
@@ -183,11 +191,18 @@
                                         @if($canApprove)
                                             <td>
                                                 @if($entry['posting_status'] === 'pending')
-                                                    <button type="button"
-                                                            class="btn btn-sm btn-success"
-                                                            data-dfs-approve-single="{{ $entry['id'] }}">
-                                                        Approve
-                                                    </button>
+                                                    <div class="d-flex flex-nowrap align-items-center" style="gap: 0.35rem;">
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-success"
+                                                                data-dfs-approve-single="{{ $entry['id'] }}">
+                                                            Approve
+                                                        </button>
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-danger"
+                                                                data-dfs-reject-single="{{ $entry['id'] }}">
+                                                            Reject
+                                                        </button>
+                                                    </div>
                                                 @else
                                                     <span class="text-muted">—</span>
                                                 @endif
@@ -215,6 +230,12 @@
                                 </button>
                                 <button type="button" class="btn btn-outline-success" id="dfsApproveSelectedBtn" data-dfs-approve-mode="selected">
                                     Approve selected
+                                </button>
+                                <button type="button" class="btn btn-outline-danger" id="dfsRejectSelectedBtn" data-dfs-reject-mode="selected">
+                                    Reject selected
+                                </button>
+                                <button type="button" class="btn btn-danger" id="dfsRejectAllBtn" data-dfs-reject-mode="all">
+                                    Reject all pending
                                 </button>
                             </div>
                         @endif
@@ -247,7 +268,7 @@
                     <div class="modal-footer border-0 pt-0">
                         <button type="button" class="btn btn-outline-secondary" data-dismiss="modal" id="dfsApproveConfirmCancel">Cancel</button>
                         <button type="button" class="btn btn-success" id="dfsApproveConfirmBtn">
-                            <i class="fa fa-check mr-50"></i><span id="dfsApproveConfirmBtnText">Approve</span>
+                            <i class="fa fa-check mr-50" id="dfsApproveConfirmBtnIcon"></i><span id="dfsApproveConfirmBtnText">Approve</span>
                         </button>
                     </div>
                 </div>
@@ -270,14 +291,18 @@
         (function () {
             var form = document.getElementById('dfsApproveForm');
             var modeInput = document.getElementById('dfsApproveMode');
+            var rejectModeInput = document.getElementById('dfsRejectMode');
             var selectAll = document.getElementById('dfsSelectAllPending');
             var $modal = window.jQuery;
             var pendingAction = null;
+            var approveAction = form ? form.getAttribute('data-approve-action') : '';
+            var rejectAction = form ? form.getAttribute('data-reject-action') : '';
 
             var titleEl = document.getElementById('dfsApproveConfirmTitle');
             var bodyEl = document.getElementById('dfsApproveConfirmBody');
             var btnTextEl = document.getElementById('dfsApproveConfirmBtnText');
             var confirmBtn = document.getElementById('dfsApproveConfirmBtn');
+            var confirmBtnIcon = document.getElementById('dfsApproveConfirmBtnIcon');
             var cancelBtn = document.getElementById('dfsApproveConfirmCancel');
             var iconWrap = document.getElementById('dfsApproveConfirmIcon');
             var iconGlyph = document.getElementById('dfsApproveConfirmIconGlyph');
@@ -297,8 +322,14 @@
                 if (btnTextEl) btnTextEl.textContent = config.btnText || 'OK';
 
                 var isAlert = !!config.alertOnly;
+                var isDanger = !!config.danger;
                 if (confirmBtn) {
                     confirmBtn.classList.toggle('d-none', isAlert);
+                    confirmBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-success';
+                    confirmBtn.disabled = false;
+                }
+                if (confirmBtnIcon) {
+                    confirmBtnIcon.className = isDanger ? 'fa fa-times mr-50' : 'fa fa-check mr-50';
                 }
                 if (cancelBtn) {
                     cancelBtn.textContent = isAlert ? 'Close' : 'Cancel';
@@ -309,6 +340,10 @@
                         iconWrap.style.background = 'rgba(255, 159, 67, 0.15)';
                         iconWrap.style.color = '#ff9f43';
                         iconGlyph.className = 'fa fa-exclamation';
+                    } else if (isDanger) {
+                        iconWrap.style.background = 'rgba(234, 84, 85, 0.12)';
+                        iconWrap.style.color = '#ea5455';
+                        iconGlyph.className = 'fa fa-times';
                     } else {
                         iconWrap.style.background = 'rgba(40, 199, 111, 0.12)';
                         iconWrap.style.color = '#28c76f';
@@ -330,12 +365,30 @@
                 if (modeInput) {
                     modeInput.value = 'selected';
                 }
+                if (rejectModeInput) {
+                    rejectModeInput.value = 'selected';
+                }
             }
 
             function prepareAllMode() {
                 if (modeInput) {
                     modeInput.value = 'all';
                 }
+                if (rejectModeInput) {
+                    rejectModeInput.value = 'all';
+                }
+            }
+
+            function submitApprove() {
+                if (!form) return;
+                form.action = approveAction;
+                form.submit();
+            }
+
+            function submitReject() {
+                if (!form) return;
+                form.action = rejectAction;
+                form.submit();
             }
 
             document.querySelectorAll('[data-dfs-approve-single]').forEach(function (btn) {
@@ -347,7 +400,23 @@
                         btnText: 'Yes, approve',
                         action: function () {
                             prepareSelectedMode(entryId);
-                            form.submit();
+                            submitApprove();
+                        },
+                    });
+                });
+            });
+
+            document.querySelectorAll('[data-dfs-reject-single]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var entryId = btn.getAttribute('data-dfs-reject-single');
+                    showModal({
+                        title: 'Reject this entry?',
+                        body: 'This pending entry will be discarded and removed from the sheet. This cannot be undone.',
+                        btnText: 'Yes, reject',
+                        danger: true,
+                        action: function () {
+                            prepareSelectedMode(entryId);
+                            submitReject();
                         },
                     });
                 });
@@ -373,7 +442,7 @@
                             btnText: 'Yes, approve selected',
                             action: function () {
                                 prepareSelectedMode();
-                                form.submit();
+                                submitApprove();
                             },
                         });
                         return;
@@ -385,7 +454,47 @@
                         btnText: 'Yes, approve all',
                         action: function () {
                             prepareAllMode();
-                            form.submit();
+                            submitApprove();
+                        },
+                    });
+                });
+            });
+
+            document.querySelectorAll('[data-dfs-reject-mode]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var mode = btn.getAttribute('data-dfs-reject-mode');
+                    if (mode === 'selected') {
+                        var checked = document.querySelectorAll('.dfs-entry-checkbox:checked');
+                        if (!checked.length) {
+                            showModal({
+                                title: 'No entries selected',
+                                body: 'Select at least one pending entry to reject.',
+                                btnText: 'OK',
+                                alertOnly: true,
+                            });
+                            return;
+                        }
+                        showModal({
+                            title: 'Reject selected entries?',
+                            body: 'Selected pending entries will be discarded and removed from the sheet. This cannot be undone.',
+                            btnText: 'Yes, reject selected',
+                            danger: true,
+                            action: function () {
+                                prepareSelectedMode();
+                                submitReject();
+                            },
+                        });
+                        return;
+                    }
+
+                    showModal({
+                        title: 'Reject all pending?',
+                        body: 'All pending entries for this day will be discarded and removed from the sheet. This cannot be undone.',
+                        btnText: 'Yes, reject all',
+                        danger: true,
+                        action: function () {
+                            prepareAllMode();
+                            submitReject();
                         },
                     });
                 });

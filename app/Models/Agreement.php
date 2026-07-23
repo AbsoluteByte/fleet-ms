@@ -364,6 +364,19 @@ class Agreement extends Model
     }
 
     /**
+     * Active, Swap, or Replacement Vehicle agreements assigned to a vehicle, including future start dates.
+     */
+    public function scopeWithRentAssignment($query)
+    {
+        $today = now()->startOfDay();
+
+        return $query
+            ->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap', 'Replacement Vehicle']))
+            ->whereNull('termination_notice_date')
+            ->whereDate('end_date', '>=', $today);
+    }
+
+    /**
      * @return list<int>
      */
     public static function rentedCarIdsForTenant(int $tenantId, ?int $excludeAgreementId = null): array
@@ -371,6 +384,22 @@ class Agreement extends Model
         return static::query()
             ->where('tenant_id', $tenantId)
             ->withActiveAssignment()
+            ->when($excludeAgreementId, fn ($query) => $query->where('id', '!=', $excludeAgreementId))
+            ->pluck('car_id')
+            ->unique()
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function rentAssignedCarIdsForTenant(int $tenantId, ?int $excludeAgreementId = null): array
+    {
+        return static::query()
+            ->where('tenant_id', $tenantId)
+            ->withRentAssignment()
             ->when($excludeAgreementId, fn ($query) => $query->where('id', '!=', $excludeAgreementId))
             ->pluck('car_id')
             ->unique()
