@@ -179,6 +179,8 @@ class AgreementUpgradeService
 
             app(DriverAgreementStatusService::class)->syncForAgreement($newAgreement);
 
+            app(CarFleetRentStatusService::class)->syncForAgreement($newAgreement, (int) $old->car_id, Auth::id());
+
             return $newAgreement;
         });
     }
@@ -195,25 +197,6 @@ class AgreementUpgradeService
             'updatedBy' => Auth::id(),
         ]);
 
-        $stillRented = in_array(
-            $car->id,
-            Agreement::rentedCarIdsForTenant($agreement->tenant_id),
-            true
-        );
-
-        if ($stillRented) {
-            return;
-        }
-
-        $car = $car->fresh();
-        $car->load(['mots', 'roadTaxes', 'phvs']);
-
-        if (in_array($car->fleet_status, [
-            Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
-            Car::FLEET_STATUS_NON_COMPLIANT,
-            Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
-        ], true)) {
-            app(CarFleetComplianceService::class)->syncFleetStatusForCar($car, Auth::id());
-        }
+        app(CarFleetRentStatusService::class)->syncForCar($car->fresh(), Auth::id());
     }
 }

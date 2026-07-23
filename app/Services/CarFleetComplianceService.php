@@ -40,6 +40,7 @@ class CarFleetComplianceService
             if (in_array($currentStatus, [
                 Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
                 Car::FLEET_STATUS_NON_COMPLIANT,
+                Car::FLEET_STATUS_ON_RENT,
             ], true)) {
                 $this->transition($car, Car::FLEET_STATUS_PREPARATION_FOR_PHVL, $changedBy, $asOf, ['phv_missing']);
 
@@ -50,6 +51,18 @@ class CarFleetComplianceService
         }
 
         $isCompliant = $this->isCompliantAsOf($car, $asOf);
+
+        if ($currentStatus === Car::FLEET_STATUS_ON_RENT) {
+            if (! $isCompliant) {
+                $this->transition($car, Car::FLEET_STATUS_NON_COMPLIANT, $changedBy, $asOf);
+
+                return self::RESULT_MARKED_NON_COMPLIANT;
+            }
+
+            $this->transition($car, Car::FLEET_STATUS_AVAILABLE_FOR_RENT, $changedBy, $asOf);
+
+            return self::RESULT_RESTORED_AVAILABLE;
+        }
 
         if ($currentStatus === Car::FLEET_STATUS_PREPARATION_FOR_PHVL && $isCompliant) {
             $this->transition($car, Car::FLEET_STATUS_AVAILABLE_FOR_RENT, $changedBy, $asOf);

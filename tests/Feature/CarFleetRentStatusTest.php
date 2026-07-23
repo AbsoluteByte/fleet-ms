@@ -9,8 +9,7 @@ use App\Models\Driver;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Services\AgreementUpgradeService;
-use App\Services\DriverAgreementStatusService;
+use App\Services\CarFleetRentStatusService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
@@ -20,7 +19,7 @@ use Spatie\Permission\Middleware\RoleMiddleware;
 use Tests\Concerns\SetupAgreementChangeCarDatabase;
 use Tests\TestCase;
 
-class DriverAgreementStatusSyncTest extends TestCase
+class CarFleetRentStatusTest extends TestCase
 {
     use SetupAgreementChangeCarDatabase;
 
@@ -36,13 +35,11 @@ class DriverAgreementStatusSyncTest extends TestCase
 
     private Status $activeStatus;
 
-    private Status $swapStatus;
+    private Status $replacementStatus;
 
     private Status $terminatedStatus;
 
-    private User $user;
-
-    private DriverAgreementStatusService $service;
+    private CarFleetRentStatusService $service;
 
     protected function setUp(): void
     {
@@ -51,25 +48,21 @@ class DriverAgreementStatusSyncTest extends TestCase
         $this->withoutMiddleware(RoleMiddleware::class);
         $this->setUpAgreementChangeCarDatabase();
         $this->setUpHttpTestExtras();
-        Schema::table('agreements', function (Blueprint $table) {
-            $table->string('paying_company_name')->nullable();
-            $table->json('mutual_detail_slip_document')->nullable();
-            $table->unsignedBigInteger('parent_agreement_id')->nullable();
-        });
+        $this->setUpAgreementStoreExtras();
 
         Carbon::setTestNow(Carbon::parse('2026-06-18 10:00:00'));
 
-        $this->tenant = Tenant::create(['company_name' => 'Status Sync Tenant']);
+        $this->tenant = Tenant::create(['company_name' => 'Rent Status Tenant']);
         $this->company = Company::create([
             'tenant_id' => $this->tenant->id,
-            'name' => 'Status Sync Company',
+            'name' => 'Rent Status Company',
         ]);
 
         $this->driver = Driver::create([
             'tenant_id' => $this->tenant->id,
-            'first_name' => 'Sync',
+            'first_name' => 'Rent',
             'last_name' => 'Driver',
-            'email' => 'sync@example.com',
+            'email' => 'rent-driver@example.com',
             'phone_number' => '07000000001',
             'dob' => '1990-01-01',
             'address1' => '1 Test Street',
@@ -80,7 +73,6 @@ class DriverAgreementStatusSyncTest extends TestCase
             'driver_license_expiry_date' => '2027-01-01',
             'next_of_kin' => 'Jane Driver',
             'next_of_kin_phone' => '07000000002',
-            'is_active' => false,
         ]);
 
         $carModelId = DB::table('car_models')->insertGetId([
@@ -100,11 +92,10 @@ class DriverAgreementStatusSyncTest extends TestCase
         $this->secondCar = $this->createCompliantCar('CAR222', $carModelId, $counselId);
 
         $this->activeStatus = Status::create(['name' => 'Active', 'type' => 'agreement']);
-        $this->swapStatus = Status::create(['name' => 'Swap', 'type' => 'agreement']);
+        $this->replacementStatus = Status::create(['name' => 'Replacement Vehicle', 'type' => 'agreement']);
         $this->terminatedStatus = Status::create(['name' => 'Terminated', 'type' => 'agreement']);
 
         $user = User::factory()->create();
-        $this->user = $user;
         DB::table('model_has_roles')->insert([
             'role_id' => (int) DB::table('roles')->value('id'),
             'model_type' => User::class,
@@ -118,18 +109,15 @@ class DriverAgreementStatusSyncTest extends TestCase
         $this->actingAs($user);
         $user->switchTenant($this->tenant->id);
 
-        $this->service = app(DriverAgreementStatusService::class);
+        $this->service = app(CarFleetRentStatusService::class);
     }
 
     protected function tearDown(): void
     {
         Carbon::setTestNow();
-        Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('bank_accounts');
-        Schema::dropIfExists('deposit_refunds');
-        Schema::dropIfExists('agreement_deductions');
-        Schema::dropIfExists('agreement_additional_charges');
         Schema::dropIfExists('agreement_collections');
+        Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('countries');
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
@@ -139,123 +127,106 @@ class DriverAgreementStatusSyncTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_active_agreement_sync_activates_driver(): void
-    {
-        $agreement = $this->createAgreement($this->car, $this->activeStatus);
-
-        $this->service->syncForAgreement($agreement);
-
-        $this->assertTrue($this->driver->fresh()->is_active);
-    }
-
-    public function test_terminating_only_agreement_deactivates_driver(): void
-    {
-        $agreement = $this->createAgreement($this->car, $this->activeStatus);
-        $this->service->syncForAgreement($agreement);
-        $this->assertTrue($this->driver->fresh()->is_active);
-
-        $agreement->update(['status_id' => $this->terminatedStatus->id]);
-
-        $this->service->syncForAgreement($agreement->fresh());
-
-        $this->assertFalse($this->driver->fresh()->is_active);
-    }
-
-    public function test_swap_keeps_driver_active(): void
-    {
-        $agreement = $this->createAgreement($this->car, $this->activeStatus);
-        $this->assertFalse($this->driver->fresh()->is_active);
-
-        app(AgreementUpgradeService::class)->createSwapFromAgreement($agreement, [
-            'car_id' => $this->secondCar->id,
-            'driver_id' => $this->driver->id,
-            'agreed_rent' => 250,
-        ]);
-
-        $this->assertTrue($this->driver->fresh()->is_active);
-    }
-
-    public function test_driver_stays_active_when_one_of_two_active_agreements_is_terminated(): void
-    {
-        $firstAgreement = $this->createAgreement($this->car, $this->activeStatus);
-        $secondAgreement = $this->createAgreement($this->secondCar, $this->activeStatus);
-        $this->service->syncForAgreement($secondAgreement);
-        $this->assertTrue($this->driver->fresh()->is_active);
-
-        $firstAgreement->update(['status_id' => $this->terminatedStatus->id]);
-        $this->service->syncForAgreement($firstAgreement->fresh());
-
-        $this->assertTrue($this->driver->fresh()->is_active);
-    }
-
-    public function test_cron_deactivates_driver_without_billable_agreements(): void
-    {
-        $this->driver->update(['is_active' => true]);
-
-        Artisan::call('drivers:sync-agreement-status');
-
-        $this->assertFalse($this->driver->fresh()->is_active);
-        $this->assertStringContainsString('Updated 1 driver(s).', Artisan::output());
-    }
-
-    public function test_cron_deactivates_driver_when_only_agreement_is_expired(): void
+    public function test_active_agreement_marks_car_on_rent_with_future_start_date(): void
     {
         $agreement = $this->createAgreement($this->car, $this->activeStatus, [
-            'end_date' => Carbon::parse('2026-06-17'),
+            'start_date' => Carbon::parse('2026-07-01 09:00:00'),
         ]);
-        $this->driver->update(['is_active' => true]);
 
-        Artisan::call('drivers:sync-agreement-status');
+        $this->service->syncForAgreement($agreement);
 
-        $this->assertFalse($this->driver->fresh()->is_active);
-        $this->service->syncForAgreement($agreement->fresh());
-        $this->assertFalse($this->driver->fresh()->is_active);
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
     }
 
-    public function test_agreement_create_form_shows_inactive_drivers(): void
+    public function test_replacement_vehicle_agreement_marks_car_on_rent(): void
     {
-        Driver::create([
+        $parent = $this->createAgreement($this->secondCar, $this->activeStatus);
+        $replacement = Agreement::create([
             'tenant_id' => $this->tenant->id,
-            'first_name' => 'Active',
-            'last_name' => 'Only',
-            'email' => 'active-only@example.com',
-            'phone_number' => '07000000003',
-            'is_active' => true,
+            'company_id' => $this->company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $this->car->id,
+            'parent_agreement_id' => $parent->id,
+            'start_date' => Carbon::parse('2026-06-17'),
+            'end_date' => Carbon::parse('2027-06-17'),
+            'agreed_rent' => 0,
+            'rent_interval' => 'weekly',
+            'deposit_amount' => 0,
+            'collection_type' => 'weekly',
+            'status_id' => $this->replacementStatus->id,
+            'createdBy' => 1,
+            'updatedBy' => 1,
         ]);
 
-        $response = $this->get(route('agreements.create'));
+        $this->service->syncForAgreement($replacement);
 
-        $response->assertOk();
-        $response->assertSee('name="driver_id"', false);
-        $response->assertSee('value="'.$this->driver->id.'"', false);
-        $response->assertSee('Sync  Driver (SW1A 1AA) (Inactive)', false);
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
     }
 
-    public function test_agreement_edit_form_shows_other_inactive_drivers(): void
+    public function test_terminating_agreement_releases_compliant_car_to_available_for_rent(): void
     {
-        $inactiveOther = Driver::create([
-            'tenant_id' => $this->tenant->id,
-            'first_name' => 'Other',
-            'last_name' => 'Inactive',
-            'email' => 'other-inactive@example.com',
-            'phone_number' => '07000000004',
-            'post_code' => 'E1 1AA',
-            'is_active' => false,
+        $agreement = $this->createAgreement($this->car, $this->activeStatus);
+        $this->service->syncForAgreement($agreement);
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
+
+        $agreement->update([
+            'status_id' => $this->terminatedStatus->id,
+            'termination_notice_date' => '2026-06-18',
+            'termination_available_from_date' => '2026-06-20',
         ]);
+
+        $this->service->syncForCar($this->car->fresh());
+
+        $this->assertSame(Car::FLEET_STATUS_AVAILABLE_FOR_RENT, $this->car->fresh()->fleet_status);
+    }
+
+    public function test_terminating_agreement_releases_non_compliant_car(): void
+    {
+        DB::table('car_mots')->where('car_id', $this->car->id)->update([
+            'expiry_date' => '2026-01-01',
+        ]);
+        $this->car = $this->car->fresh(['mots', 'roadTaxes', 'phvs']);
 
         $agreement = $this->createAgreement($this->car, $this->activeStatus);
+        $this->service->syncForAgreement($agreement);
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
 
-        $response = $this->get(route('agreements.edit', $agreement));
+        $agreement->update([
+            'status_id' => $this->terminatedStatus->id,
+            'termination_notice_date' => '2026-06-18',
+            'termination_available_from_date' => '2026-06-20',
+        ]);
 
-        $response->assertOk();
-        $response->assertSee('value="'.$inactiveOther->id.'"', false);
-        $response->assertSee('Other  Inactive (E1 1AA) (Inactive)', false);
+        $this->service->syncForCar($this->car->fresh(['mots', 'roadTaxes', 'phvs']));
+
+        $this->assertSame(Car::FLEET_STATUS_NON_COMPLIANT, $this->car->fresh()->fleet_status);
     }
 
-    public function test_creating_active_agreement_via_store_activates_inactive_driver(): void
+    public function test_cron_sync_marks_and_releases_cars(): void
     {
-        $this->assertFalse($this->driver->fresh()->is_active);
+        $agreement = $this->createAgreement($this->car, $this->activeStatus);
+        $this->car->update(['fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT]);
+        $this->secondCar->update(['fleet_status' => Car::FLEET_STATUS_ON_RENT]);
 
+        Artisan::call('cars:sync-fleet-rent-status');
+
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
+        $this->assertSame(Car::FLEET_STATUS_AVAILABLE_FOR_RENT, $this->secondCar->fresh()->fleet_status);
+        $this->assertStringContainsString('marked on rent', Artisan::output());
+    }
+
+    public function test_on_rent_car_is_not_selectable_for_new_agreement(): void
+    {
+        $agreement = $this->createAgreement($this->car, $this->activeStatus);
+        $this->service->syncForAgreement($agreement);
+
+        $rentedCarIds = Agreement::rentedCarIdsForTenant($this->tenant->id);
+
+        $this->assertFalse($this->car->fresh()->isSelectableForAgreement($rentedCarIds));
+    }
+
+    public function test_creating_active_agreement_via_store_marks_car_on_rent(): void
+    {
         $response = $this->from(route('agreements.create'))
             ->post(route('agreements.store'), [
                 'company_id' => $this->company->id,
@@ -272,7 +243,7 @@ class DriverAgreementStatusSyncTest extends TestCase
 
         $response->assertRedirect(route('agreements.index'));
         $response->assertSessionHasNoErrors();
-        $this->assertTrue($this->driver->fresh()->is_active);
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
     }
 
     private function createAgreement(Car $car, Status $status, array $overrides = []): Agreement
@@ -309,7 +280,7 @@ class DriverAgreementStatusSyncTest extends TestCase
             'purchase_date' => '2020-01-01',
             'purchase_price' => 10000,
             'purchase_type' => 'uk',
-            'fleet_status' => 'available_for_rent',
+            'fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
             'sorn_applied' => false,
         ]);
 
@@ -377,17 +348,6 @@ class DriverAgreementStatusSyncTest extends TestCase
             $table->boolean('is_active')->default(true);
         });
 
-        Schema::create('car_status_histories', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tenant_id')->nullable();
-            $table->foreignId('car_id');
-            $table->string('previous_status')->nullable();
-            $table->string('new_status');
-            $table->json('status_data')->nullable();
-            $table->unsignedBigInteger('changed_by')->nullable();
-            $table->timestamps();
-        });
-
         Schema::create('tenant_user', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');
@@ -419,7 +379,34 @@ class DriverAgreementStatusSyncTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        Schema::create('agreement_collections', function (Blueprint $table) {
+        Schema::create('car_status_histories', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id');
+            $table->string('previous_status')->nullable();
+            $table->string('new_status');
+            $table->json('status_data')->nullable();
+            $table->unsignedBigInteger('changed_by')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    private function setUpAgreementStoreExtras(): void
+    {
+        if (! Schema::hasColumn('agreements', 'mutual_detail_slip_document')) {
+            Schema::table('agreements', function (Blueprint $table) {
+                $table->json('mutual_detail_slip_document')->nullable();
+            });
+        }
+
+        if (! Schema::hasColumn('agreements', 'parent_agreement_id')) {
+            Schema::table('agreements', function (Blueprint $table) {
+                $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            });
+        }
+
+        if (! Schema::hasTable('agreement_collections')) {
+            Schema::create('agreement_collections', function (Blueprint $table) {
             $table->id();
             $table->foreignId('agreement_id');
             $table->date('date');
@@ -432,45 +419,11 @@ class DriverAgreementStatusSyncTest extends TestCase
             $table->text('notes')->nullable();
             $table->boolean('is_auto_generated')->default(false);
             $table->timestamps();
-        });
+            });
+        }
 
-        Schema::create('agreement_deductions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tenant_id');
-            $table->foreignId('agreement_id');
-            $table->decimal('amount', 12, 2);
-            $table->text('notes')->nullable();
-            $table->unsignedInteger('sort_order')->default(0);
-            $table->foreignId('created_by')->nullable();
-            $table->timestamps();
-        });
-
-        Schema::create('agreement_additional_charges', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tenant_id');
-            $table->foreignId('agreement_id');
-            $table->string('description');
-            $table->decimal('amount', 12, 2);
-            $table->unsignedInteger('sort_order')->default(0);
-            $table->foreignId('created_by')->nullable();
-            $table->timestamps();
-        });
-
-        Schema::create('deposit_refunds', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tenant_id');
-            $table->foreignId('agreement_id')->unique();
-            $table->foreignId('driver_id');
-            $table->decimal('amount', 12, 2)->default(0);
-            $table->decimal('gross_deposit_amount', 12, 2)->default(0);
-            $table->decimal('deductions_amount', 12, 2)->default(0);
-            $table->decimal('debt_offset_amount', 12, 2)->default(0);
-            $table->string('payment_method')->nullable();
-            $table->string('status')->default('pending');
-            $table->timestamps();
-        });
-
-        Schema::create('bank_accounts', function (Blueprint $table) {
+        if (! Schema::hasTable('bank_accounts')) {
+            Schema::create('bank_accounts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id');
             $table->foreignId('company_id');
@@ -479,6 +432,7 @@ class DriverAgreementStatusSyncTest extends TestCase
             $table->unsignedBigInteger('createdBy')->nullable();
             $table->unsignedBigInteger('updatedBy')->nullable();
             $table->timestamps();
-        });
+            });
+        }
     }
 }

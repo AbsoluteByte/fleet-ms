@@ -90,6 +90,7 @@
                         @include('backend.drivers._select_options', [
                             'drivers' => $drivers,
                             'selectedId' => old('driver_id') ?? ($model->driver_id ?? null),
+                            'showInactiveLabel' => true,
                         ])
                     </select>
                     @error('driver_id')

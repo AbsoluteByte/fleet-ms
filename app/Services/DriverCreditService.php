@@ -219,6 +219,25 @@ class DriverCreditService
         });
     }
 
+    public function cancelPending(DriverCreditTransaction $creditTransaction): void
+    {
+        DB::transaction(function () use ($creditTransaction) {
+            $creditTransaction = DriverCreditTransaction::query()
+                ->whereKey($creditTransaction->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $creditTransaction->isPending()) {
+                throw ValidationException::withMessages([
+                    'credit' => 'Only pending credit transactions can be rejected.',
+                ]);
+            }
+
+            $creditTransaction->lines()->delete();
+            $creditTransaction->delete();
+        });
+    }
+
     private function createTransaction(Driver $driver, string $kind, float $amount, array $data): DriverCreditTransaction
     {
         return DriverCreditTransaction::query()->create([

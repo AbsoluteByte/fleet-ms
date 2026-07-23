@@ -36,10 +36,10 @@
     </div>
 
     {{-- Summary Cards - FLEET NOTIFICATIONS ONLY (NO PAYMENTS) --}}
-    <div class="row">
+    <div class="row" id="notification-summary-cards">
         {{-- Insurance Applied --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('insurance_applied')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="insurance_applied" onclick="filterNotifications('insurance_applied')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-warning p-50 m-0 mb-1">
@@ -56,7 +56,7 @@
 
         {{-- Expiring Insurance --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('insurance_expiry')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="insurance_expiry" onclick="filterNotifications('insurance_expiry')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-primary p-50 m-0 mb-1">
@@ -73,7 +73,7 @@
 
         {{-- Expiring PHV --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('phv_expiry')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="phv_expiry" onclick="filterNotifications('phv_expiry')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-secondary p-50 m-0 mb-1">
@@ -90,7 +90,7 @@
 
         {{-- Expiring MOT --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('mot_expiry')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="mot_expiry" onclick="filterNotifications('mot_expiry')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-warning p-50 m-0 mb-1">
@@ -107,7 +107,7 @@
 
         {{-- Expiring Road Tax --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('road_tax_expiry')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="road_tax_expiry" onclick="filterNotifications('road_tax_expiry')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-success p-50 m-0 mb-1">
@@ -124,7 +124,7 @@
 
         {{-- Driver Licenses --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('driver_license_expiry')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="driver_license_expiry" onclick="filterNotifications('driver_license_expiry')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-info p-50 m-0 mb-1">
@@ -141,7 +141,7 @@
 
         {{-- PHD Licenses --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('phd_license_expiry')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="phd_license_expiry" onclick="filterNotifications('phd_license_expiry')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-secondary p-50 m-0 mb-1">
@@ -158,7 +158,7 @@
 
         {{-- Agreement Notifications --}}
         <div class="col-xl-2 col-md-4 col-sm-6">
-            <div class="card text-center cursor-pointer" onclick="filterNotifications('agreement_notifications')">
+            <div class="card text-center cursor-pointer notification-summary-card" data-notification-filter="agreement_notifications" onclick="filterNotifications('agreement_notifications')">
                 <div class="card-content">
                     <div class="card-body py-1">
                         <div class="avatar bg-rgba-info p-50 m-0 mb-1">
@@ -180,7 +180,7 @@
             <div class="card-body p-1">
                 <ul class="nav nav-pills nav-justified" id="notification-tabs">
                     <li class="nav-item">
-                        <a class="nav-link active" href="javascript:void(0)" onclick="filterNotifications('')">
+                        <a class="nav-link active" href="javascript:void(0)" data-notification-filter="" onclick="filterNotifications('')">
                             All Fleet
                             <span class="badge badge-pill badge-light ml-50">
                                 {{ $summary['insurance_applied'] + $summary['expiring_insurance'] + $summary['expiring_phv'] + $summary['expiring_mot'] + $summary['expiring_road_tax'] + $summary['expiring_driver_licenses'] + $summary['expiring_phd_licenses'] + ($summary['agreement_notifications'] ?? 0) }}
@@ -188,49 +188,49 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('insurance_applied')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="insurance_applied" onclick="filterNotifications('insurance_applied')">
                             Insurance Applied
                             <span class="badge badge-pill badge-warning ml-50">{{ $summary['insurance_applied'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('insurance_expiry')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="insurance_expiry" onclick="filterNotifications('insurance_expiry')">
                             Insurance
                             <span class="badge badge-pill badge-primary ml-50">{{ $summary['expiring_insurance'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('phv_expiry')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="phv_expiry" onclick="filterNotifications('phv_expiry')">
                             PHVL
                             <span class="badge badge-pill badge-secondary ml-50">{{ $summary['expiring_phv'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('mot_expiry')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="mot_expiry" onclick="filterNotifications('mot_expiry')">
                             MOT
                             <span class="badge badge-pill badge-warning ml-50">{{ $summary['expiring_mot'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('road_tax_expiry')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="road_tax_expiry" onclick="filterNotifications('road_tax_expiry')">
                             Road Tax
                             <span class="badge badge-pill badge-success ml-50">{{ $summary['expiring_road_tax'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('driver_license_expiry')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="driver_license_expiry" onclick="filterNotifications('driver_license_expiry')">
                             Driver License
                             <span class="badge badge-pill badge-info ml-50">{{ $summary['expiring_driver_licenses'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('phd_license_expiry')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="phd_license_expiry" onclick="filterNotifications('phd_license_expiry')">
                             PHD License
                             <span class="badge badge-pill badge-secondary ml-50">{{ $summary['expiring_phd_licenses'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0)" onclick="filterNotifications('agreement_notifications')">
+                        <a class="nav-link" href="javascript:void(0)" data-notification-filter="agreement_notifications" onclick="filterNotifications('agreement_notifications')">
                             Agreements
                             <span class="badge badge-pill badge-info ml-50">{{ $summary['agreement_notifications'] ?? 0 }}</span>
                         </a>
@@ -284,10 +284,17 @@
     <style>
         .cursor-pointer {
             cursor: pointer;
-            transition: transform 0.2s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
         }
         .cursor-pointer:hover {
             transform: translateY(-5px);
+        }
+        .notification-summary-card {
+            border: 2px solid transparent;
+        }
+        .notification-summary-card.is-active {
+            border-color: #7367F0;
+            box-shadow: 0 0.25rem 1rem rgba(115, 103, 240, 0.25);
         }
         .nav-pills .nav-link.active {
             background-color: #7367F0 !important;
@@ -460,14 +467,25 @@
             });
         }
 
-        function filterNotifications(type) {
-            currentFilter = type;
+        function setActiveNotificationFilter(type) {
+            const filterValue = type || '';
 
-            // Update active tab
             $('#notification-tabs .nav-link').removeClass('active');
-            event.currentTarget.classList.add('active');
+            $('#notification-tabs .nav-link').filter(function () {
+                return String($(this).attr('data-notification-filter') ?? '') === filterValue;
+            }).addClass('active');
 
-            // Reload table
+            $('.notification-summary-card').removeClass('is-active');
+            if (filterValue !== '') {
+                $('.notification-summary-card').filter(function () {
+                    return String($(this).attr('data-notification-filter') ?? '') === filterValue;
+                }).addClass('is-active');
+            }
+        }
+
+        function filterNotifications(type) {
+            currentFilter = type || '';
+            setActiveNotificationFilter(currentFilter);
             notificationsTable.ajax.reload();
         }
 
