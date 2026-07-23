@@ -96,13 +96,20 @@
                         </table>
                     </div>
 
-                    <form action="{{ route('payments.destroy', $payment) }}" method="POST" onsubmit="return confirm('Delete this payment? Invoice balances will be recalculated.');">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="btn btn-outline-danger">
-                            <i class="fa fa-trash"></i> Delete Payment
-                        </button>
-                    </form>
+                    @if($canManagePayments ?? false)
+                        <div class="d-flex flex-wrap" style="gap: 0.5rem;">
+                            <a href="{{ route('payments.edit', $payment) }}" class="btn btn-outline-warning">
+                                <i class="fa fa-edit"></i> Edit Payment
+                            </a>
+                            <form action="{{ route('payments.destroy', $payment) }}" method="POST" onsubmit="return confirm('Delete this payment? Invoice balances will be recalculated.');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn btn-outline-danger">
+                                    <i class="fa fa-trash"></i> Delete Payment
+                                </button>
+                            </form>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>

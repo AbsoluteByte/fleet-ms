@@ -102,6 +102,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
     Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');
     Route::get('cars/reports/awaiting-phv', [App\Http\Controllers\Backend\CarController::class, 'awaitingPhv'])->name('cars.reports.awaiting-phv');
+    Route::get('cars/notification-counts', [App\Http\Controllers\Backend\DashboardController::class, 'getCarNotificationCountsJson'])->name('cars.notification-counts');
     Route::get('cars/{car}/view/v5/{v5_index?}', [App\Http\Controllers\Backend\CarController::class, 'viewV5'])->name('cars.view.v5')->whereNumber('v5_index');
     Route::get('cars/{car}/download/v5/{v5_index?}', [App\Http\Controllers\Backend\CarController::class, 'downloadV5'])->name('cars.download.v5')->whereNumber('v5_index');
     Route::get('cars/{car}/mots/{car_mot}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadMot'])->name('cars.mots.download');

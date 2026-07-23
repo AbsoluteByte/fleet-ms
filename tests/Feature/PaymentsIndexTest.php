@@ -183,6 +183,39 @@ class PaymentsIndexTest extends TestCase
         $response->assertSee('data-latest-invoice-date="2026-07-10"', false);
     }
 
+    public function test_payments_index_shows_total_due_and_credit_without_n_plus_one_queries(): void
+    {
+        $driver = $this->createDriver('Due', 'Driver', 'due@example.com');
+
+        Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-2001',
+            'invoice_date' => '2026-07-01',
+            'due_date' => '2026-07-08',
+            'total_amount' => 150,
+            'paid_amount' => 0,
+            'balance_amount' => 150,
+            'status' => 'pending',
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-05',
+            'amount' => 200,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertSee('£150.00');
+        $response->assertSee('£200.00');
+    }
+
     private function setUpHttpTestExtras(): void
     {
         Schema::table('tenants', function (Blueprint $table) {

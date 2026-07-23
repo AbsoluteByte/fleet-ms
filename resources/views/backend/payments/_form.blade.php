@@ -8,13 +8,17 @@
         <div class="row">
             <div class="col-md-6 mb-2">
                 <label for="driver_id" class="form-label">Driver <span class="text-danger">*</span></label>
-                <select name="driver_id" id="driver_id" class="form-control select-search @error('driver_id') is-invalid @enderror" required>
+                <select name="driver_id" id="driver_id" class="form-control select-search @error('driver_id') is-invalid @enderror" required
+                        @if(($isPosted ?? false) || ($isEdit ?? false)) disabled @endif>
                     <option value="">Select Driver</option>
                     @include('backend.drivers._select_options', [
                         'drivers' => $drivers,
-                        'selectedId' => old('driver_id', optional($selectedDriver)->id),
+                        'selectedId' => old('driver_id', optional($selectedDriver)->id ?? $model->driver_id ?? null),
                     ])
                 </select>
+                @if(($isPosted ?? false) || ($isEdit ?? false))
+                    <input type="hidden" name="driver_id" value="{{ old('driver_id', $model->driver_id ?? optional($selectedDriver)->id) }}">
+                @endif
                 @error('driver_id')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -24,7 +28,7 @@
                 <label for="payment_date" class="form-label">Payment Date <span class="text-danger">*</span></label>
                 <input type="date" name="payment_date" id="payment_date"
                        class="form-control @error('payment_date') is-invalid @enderror"
-                       value="{{ old('payment_date', now()->toDateString()) }}" required>
+                       value="{{ old('payment_date', optional($model->payment_date)->toDateString() ?? now()->toDateString()) }}" required>
                 @error('payment_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -101,11 +105,16 @@
         </h5>
     </div>
     <div class="card-body">
+        @if($isPosted ?? false)
+            <div class="alert alert-info mb-0">
+                Allocations for posted payments are recalculated automatically when you save, using the same rules as when the payment was posted.
+            </div>
+        @else
         <input type="hidden" name="auto_manage_invoices" value="0">
         <div class="custom-control custom-checkbox mb-2">
             <input type="checkbox" class="custom-control-input" id="auto_manage_invoices"
                    name="auto_manage_invoices" value="1"
-                {{ old('auto_manage_invoices', '1') ? 'checked' : '' }}>
+                {{ old('auto_manage_invoices', ($model->auto_allocate ?? true) ? '1' : '0') ? 'checked' : '' }}>
             <label class="custom-control-label" for="auto_manage_invoices">Auto manage invoices</label>
         </div>
         <p class="text-muted">
@@ -149,7 +158,7 @@
                                 <td class="manual-allocation-column">
                                     <input type="number" name="allocations[{{ $invoice->id }}]"
                                            class="form-control manual-allocation-input @error('allocations.'.$invoice->id) is-invalid @enderror"
-                                           value="{{ old('allocations.'.$invoice->id) }}"
+                                           value="{{ old('allocations.'.$invoice->id, data_get($model->pending_manual_allocations ?? [], $invoice->id)) }}"
                                            min="0" max="{{ $invoice->balance_amount }}" step="0.01">
                                     @error('allocations.'.$invoice->id)
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -174,6 +183,7 @@
             <div class="text-danger">{{ $message }}</div>
             @enderror
         </div>
+        @endif
     </div>
 </div>
 
@@ -181,9 +191,9 @@
     <div class="col-12">
         <div class="form-group">
             <button type="submit" class="btn btn-primary">
-                <i class="fa fa-save"></i> Add Payment
+                <i class="fa fa-save"></i> {{ ($isEdit ?? false) ? 'Update Payment' : 'Add Payment' }}
             </button>
-            <a href="{{ route('payments.index') }}" class="btn btn-secondary ml-2">
+            <a href="{{ ($isEdit ?? false) ? route('payments.show', $model) : route('payments.index') }}" class="btn btn-secondary ml-2">
                 <i class="fa fa-times"></i> Cancel
             </a>
         </div>

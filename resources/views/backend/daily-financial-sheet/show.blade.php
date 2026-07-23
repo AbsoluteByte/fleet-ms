@@ -142,7 +142,13 @@
                                             @endif
                                         </td>
                                         <td>{{ $entry['employee'] }}</td>
-                                        <td>{{ $entry['description'] }}</td>
+                                        <td @if(!empty($entry['is_adjustment']) && ($entry['adjustment_event_type'] ?? '') === 'reversal') class="text-muted" @endif>
+                                            @if(!empty($entry['is_adjustment']) && ($entry['adjustment_event_type'] ?? '') === 'reversal')
+                                                <del>{{ $entry['description'] }}</del>
+                                            @else
+                                                {{ $entry['description'] }}
+                                            @endif
+                                        </td>
                                         <td>
                                             {{ $entry['category'] }}
                                             @if(!empty($entry['agreement_url']))
@@ -166,7 +172,9 @@
                                         </td>
                                         <td>£{{ number_format($entry['amount'], 2) }}</td>
                                         <td>
-                                            @if($entry['posting_status'] === 'pending')
+                                            @if(($entry['posting_status'] ?? '') === 'adjustment')
+                                                <span class="badge badge-info">Adjustment</span>
+                                            @elseif($entry['posting_status'] === 'pending')
                                                 <span class="badge badge-warning">Pending</span>
                                             @else
                                                 <span class="badge badge-success">Posted</span>

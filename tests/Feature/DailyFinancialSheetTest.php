@@ -92,6 +92,7 @@ class DailyFinancialSheetTest extends TestCase
         Schema::dropIfExists('agreements');
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
+        Schema::dropIfExists('financial_sheet_adjustments');
         Schema::dropIfExists('daily_financial_sheets');
         Schema::dropIfExists('payment_allocations');
         Schema::dropIfExists('payments');
@@ -622,6 +623,29 @@ class DailyFinancialSheetTest extends TestCase
         ]);
     }
 
+    public function test_approved_sheet_shows_payment_reversal_adjustment_after_manager_deletes_posted_payment(): void
+    {
+        $date = now()->toDateString();
+        $this->createInvoice(100);
+        $payment = $this->createPendingPayment($date, 100);
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+        $this->post(route('daily-financial-sheet.approve', $date));
+
+        $response = $this->delete(route('payments.destroy', $payment));
+
+        $response->assertRedirect(route('payments.driver', $this->driver->id));
+
+        $sheetResponse = $this->get(route('daily-financial-sheet.show', $date));
+        $sheetResponse->assertOk();
+        $sheetResponse->assertSee('Adjustment');
+        $sheetResponse->assertSee('Payment reversed');
+
+        $sheet = DailyFinancialSheet::query()->first();
+        $this->assertEquals(0, (float) $sheet->cash_in);
+    }
+
     private function createPendingPayment(string $date, float $amount): Payment
     {
         return Payment::query()->create([
@@ -881,6 +905,23 @@ class DailyFinancialSheetTest extends TestCase
             $table->text('approval_notes')->nullable();
             $table->foreignId('approved_by')->nullable();
             $table->timestamp('approved_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('financial_sheet_adjustments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->date('sheet_date');
+            $table->string('source_type')->default('payment');
+            $table->unsignedBigInteger('source_id')->nullable();
+            $table->string('event_type');
+            $table->string('direction');
+            $table->decimal('amount', 12, 2);
+            $table->string('payment_method')->nullable();
+            $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->text('description');
+            $table->json('metadata')->nullable();
+            $table->foreignId('created_by')->nullable();
             $table->timestamps();
         });
     }

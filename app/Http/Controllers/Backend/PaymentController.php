@@ -7,6 +7,7 @@ use App\Models\BankAccount;
 use App\Models\Driver;
 use App\Models\Payment;
 use App\Services\DriverCreditService;
+use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,8 @@ use Illuminate\Validation\Rule;
 
 class PaymentController extends Controller
 {
+    private const PAYMENT_MANAGER_EMAIL = 'jawad@samoretraders.com';
+
     protected $url = 'payments.';
 
     protected $dir = 'backend.payments.';
@@ -42,6 +45,7 @@ class PaymentController extends Controller
 
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
+            ->withPaymentIndexAggregates()
             ->with(['agreements' => fn ($query) => $query->currentlyActive()->with('car')])
             ->withMax(['payments as last_posted_payment_date' => function ($query) {
                 $query->posted();
@@ -86,6 +90,7 @@ class PaymentController extends Controller
         $summary = $this->driverSummary($driver);
         $creditPreview = app(DriverCreditService::class)->preview($driver);
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+        $canManagePayments = $this->canManagePayments();
 
         return view($this->dir.'show', compact(
             'driver',
@@ -95,7 +100,8 @@ class PaymentController extends Controller
             'payments',
             'summary',
             'creditPreview',
-            'bankAccounts'
+            'bankAccounts',
+            'canManagePayments'
         ));
     }
 
@@ -235,17 +241,100 @@ class PaymentController extends Controller
         $payment->load(['driver', 'bankAccount', 'sourceAgreement', 'allocations.invoice.sourceAgreement']);
         $this->authorizeDriver($payment->driver, $tenant);
 
-        return view($this->dir.'payment', compact('payment'));
+        $canManagePayments = $this->canManagePayments();
+
+        return view($this->dir.'payment', compact('payment', 'canManagePayments'));
     }
 
     public function edit(Payment $payment)
     {
-        return redirect()->route('payments.show', $payment);
+        abort_unless($this->canManagePayments(), 403);
+
+        $tenant = Auth::user()->currentTenant();
+        $payment->load(['driver', 'bankAccount', 'allocations.invoice']);
+        $this->authorizeDriver($payment->driver, $tenant);
+
+        if (Schema::hasTable('driver_credit_transaction_lines') && $payment->creditTransactionLines()->exists()) {
+            return redirect()->route('payments.show', $payment)
+                ->with('error', 'This payment is linked to a driver credit transaction and cannot be edited.');
+        }
+
+        $drivers = Driver::where('tenant_id', $tenant->id)
+            ->active()
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        $selectedDriver = $payment->driver;
+        $openInvoices = $selectedDriver->activeInvoices()
+            ->with(['sourceAgreement.car'])
+            ->orderBy('invoice_date')
+            ->orderBy('due_date')
+            ->get();
+
+        $model = $payment;
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+        $isPosted = $payment->isPosted();
+
+        return view($this->dir.'edit', compact(
+            'model',
+            'drivers',
+            'selectedDriver',
+            'openInvoices',
+            'bankAccounts',
+            'isPosted'
+        ));
     }
 
-    public function update(Request $request, Payment $payment)
-    {
-        return redirect()->route('payments.show', $payment);
+    public function update(
+        Request $request,
+        Payment $payment,
+        PaymentAllocationService $paymentAllocationService,
+        DailyFinancialSheetService $dailyFinancialSheetService
+    ) {
+        abort_unless($this->canManagePayments(), 403);
+
+        $tenant = Auth::user()->currentTenant();
+        $payment->load('driver');
+        $this->authorizeDriver($payment->driver, $tenant);
+
+        if (Schema::hasTable('driver_credit_transaction_lines') && $payment->creditTransactionLines()->exists()) {
+            return redirect()->route('payments.show', $payment)
+                ->with('error', 'This payment is linked to a driver credit transaction and cannot be edited.');
+        }
+
+        $validated = $this->validatePaymentRequest($request, $tenant, $payment);
+        $autoManageInvoices = $request->boolean('auto_manage_invoices', true);
+
+        $paymentData = [
+            'payment_method' => $validated['payment_method'],
+            'bank_account_id' => Payment::bankAccountIdForMethod(
+                $validated['payment_method'],
+                $validated['bank_account_id'] ?? null
+            ),
+            'payment_date' => $validated['payment_date'],
+            'amount' => $validated['amount'],
+            'notes' => $validated['notes'] ?? null,
+        ];
+
+        if ($payment->isPosted()) {
+            $paymentAllocationService->updatePostedPayment(
+                $payment,
+                $paymentData,
+                $dailyFinancialSheetService,
+                (int) Auth::id()
+            );
+        } else {
+            $paymentAllocationService->updatePendingPayment(
+                $payment,
+                $paymentData,
+                $autoManageInvoices,
+                $validated['allocations'] ?? []
+            );
+        }
+
+        return redirect()->route('payments.show', $payment)
+            ->with('success', 'Payment updated successfully.');
     }
 
     public function updateNotes(Request $request, Payment $payment)
@@ -364,31 +453,70 @@ class PaymentController extends Controller
         return redirect()->back()->with('success', 'Reminder dismissed.');
     }
 
-    public function destroy(Payment $payment)
-    {
+    public function destroy(
+        Payment $payment,
+        PaymentAllocationService $paymentAllocationService,
+        DailyFinancialSheetService $dailyFinancialSheetService
+    ) {
+        abort_unless($this->canManagePayments(), 403);
+
         $tenant = Auth::user()->currentTenant();
-        $payment->load(['driver', 'allocations.invoice']);
+        $payment->load('driver');
         $this->authorizeDriver($payment->driver, $tenant);
 
-        if (Schema::hasTable('driver_credit_transaction_lines') && $payment->creditTransactionLines()->exists()) {
+        try {
+            $driverId = $payment->driver_id;
+            $paymentAllocationService->deletePayment($payment, $dailyFinancialSheetService, (int) Auth::id());
+        } catch (\Illuminate\Validation\ValidationException $exception) {
             return redirect()->route('payments.driver', $payment->driver_id)
-                ->with('error', 'This payment is linked to a driver credit transaction and cannot be deleted.');
+                ->with('error', collect($exception->errors())->flatten()->first());
         }
 
-        $invoices = $payment->allocations->pluck('invoice')->filter();
-
-        foreach ($payment->allocations as $allocation) {
-            $allocation->delete();
-        }
-
-        $payment->delete();
-
-        foreach ($invoices as $invoice) {
-            $invoice->refreshPaymentTotals();
-        }
-
-        return redirect()->route('payments.driver', $payment->driver_id)
+        return redirect()->route('payments.driver', $driverId)
             ->with('success', 'Payment deleted successfully.');
+    }
+
+    private function canManagePayments(): bool
+    {
+        return strtolower(trim((string) Auth::user()?->email)) === self::PAYMENT_MANAGER_EMAIL;
+    }
+
+    private function validatePaymentRequest(Request $request, $tenant, ?Payment $payment = null): array
+    {
+        $driverRule = Rule::exists('drivers', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id));
+
+        if ($payment?->isPosted()) {
+            return $request->validate([
+                'payment_method' => 'required|string|max:255',
+                'bank_account_id' => [
+                    'nullable',
+                    Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
+                    Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+                ],
+                'payment_date' => 'required|date',
+                'amount' => 'required|numeric|min:0.01',
+                'notes' => 'nullable|string',
+            ]);
+        }
+
+        return $request->validate([
+            'driver_id' => [
+                'required',
+                $driverRule,
+            ],
+            'payment_method' => 'required|string|max:255',
+            'bank_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
+                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
+            'payment_date' => 'required|date',
+            'amount' => 'required|numeric|min:0.01',
+            'notes' => 'nullable|string',
+            'auto_manage_invoices' => 'boolean',
+            'allocations' => 'nullable|array',
+            'allocations.*' => 'nullable|numeric|min:0',
+        ]);
     }
 
     private function authorizeDriver(?Driver $driver, $tenant): void

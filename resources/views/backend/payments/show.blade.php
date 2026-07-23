@@ -180,6 +180,18 @@
                                                 <a href="{{ route('payments.show', $payment) }}" class="btn btn-sm btn-outline-info" title="View payment">
                                                     <i class="fa fa-eye"></i>
                                                 </a>
+                                                @if($canManagePayments ?? false)
+                                                    <a href="{{ route('payments.edit', $payment) }}" class="btn btn-sm btn-outline-warning" title="Edit payment">
+                                                        <i class="fa fa-edit"></i>
+                                                    </a>
+                                                    <form action="{{ route('payments.destroy', $payment) }}" method="POST" style="display: inline;" onsubmit="return confirm('Delete this payment? Invoice balances will be recalculated.');">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete payment">
+                                                            <i class="fa fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                @endif
                                             </td>
                                         </tr>
                                     @empty

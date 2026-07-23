@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\DriverPersistenceService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
@@ -234,30 +235,93 @@ class Driver extends Model
         return $this->activeInvoices()->whereDate('due_date', '<', now());
     }
 
+    public function scopeWithPaymentIndexAggregates(Builder $query): Builder
+    {
+        $query = $query
+            ->withSum(['invoices as total_due' => function ($invoiceQuery) {
+                $invoiceQuery->where('balance_amount', '>', 0)
+                    ->where('status', '!=', 'cancelled');
+            }], 'balance_amount')
+            ->withSum(['payments as total_paid' => function ($paymentQuery) {
+                $paymentQuery->posted();
+            }], 'amount')
+            ->addSelect([
+                'total_allocated' => PaymentAllocation::query()
+                    ->selectRaw('coalesce(sum(payment_allocations.allocated_amount), 0)')
+                    ->join('payments', 'payments.id', '=', 'payment_allocations.payment_id')
+                    ->whereColumn('payments.driver_id', 'drivers.id')
+                    ->where('payments.posting_status', Payment::POSTING_STATUS_POSTED),
+            ]);
+
+        if (Schema::hasTable('driver_credit_transaction_lines')) {
+            $query->addSelect([
+                'refunded_credit_sum' => DriverCreditTransactionLine::query()
+                    ->selectRaw('coalesce(sum(driver_credit_transaction_lines.amount), 0)')
+                    ->join(
+                        'driver_credit_transactions',
+                        'driver_credit_transactions.id',
+                        '=',
+                        'driver_credit_transaction_lines.driver_credit_transaction_id'
+                    )
+                    ->whereColumn('driver_credit_transactions.driver_id', 'drivers.id')
+                    ->where('driver_credit_transactions.kind', DriverCreditTransaction::KIND_REFUND)
+                    ->where('driver_credit_transactions.posting_status', DriverCreditTransaction::STATUS_POSTED)
+                    ->where('driver_credit_transaction_lines.status', DriverCreditTransactionLine::STATUS_CONSUMED),
+            ]);
+        }
+
+        return $query;
+    }
+
     public function getTotalInvoicedAttribute()
     {
         return (float) $this->invoices()->sum('total_amount');
     }
 
-    public function getTotalPaidAttribute()
+    public function getTotalPaidAttribute($value = null)
     {
+        if ($value !== null) {
+            return (float) $value;
+        }
+
         return (float) $this->payments()->posted()->sum('amount');
     }
 
-    public function getTotalAllocatedAttribute()
+    public function getTotalAllocatedAttribute($value = null)
     {
+        if ($value !== null) {
+            return (float) $value;
+        }
+
         return (float) PaymentAllocation::whereHas('payment', function ($query) {
             $query->where('driver_id', $this->id)->posted();
         })->sum('allocated_amount');
     }
 
-    public function getTotalDueAttribute()
+    public function getTotalDueAttribute($value = null)
     {
+        if ($value !== null) {
+            return (float) $value;
+        }
+
         return (float) $this->activeInvoices()->sum('balance_amount');
     }
 
-    public function getCreditAmountAttribute()
+    public function getCreditAmountAttribute($value = null)
     {
+        if ($value !== null) {
+            return (float) $value;
+        }
+
+        if ($this->hasPreloadedPaymentIndexAggregates()) {
+            return round(max(
+                (float) ($this->attributes['total_paid'] ?? 0)
+                - (float) ($this->attributes['total_allocated'] ?? 0)
+                - (float) ($this->attributes['refunded_credit_sum'] ?? 0),
+                0
+            ), 2);
+        }
+
         $refundedCredit = Schema::hasTable('driver_credit_transaction_lines')
             ? DriverCreditTransactionLine::query()
                 ->whereHas('transaction', function ($query) {
@@ -270,6 +334,12 @@ class Driver extends Model
             : 0;
 
         return round(max($this->total_paid - $this->total_allocated - (float) $refundedCredit, 0), 2);
+    }
+
+    private function hasPreloadedPaymentIndexAggregates(): bool
+    {
+        return array_key_exists('total_paid', $this->attributes)
+            && array_key_exists('total_allocated', $this->attributes);
     }
 
     public function getReservedCreditAmountAttribute(): float
