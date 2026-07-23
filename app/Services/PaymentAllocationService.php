@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class PaymentAllocationService
@@ -61,16 +62,120 @@ class PaymentAllocationService
         return DB::transaction(function () use ($payment) {
             $payment->update(['posting_status' => Payment::POSTING_STATUS_POSTED]);
 
-            if ($payment->allocation_source_id && is_array($payment->allocation_invoice_types)) {
-                $this->autoAllocateForSource($payment, $payment->allocation_source_id, $payment->allocation_invoice_types);
-            } elseif ($payment->auto_allocate) {
-                $this->autoAllocate($payment);
-            } elseif (is_array($payment->pending_manual_allocations)) {
-                $this->manualAllocate($payment, $payment->pending_manual_allocations);
-            }
+            $this->allocatePostedPayment($payment);
 
             return $payment->fresh(['driver', 'allocations.invoice']);
         });
+    }
+
+    public function updatePendingPayment(
+        Payment $payment,
+        array $data,
+        bool $autoManageInvoices,
+        array $manualAllocations = []
+    ): Payment {
+        return DB::transaction(function () use ($payment, $data, $autoManageInvoices, $manualAllocations) {
+            $payment->update(array_merge($data, [
+                'auto_allocate' => $autoManageInvoices,
+                'pending_manual_allocations' => $autoManageInvoices ? null : $manualAllocations,
+            ]));
+
+            return $payment->fresh(['driver', 'allocations.invoice']);
+        });
+    }
+
+    public function updatePostedPayment(
+        Payment $payment,
+        array $data,
+        DailyFinancialSheetService $sheetService,
+        int $actorId
+    ): Payment {
+        return DB::transaction(function () use ($payment, $data, $sheetService, $actorId) {
+            $payment->load(['driver', 'allocations.invoice']);
+            $oldSnapshot = $this->paymentSnapshot($payment);
+
+            $this->clearPaymentAllocations($payment);
+
+            $payment->update($data);
+            $payment->refresh();
+
+            $this->allocatePostedPayment($payment);
+
+            $sheetService->recordPaymentCorrection($payment->fresh(['driver']), $oldSnapshot, $actorId);
+
+            return $payment->fresh(['driver', 'allocations.invoice']);
+        });
+    }
+
+    public function deletePayment(Payment $payment, DailyFinancialSheetService $sheetService, int $actorId): void
+    {
+        if (Schema::hasTable('driver_credit_transaction_lines') && $payment->creditTransactionLines()->exists()) {
+            throw ValidationException::withMessages([
+                'payment' => 'This payment is linked to a driver credit transaction and cannot be deleted.',
+            ]);
+        }
+
+        DB::transaction(function () use ($payment, $sheetService, $actorId) {
+            $payment->load(['driver', 'allocations.invoice']);
+
+            if ($payment->isPosted()) {
+                $tenantId = (int) $payment->driver->tenant_id;
+                $paymentDate = $payment->payment_date?->toDateString();
+
+                if ($paymentDate && $sheetService->isDateApproved($tenantId, $paymentDate)) {
+                    $sheetService->recordPaymentReversal($payment, $actorId);
+                }
+            }
+
+            $this->clearPaymentAllocations($payment);
+            $payment->delete();
+        });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function paymentSnapshot(Payment $payment): array
+    {
+        return [
+            'payment_id' => $payment->id,
+            'payment_no' => $payment->payment_no,
+            'amount' => (float) $payment->amount,
+            'payment_date' => $payment->payment_date?->toDateString(),
+            'payment_method' => $payment->payment_method,
+            'bank_account_id' => $payment->bank_account_id,
+            'driver_name' => trim(($payment->driver->first_name ?? '').' '.($payment->driver->last_name ?? '')),
+            'allocations' => $payment->allocations
+                ->map(fn ($allocation) => [
+                    'invoice_id' => $allocation->invoice_id,
+                    'allocated_amount' => (float) $allocation->allocated_amount,
+                ])
+                ->all(),
+        ];
+    }
+
+    private function clearPaymentAllocations(Payment $payment): void
+    {
+        $invoices = $payment->allocations->pluck('invoice')->filter();
+
+        foreach ($payment->allocations as $allocation) {
+            $allocation->delete();
+        }
+
+        foreach ($invoices as $invoice) {
+            $invoice->refreshPaymentTotals();
+        }
+    }
+
+    private function allocatePostedPayment(Payment $payment): void
+    {
+        if ($payment->allocation_source_id && is_array($payment->allocation_invoice_types)) {
+            $this->autoAllocateForSource($payment, $payment->allocation_source_id, $payment->allocation_invoice_types);
+        } elseif ($payment->auto_allocate) {
+            $this->autoAllocate($payment);
+        } elseif (is_array($payment->pending_manual_allocations)) {
+            $this->manualAllocate($payment, $payment->pending_manual_allocations);
+        }
     }
 
     private function autoAllocate(Payment $payment): void

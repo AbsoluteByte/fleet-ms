@@ -87,7 +87,6 @@
                                             ], true)
                                                 ? '—'
                                                 : ($car->latestPhvCounselName() ?? '—');
-                                            $carNotificationCount = $carNotificationCounts[$car->registration] ?? 0;
                                             $motExpiry = $car->latestMot()?->expiry_date;
                                             $motExpiryIso = $motExpiry ? $motExpiry->format('Y-m-d') : '';
                                             $roadTaxExpiry = $car->latestRoadTax()?->expiryDate();
@@ -172,19 +171,16 @@
                                                        title="Edit Car" aria-label="Edit Car">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
-                                                    <span class="car-notifications-wrap">
+                                                    <span class="car-notifications-wrap" data-registration="{{ $car->registration }}">
                                                         <button type="button"
                                                                 class="btn btn-sm btn-outline-primary car-notifications-btn js-action-tooltip"
                                                                 data-notifications-url="{{ route('cars.notifications', $car) }}"
                                                                 data-registration="{{ $car->registration }}"
                                                                 data-toggle="tooltip" data-placement="top"
-                                                                title="View Car Notifications{{ $carNotificationCount > 0 ? ' (' . $carNotificationCount . ')' : '' }}"
+                                                                title="View Car Notifications"
                                                                 aria-label="View Car Notifications">
                                                             <i class="fa fa-bell"></i>
                                                         </button>
-                                                        @if($carNotificationCount > 0)
-                                                            <span class="badge badge-danger car-notifications-badge{{ $carNotificationCount > 9 ? ' car-notifications-badge--wide' : '' }}">{{ $carNotificationCount }}</span>
-                                                        @endif
                                                     </span>
                                                     <form action="{{ route('cars.destroy', $car) }}" method="POST" style="display: inline;">
                                                         @csrf
@@ -1464,6 +1460,42 @@
                         $('#carNotificationsModalBody').html('<p class="text-danger mb-0">Unable to load notifications for this car right now.</p>');
                     });
             });
+
+            fetch('{{ route('cars.notification-counts') }}', {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('Failed to load notification counts');
+                    }
+                    return response.json();
+                })
+                .then(function (data) {
+                    const counts = data.counts || {};
+
+                    $('.car-notifications-wrap[data-registration]').each(function () {
+                        const $wrap = $(this);
+                        const registration = String($wrap.data('registration') || '');
+                        const count = Number(counts[registration] || 0);
+
+                        if (count <= 0) {
+                            return;
+                        }
+
+                        const wideClass = count > 9 ? ' car-notifications-badge--wide' : '';
+                        $wrap.append(
+                            '<span class="badge badge-danger car-notifications-badge' + wideClass + '">' + count + '</span>'
+                        );
+
+                        const $button = $wrap.find('.car-notifications-btn');
+                        const tooltipTitle = 'View Car Notifications (' + count + ')';
+                        $button.attr('title', tooltipTitle).attr('aria-label', tooltipTitle);
+                    });
+                })
+                .catch(function () {
+                    // Badges are optional; leave buttons usable without counts.
+                });
         });
     </script>
 @endsection

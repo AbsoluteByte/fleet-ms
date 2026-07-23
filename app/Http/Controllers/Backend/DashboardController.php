@@ -18,6 +18,7 @@ use App\Models\Invoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
@@ -845,6 +846,28 @@ class DashboardController extends Controller
     }
 
     public function getCarNotificationCounts(): array
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return [];
+        }
+
+        return Cache::remember(
+            "tenant:{$tenant->id}:car_notification_counts",
+            now()->addMinutes(2),
+            fn () => $this->buildCarNotificationCounts()
+        );
+    }
+
+    public function getCarNotificationCountsJson()
+    {
+        return response()->json([
+            'counts' => $this->getCarNotificationCounts(),
+        ]);
+    }
+
+    private function buildCarNotificationCounts(): array
     {
         $data = $this->getUnifiedNotifications();
 

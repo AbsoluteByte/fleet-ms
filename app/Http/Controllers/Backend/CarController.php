@@ -70,9 +70,7 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        $carNotificationCounts = app(DashboardController::class)->getCarNotificationCounts();
-
-        return view($this->dir.'index', compact('cars', 'carNotificationCounts'));
+        return view($this->dir.'index', compact('cars'));
     }
 
     // ✅ Updated Create

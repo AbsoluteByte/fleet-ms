@@ -6,6 +6,7 @@ use App\Models\DailyFinancialSheet;
 use App\Models\DepositRefund;
 use App\Models\DriverCreditTransaction;
 use App\Models\Expense;
+use App\Models\FinancialSheetAdjustment;
 use App\Models\Invoice;
 use App\Models\Payment;
 use Carbon\Carbon;
@@ -125,12 +126,180 @@ class DailyFinancialSheetService
             ->get()
             ->map(fn (DriverCreditTransaction $transaction) => $this->formatDriverCreditEntry($transaction));
 
+        $adjustmentEntries = FinancialSheetAdjustment::query()
+            ->with(['bankAccount', 'createdByUser'])
+            ->where('tenant_id', $tenantId)
+            ->whereDate('sheet_date', $date)
+            ->get()
+            ->map(fn (FinancialSheetAdjustment $adjustment) => $this->formatAdjustmentEntry($adjustment));
+
         return collect($payments)
             ->merge($expenses)
             ->merge($refundEntries)
             ->merge($creditEntries)
+            ->merge($adjustmentEntries)
             ->sortBy('sort_at')
             ->values();
+    }
+
+    public function recordPaymentReversal(Payment $payment, int $actorId): void
+    {
+        $tenantId = (int) $payment->driver->tenant_id;
+        $sheetDate = $payment->payment_date?->toDateString();
+
+        if (! $sheetDate || ! $this->isDateApproved($tenantId, $sheetDate)) {
+            return;
+        }
+
+        $driverName = trim(($payment->driver->first_name ?? '').' '.($payment->driver->last_name ?? ''));
+
+        $adjustment = FinancialSheetAdjustment::query()->create([
+            'tenant_id' => $tenantId,
+            'sheet_date' => $sheetDate,
+            'source_type' => FinancialSheetAdjustment::SOURCE_PAYMENT,
+            'source_id' => $payment->id,
+            'event_type' => FinancialSheetAdjustment::EVENT_REVERSAL,
+            'direction' => 'out',
+            'amount' => (float) $payment->amount,
+            'payment_method' => $payment->payment_method,
+            'bank_account_id' => $payment->bank_account_id,
+            'description' => trim($driverName.' — Payment reversed — '.$payment->payment_no),
+            'metadata' => [
+                'payment_no' => $payment->payment_no,
+                'original_amount' => (float) $payment->amount,
+            ],
+            'created_by' => $actorId,
+        ]);
+
+        $this->mergeAdjustmentIntoApprovedSheet($tenantId, $sheetDate, $adjustment);
+    }
+
+    /**
+     * @param  array<string, mixed>  $oldSnapshot
+     */
+    public function recordPaymentCorrection(Payment $payment, array $oldSnapshot, int $actorId): void
+    {
+        $tenantId = (int) $payment->driver->tenant_id;
+        $oldDate = (string) ($oldSnapshot['payment_date'] ?? '');
+        $newDate = $payment->payment_date?->toDateString() ?? '';
+
+        if ($oldDate !== '' && $oldDate !== $newDate && $this->isDateApproved($tenantId, $oldDate)) {
+            $this->createPaymentCorrectionAdjustment(
+                tenantId: $tenantId,
+                sheetDate: $oldDate,
+                payment: $payment,
+                snapshot: $oldSnapshot,
+                direction: 'out',
+                amount: (float) ($oldSnapshot['amount'] ?? 0),
+                eventType: FinancialSheetAdjustment::EVENT_CORRECTION,
+                descriptionSuffix: 'moved from this date',
+                actorId: $actorId,
+                metadata: ['reason' => 'date_change_old_date', 'new_date' => $newDate]
+            );
+        }
+
+        if ($newDate === '' || ! $this->isDateApproved($tenantId, $newDate)) {
+            return;
+        }
+
+        if ($oldDate !== $newDate) {
+            $this->createPaymentCorrectionAdjustment(
+                tenantId: $tenantId,
+                sheetDate: $newDate,
+                payment: $payment,
+                snapshot: $oldSnapshot,
+                direction: 'in',
+                amount: (float) $payment->amount,
+                eventType: FinancialSheetAdjustment::EVENT_CORRECTION,
+                descriptionSuffix: 'moved to this date',
+                actorId: $actorId,
+                metadata: ['reason' => 'date_change_new_date', 'old_date' => $oldDate]
+            );
+
+            return;
+        }
+
+        $oldContribution = $this->paymentContributionEntry($oldSnapshot);
+        $newContribution = $this->paymentContributionEntry([
+            'amount' => (float) $payment->amount,
+            'payment_method' => $payment->payment_method,
+            'bank_account_id' => $payment->bank_account_id,
+        ]);
+
+        $this->createContributionDeltaAdjustments(
+            $tenantId,
+            $newDate,
+            $payment,
+            $oldSnapshot,
+            $oldContribution,
+            $newContribution,
+            $actorId
+        );
+    }
+
+    private function mergeAdjustmentIntoApprovedSheet(int $tenantId, string $date, FinancialSheetAdjustment $adjustment): void
+    {
+        $signedTotals = $this->signedTotalsForAdjustment($adjustment);
+
+        DB::transaction(function () use ($tenantId, $date, $signedTotals) {
+            $existing = DailyFinancialSheet::query()
+                ->where('tenant_id', $tenantId)
+                ->whereDate('sheet_date', $date)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $existing || ! $existing->isApproved()) {
+                return;
+            }
+
+            $existing->fill([
+                'cash_in' => $this->addMoney((float) $existing->cash_in, $signedTotals['cash_in']),
+                'cash_out' => $this->addMoney((float) $existing->cash_out, $signedTotals['cash_out']),
+                'bank_in_json' => $this->mergeBankTotals($existing->bank_in_json ?? [], $signedTotals['bank_in']),
+                'bank_out_json' => $this->mergeBankTotals($existing->bank_out_json ?? [], $signedTotals['bank_out']),
+            ]);
+            $existing->save();
+        });
+    }
+
+    /**
+     * @return array{cash_in: float, cash_out: float, bank_in: array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>, bank_out: array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>}
+     */
+    private function signedTotalsForAdjustment(FinancialSheetAdjustment $adjustment): array
+    {
+        $adjustment->loadMissing('bankAccount');
+
+        $magnitude = $this->computeTotals(collect([[
+            'direction' => 'in',
+            'payment_method' => $adjustment->payment_method,
+            'bank_account_id' => $adjustment->bank_account_id,
+            'bank_name' => $adjustment->bankAccount?->bank_name,
+            'account_number' => $adjustment->bankAccount?->account_number,
+            'amount' => (float) $adjustment->amount,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+        ]]), pendingOnly: false);
+
+        $sign = $adjustment->direction === 'out' ? -1 : 1;
+
+        return [
+            'cash_in' => round($sign * $magnitude['cash_in'], 2),
+            'cash_out' => round($sign * $magnitude['cash_out'], 2),
+            'bank_in' => $this->scaleBankTotals($magnitude['bank_in'], $sign),
+            'bank_out' => $this->scaleBankTotals($magnitude['bank_out'], $sign),
+        ];
+    }
+
+    /**
+     * @param  array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>  $rows
+     * @return array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>
+     */
+    private function scaleBankTotals(array $rows, int $sign): array
+    {
+        return array_map(function (array $row) use ($sign) {
+            $row['total'] = round($sign * (float) ($row['total'] ?? 0), 2);
+
+            return $row;
+        }, $rows);
     }
 
     /**
@@ -739,5 +908,204 @@ class DailyFinancialSheetService
             'amount' => (float) $transaction->amount,
             'posting_status' => $transaction->posting_status,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatAdjustmentEntry(FinancialSheetAdjustment $adjustment): array
+    {
+        return [
+            'id' => 'adjustment-'.$adjustment->id,
+            'sort_at' => $adjustment->created_at?->timestamp ?? 0,
+            'direction' => $adjustment->direction,
+            'employee' => $adjustment->createdByUser?->name ?? '—',
+            'description' => $adjustment->description,
+            'category' => $adjustment->event_type === FinancialSheetAdjustment::EVENT_REVERSAL
+                ? 'Payment reversal'
+                : 'Payment correction',
+            'car_registration' => null,
+            'agreement_id' => null,
+            'agreement_url' => null,
+            'paying_company_name' => null,
+            'payment_method' => $adjustment->payment_method,
+            'bank_account_id' => $adjustment->bank_account_id,
+            'bank_name' => $adjustment->bankAccount?->bank_name,
+            'account_number' => $adjustment->bankAccount?->account_number,
+            'amount' => (float) $adjustment->amount,
+            'posting_status' => 'adjustment',
+            'is_adjustment' => true,
+            'adjustment_event_type' => $adjustment->event_type,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     * @param  array<string, mixed>|null  $metadata
+     */
+    private function createPaymentCorrectionAdjustment(
+        int $tenantId,
+        string $sheetDate,
+        Payment $payment,
+        array $snapshot,
+        string $direction,
+        float $amount,
+        string $eventType,
+        string $descriptionSuffix,
+        int $actorId,
+        ?array $metadata = null
+    ): void {
+        if ($amount <= 0) {
+            return;
+        }
+
+        $driverName = trim(($payment->driver->first_name ?? '').' '.($payment->driver->last_name ?? ''));
+        $method = $direction === 'out'
+            ? (string) ($snapshot['payment_method'] ?? $payment->payment_method)
+            : $payment->payment_method;
+        $bankAccountId = $direction === 'out'
+            ? ($snapshot['bank_account_id'] ?? $payment->bank_account_id)
+            : $payment->bank_account_id;
+
+        $adjustment = FinancialSheetAdjustment::query()->create([
+            'tenant_id' => $tenantId,
+            'sheet_date' => $sheetDate,
+            'source_type' => FinancialSheetAdjustment::SOURCE_PAYMENT,
+            'source_id' => $payment->id,
+            'event_type' => $eventType,
+            'direction' => $direction,
+            'amount' => round($amount, 2),
+            'payment_method' => $method,
+            'bank_account_id' => $bankAccountId,
+            'description' => trim($driverName.' — Payment corrected — '.$payment->payment_no.' ('.$descriptionSuffix.')'),
+            'metadata' => array_merge([
+                'payment_no' => $payment->payment_no,
+                'old_snapshot' => $snapshot,
+            ], $metadata ?? []),
+            'created_by' => $actorId,
+        ]);
+
+        $this->mergeAdjustmentIntoApprovedSheet($tenantId, $sheetDate, $adjustment);
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     * @return array<string, mixed>
+     */
+    private function paymentContributionEntry(array $snapshot): array
+    {
+        return [
+            'direction' => 'in',
+            'payment_method' => $snapshot['payment_method'] ?? null,
+            'bank_account_id' => $snapshot['bank_account_id'] ?? null,
+            'bank_name' => null,
+            'account_number' => null,
+            'amount' => (float) ($snapshot['amount'] ?? 0),
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $oldSnapshot
+     * @param  array<string, mixed>  $oldContribution
+     * @param  array<string, mixed>  $newContribution
+     */
+    private function createContributionDeltaAdjustments(
+        int $tenantId,
+        string $sheetDate,
+        Payment $payment,
+        array $oldSnapshot,
+        array $oldContribution,
+        array $newContribution,
+        int $actorId
+    ): void {
+        $oldTotals = $this->computeTotals(collect([$oldContribution]), pendingOnly: false);
+        $newTotals = $this->computeTotals(collect([$newContribution]), pendingOnly: false);
+
+        $cashDelta = round($newTotals['cash_in'] - $oldTotals['cash_in'], 2);
+        if (abs($cashDelta) >= 0.01) {
+            $this->createPaymentCorrectionAdjustment(
+                tenantId: $tenantId,
+                sheetDate: $sheetDate,
+                payment: $payment,
+                snapshot: $oldSnapshot,
+                direction: $cashDelta >= 0 ? 'in' : 'out',
+                amount: abs($cashDelta),
+                eventType: FinancialSheetAdjustment::EVENT_CORRECTION,
+                descriptionSuffix: 'cash amount corrected',
+                actorId: $actorId,
+                metadata: ['bucket' => 'cash', 'delta' => $cashDelta]
+            );
+        }
+
+        $this->createBankDeltaAdjustments(
+            $tenantId,
+            $sheetDate,
+            $payment,
+            $oldSnapshot,
+            $oldTotals['bank_in'],
+            $newTotals['bank_in'],
+            'in',
+            $actorId
+        );
+    }
+
+    /**
+     * @param  array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>  $oldRows
+     * @param  array<int, array{bank_account_id: int|null, bank_name: string, account_number: string, total: float}>  $newRows
+     * @param  array<string, mixed>  $oldSnapshot
+     */
+    private function createBankDeltaAdjustments(
+        int $tenantId,
+        string $sheetDate,
+        Payment $payment,
+        array $oldSnapshot,
+        array $oldRows,
+        array $newRows,
+        string $direction,
+        int $actorId
+    ): void {
+        $keys = array_unique(array_merge(
+            array_map(fn ($row) => (string) ($row['bank_account_id'] ?? 'unknown'), $oldRows),
+            array_map(fn ($row) => (string) ($row['bank_account_id'] ?? 'unknown'), $newRows)
+        ));
+
+        foreach ($keys as $key) {
+            $oldAmount = 0.0;
+            foreach ($oldRows as $row) {
+                if ((string) ($row['bank_account_id'] ?? 'unknown') === $key) {
+                    $oldAmount = (float) $row['total'];
+                    break;
+                }
+            }
+
+            $newAmount = 0.0;
+            $bankAccountId = $key === 'unknown' ? null : (int) $key;
+            foreach ($newRows as $row) {
+                if ((string) ($row['bank_account_id'] ?? 'unknown') === $key) {
+                    $newAmount = (float) $row['total'];
+                    $bankAccountId = $row['bank_account_id'] ?? $bankAccountId;
+                    break;
+                }
+            }
+
+            $delta = round($newAmount - $oldAmount, 2);
+            if (abs($delta) < 0.01) {
+                continue;
+            }
+
+            $this->createPaymentCorrectionAdjustment(
+                tenantId: $tenantId,
+                sheetDate: $sheetDate,
+                payment: $payment,
+                snapshot: $oldSnapshot,
+                direction: $delta >= 0 ? 'in' : 'out',
+                amount: abs($delta),
+                eventType: FinancialSheetAdjustment::EVENT_CORRECTION,
+                descriptionSuffix: 'bank amount corrected',
+                actorId: $actorId,
+                metadata: ['bucket' => 'bank', 'bank_account_id' => $bankAccountId, 'delta' => $delta]
+            );
+        }
     }
 }
