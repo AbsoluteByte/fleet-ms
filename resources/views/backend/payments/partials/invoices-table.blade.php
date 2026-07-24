@@ -4,6 +4,7 @@
         <tr>
             <th>Invoice No</th>
             <th>Type</th>
+            <th>Agreement</th>
             <th>Pays via</th>
             <th>Invoice Date</th>
             <th>Due Date</th>
@@ -19,6 +20,13 @@
             <tr>
                 <td><strong>{{ $invoice->invoice_no }}</strong></td>
                 <td>{{ ucfirst(str_replace('_', ' ', $invoice->invoice_type)) }}</td>
+                <td>
+                    @if($agreementId = $invoice->linkedAgreementId())
+                        <a href="{{ route('agreements.show', $agreementId) }}">Agreement ID #{{ $agreementId }}</a>
+                    @else
+                        —
+                    @endif
+                </td>
                 <td>{{ $invoice->payingCompanyNameLabel() ?? '—' }}</td>
                 <td>{{ optional($invoice->invoice_date)->format('d M Y') }}</td>
                 <td>{{ optional($invoice->due_date)->format('d M Y') }}</td>
@@ -40,7 +48,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="10" class="text-center text-muted">No invoices found.</td>
+                <td colspan="11" class="text-center text-muted">No invoices found.</td>
             </tr>
         @endforelse
         </tbody>
