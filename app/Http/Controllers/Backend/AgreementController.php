@@ -1199,7 +1199,7 @@ class AgreementController extends Controller
         ?Agreement $existing = null,
         array $validated = []
     ): void {
-        if ($existing && $this->isTerminationOnlyCarCheck($existing, $validated)) {
+        if ($existing && (int) ($validated['car_id'] ?? 0) === (int) $existing->car_id) {
             $car = Car::where('tenant_id', $tenant->id)->find($carId);
 
             if (! $car) {
@@ -1212,27 +1212,6 @@ class AgreementController extends Controller
         }
 
         $this->assertCarNotCurrentlyRented($carId, $tenant, $existing?->id);
-    }
-
-    private function isTerminationOnlyCarCheck(Agreement $existing, array $validated): bool
-    {
-        $carUnchanged = (int) ($validated['car_id'] ?? 0) === (int) $existing->car_id;
-
-        if (! $carUnchanged) {
-            return false;
-        }
-
-        if (filled($validated['termination_notice_date'] ?? null)) {
-            return true;
-        }
-
-        $statusId = (int) ($validated['status_id'] ?? 0);
-
-        if ($statusId > 0 && $this->isClosingStatusId($statusId)) {
-            return true;
-        }
-
-        return $this->isClosingStatusId((int) $existing->status_id);
     }
 
     private function isClosingStatusId(int $statusId): bool
