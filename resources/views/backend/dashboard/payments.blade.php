@@ -50,7 +50,7 @@
             </div>
         </div>
 
-        {{-- Due Today --}}
+        {{-- Generated Today --}}
         <div class="col-lg-4 col-md-6 col-12">
             <div class="card text-center cursor-pointer" onclick="filterPayments('due_today')">
                 <div class="card-content">
@@ -61,8 +61,8 @@
                             </div>
                         </div>
                         <h2 class="text-bold-700 text-warning">{{ $summary['due_today'] }}</h2>
-                        <p class="mb-0">Due Today</p>
-                        <p class="text-muted font-small-3 mb-0">Payment due today</p>
+                        <p class="mb-0">Generated Today</p>
+                        <p class="text-muted font-small-3 mb-0">Invoices generated today</p>
                     </div>
                 </div>
             </div>
@@ -108,7 +108,7 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" onclick="filterPayments('due_today')">
-                            Due Today
+                            Generated Today
                             <span class="badge badge-pill badge-warning ml-50">{{ $summary['due_today'] }}</span>
                         </a>
                     </li>
@@ -139,6 +139,28 @@
         </div>
         <div class="card-content">
             <div class="card-body">
+                <div id="paymentsGeneratedDateFilter" class="form-row align-items-end mb-2">
+                    <div class="form-group col-md-3 col-sm-6 mb-1">
+                        <label class="small text-muted mb-25 d-block" for="paymentsInvoiceDateFrom">Generated From</label>
+                        <input type="date" id="paymentsInvoiceDateFrom" class="form-control">
+                    </div>
+                    <div class="form-group col-md-3 col-sm-6 mb-1">
+                        <label class="small text-muted mb-25 d-block" for="paymentsInvoiceDateTo">Generated To</label>
+                        <input type="date" id="paymentsInvoiceDateTo" class="form-control">
+                    </div>
+                    <div class="form-group col-md-2 col-sm-6 mb-1">
+                        <label class="small text-muted mb-25 d-block invisible" aria-hidden="true">&nbsp;</label>
+                        <button type="button" class="btn btn-primary btn-block" id="paymentsApplyDateFilter">
+                            Apply
+                        </button>
+                    </div>
+                    <div class="form-group col-md-2 col-sm-6 mb-1">
+                        <label class="small text-muted mb-25 d-block invisible" aria-hidden="true">&nbsp;</label>
+                        <button type="button" class="btn btn-outline-secondary btn-block" id="paymentsClearDateFilter">
+                            Clear
+                        </button>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table id="paymentsTable" class="table table-hover-animation">
                         <thead>
@@ -148,6 +170,7 @@
                             <th>VEHICLE</th>
                             <th>PAYS VIA</th>
                             <th>AMOUNT</th>
+                            <th>GENERATED DATE</th>
                             <th>DUE DATE</th>
                             <th>STATUS</th>
                             <th>ACTIONS</th>
@@ -247,6 +270,10 @@
         .navbar-floating .header-navbar-shadow {
             height: 85px !important;
         }
+        #paymentsGeneratedDateFilter .form-control,
+        #paymentsGeneratedDateFilter .btn.btn-block {
+            min-height: calc(1.25em + 1.4rem + 2px);
+        }
     </style>
 @endsection
 
@@ -261,7 +288,28 @@
 
         $(document).ready(function() {
             initializeDataTable();
+            toggleGeneratedDateFilter();
+            $('#paymentsApplyDateFilter').on('click', function() {
+                if (currentFilter === '') {
+                    paymentsTable.ajax.reload();
+                }
+            });
+            $('#paymentsClearDateFilter').on('click', function() {
+                $('#paymentsInvoiceDateFrom').val('');
+                $('#paymentsInvoiceDateTo').val('');
+                if (currentFilter === '') {
+                    paymentsTable.ajax.reload();
+                }
+            });
         });
+
+        function toggleGeneratedDateFilter() {
+            if (currentFilter === '') {
+                $('#paymentsGeneratedDateFilter').show();
+            } else {
+                $('#paymentsGeneratedDateFilter').hide();
+            }
+        }
 
         function initializeDataTable() {
             paymentsTable = $('#paymentsTable').DataTable({
@@ -271,6 +319,10 @@
                     url: '{{ route("payments.notifications") }}',
                     data: function(d) {
                         d.type = currentFilter;
+                        if (currentFilter === '') {
+                            d.invoice_date_from = $('#paymentsInvoiceDateFrom').val();
+                            d.invoice_date_to = $('#paymentsInvoiceDateTo').val();
+                        }
                     }
                 },
                 columns: [
@@ -305,6 +357,9 @@
                         render: function(data, type, row) {
                             return `<span class="font-weight-bold text-${row.color}">${data}</span>`;
                         }
+                    },
+                    {
+                        data: 'invoice_generated_date'
                     },
                     {
                         data: 'due_date'
@@ -354,6 +409,8 @@
             $('#payment-tabs .nav-link').removeClass('active');
             event.currentTarget.classList.add('active');
 
+            toggleGeneratedDateFilter();
+
             // Reload table
             paymentsTable.ajax.reload();
         }
@@ -364,6 +421,7 @@
             'Vehicle',
             'Pays via',
             'Amount',
+            'Generated Date',
             'Due Date',
             'Status'
         ];
@@ -373,7 +431,7 @@
         const paymentFilterLabels = {
             '': 'All Payments',
             overdue_payment: 'Overdue',
-            due_today: 'Due Today',
+            due_today: 'Generated Today',
             due_this_week: 'This Week'
         };
 
@@ -384,6 +442,13 @@
         function buildPaymentsExportMeta() {
             const lines = [];
             lines.push('Filter: ' + (paymentFilterLabels[currentFilter] || 'All Payments'));
+            if (currentFilter === '') {
+                const fromDate = ($('#paymentsInvoiceDateFrom').val() || '').trim();
+                const toDate = ($('#paymentsInvoiceDateTo').val() || '').trim();
+                if (fromDate || toDate) {
+                    lines.push('Generated date: ' + (fromDate || 'Any') + ' to ' + (toDate || 'Any'));
+                }
+            }
             const searchValue = (paymentsTable.search() || '').trim();
             if (searchValue) {
                 lines.push('Search: ' + searchValue);
@@ -419,6 +484,7 @@
                     row.vehicle || '—',
                     row.paying_company || '—',
                     row.amount || '—',
+                    row.invoice_generated_date || '—',
                     row.due_date || '—',
                     row.time_ago || '—'
                 ]);

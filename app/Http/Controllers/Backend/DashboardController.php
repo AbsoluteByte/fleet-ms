@@ -15,6 +15,7 @@ use App\Models\Claim;
 use App\Models\Driver;
 use App\Models\Expense;
 use App\Models\Invoice;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -209,21 +210,25 @@ class DashboardController extends Controller
             ->where('balance_amount', '>', 0)
             ->whereHas('driver', $invoiceDriverFilter);
 
-        // ==================== 1. OVERDUE INVOICES (Due Invoices tab match) ====================
-        $overdueInvoices = $baseInvoiceQuery()
-            ->whereDate('due_date', '<', now())
-            ->orderBy('due_date')
+        // ==================== 1. GENERATED TODAY INVOICES ====================
+        $dueTodayInvoices = $baseInvoiceQuery()
+            ->whereDate('invoice_date', now())
+            ->orderByDesc('invoice_date')
             ->get();
 
-        // ==================== 2. DUE TODAY INVOICES ====================
-        $dueTodayInvoices = $baseInvoiceQuery()
-            ->whereDate('due_date', now())
+        $generatedTodayIds = $dueTodayInvoices->pluck('id');
+
+        // ==================== 2. OVERDUE INVOICES (Due Invoices tab match) ====================
+        $overdueInvoices = $baseInvoiceQuery()
+            ->whereDate('due_date', '<', now())
+            ->when($generatedTodayIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $generatedTodayIds))
             ->orderBy('due_date')
             ->get();
 
         // ==================== 3. DUE THIS WEEK INVOICES ====================
         $dueThisWeekInvoices = $baseInvoiceQuery()
             ->whereBetween('due_date', [now()->addDay()->startOfDay(), now()->addWeek()->endOfDay()])
+            ->when($generatedTodayIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $generatedTodayIds))
             ->orderBy('due_date')
             ->get();
 
@@ -259,13 +264,13 @@ class DashboardController extends Controller
                 'due_today',
                 'due_today_'.$invoice->id,
                 2,
-                'Payment Due Today',
-                $driverName.' - Due today',
+                'Invoice Generated Today',
+                $driverName.' - Generated today',
                 'warning',
                 'icon-clock',
                 'rgba(245, 158, 11, 0.1)',
                 '#f59e0b',
-                'Due Today',
+                'Generated today',
                 $agreementsById
             ));
         }
@@ -935,6 +940,12 @@ class DashboardController extends Controller
             // ✅ Filter by type if requested
             if ($request->has('type') && $request->type) {
                 $paymentNotifications = $paymentNotifications->where('type', $request->type);
+            } elseif ($request->filled('invoice_date_from') || $request->filled('invoice_date_to')) {
+                $paymentNotifications = $this->filterPaymentNotificationsByInvoiceDateRange(
+                    $paymentNotifications,
+                    $request->input('invoice_date_from'),
+                    $request->input('invoice_date_to')
+                );
             }
 
             $paymentNotifications = $paymentNotifications->sortBy([
@@ -953,7 +964,12 @@ class DashboardController extends Controller
                     'paying_company' => $notification['paying_company'] ?? null,
                     'amount' => $notification['amount'] ?? '£0.00',
                     'amount_raw' => $amountRaw,
-                    'due_date' => $notification['created_at']->format('d M, Y'),
+                    'invoice_generated_date' => isset($notification['invoice_date'])
+                        ? $notification['invoice_date']->format('d M, Y')
+                        : '—',
+                    'due_date' => isset($notification['due_date_value'])
+                        ? $notification['due_date_value']->format('d M, Y')
+                        : '—',
                     'time_ago' => $notification['time_ago'],
                     'action_url' => $notification['action_url'] ?? '#',
                     'driver_id' => $notification['driver_id'] ?? null,
@@ -1223,8 +1239,59 @@ class DashboardController extends Controller
             'border_color' => $borderColor,
             'created_at' => $invoice->due_date,
             'sort_key' => $invoice->due_date->timestamp,
+            'invoice_date' => $invoice->invoice_date,
+            'due_date_value' => $invoice->due_date,
             'invoice_date_sort' => $invoice->invoice_date?->timestamp ?? $invoice->id,
         ];
+    }
+
+    private function filterPaymentNotificationsByInvoiceDateRange(
+        Collection $paymentNotifications,
+        ?string $from,
+        ?string $to
+    ): Collection {
+        $fromDate = null;
+        $toDate = null;
+
+        try {
+            if (filled($from)) {
+                $fromDate = Carbon::parse($from)->startOfDay();
+            }
+        } catch (\Throwable) {
+            $fromDate = null;
+        }
+
+        try {
+            if (filled($to)) {
+                $toDate = Carbon::parse($to)->endOfDay();
+            }
+        } catch (\Throwable) {
+            $toDate = null;
+        }
+
+        if ($fromDate === null && $toDate === null) {
+            return $paymentNotifications;
+        }
+
+        return $paymentNotifications->filter(function (array $notification) use ($fromDate, $toDate) {
+            $invoiceDate = $notification['invoice_date'] ?? null;
+
+            if (! $invoiceDate) {
+                return false;
+            }
+
+            $invoiceDay = $invoiceDate->copy()->startOfDay();
+
+            if ($fromDate !== null && $invoiceDay->lt($fromDate)) {
+                return false;
+            }
+
+            if ($toDate !== null && $invoiceDay->gt($toDate->copy()->startOfDay())) {
+                return false;
+            }
+
+            return true;
+        })->values();
     }
 
     private function invoicePayingCompanyName(Invoice $invoice, Collection $agreementsById): ?string

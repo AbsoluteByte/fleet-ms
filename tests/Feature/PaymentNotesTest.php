@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Agreement;
 use App\Models\Company;
 use App\Models\Driver;
+use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Tenant;
 use App\Models\User;
@@ -15,6 +17,8 @@ use Tests\TestCase;
 class PaymentNotesTest extends TestCase
 {
     private Tenant $tenant;
+
+    private Company $company;
 
     private Driver $driver;
 
@@ -34,7 +38,7 @@ class PaymentNotesTest extends TestCase
             'status' => Tenant::STATUS_ACTIVE,
         ]);
 
-        Company::query()->create([
+        $this->company = Company::query()->create([
             'tenant_id' => $this->tenant->id,
             'name' => 'Notes Company',
         ]);
@@ -72,6 +76,7 @@ class PaymentNotesTest extends TestCase
         Schema::dropIfExists('roles');
         Schema::dropIfExists('payment_allocations');
         Schema::dropIfExists('invoices');
+        Schema::dropIfExists('agreements');
         Schema::dropIfExists('payments');
         Schema::dropIfExists('drivers');
         Schema::dropIfExists('companies');
@@ -114,6 +119,60 @@ class PaymentNotesTest extends TestCase
 
         $response->assertRedirect(route('payments.show', $this->payment));
         $this->assertNull($this->payment->fresh()->notes);
+    }
+
+    public function test_driver_payments_page_shows_agreement_link_for_agreement_invoice(): void
+    {
+        $agreement = Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $this->driver->id,
+            'start_date' => now(),
+            'end_date' => now()->addYear()->toDateString(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'weekly',
+            'deposit_amount' => 500,
+            'collection_type' => 'weekly',
+        ]);
+
+        Invoice::query()->create([
+            'driver_id' => $this->driver->id,
+            'source_id' => $agreement->id,
+            'invoice_type' => 'agreement',
+            'invoice_no' => 'INV-AG-001',
+            'invoice_date' => now()->toDateString(),
+            'due_date' => now()->addWeek()->toDateString(),
+            'total_amount' => 200,
+            'paid_amount' => 0,
+            'balance_amount' => 200,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.driver', $this->driver));
+
+        $response->assertOk();
+        $response->assertSee('Agreement ID #'.$agreement->id, false);
+        $response->assertSee(route('agreements.show', $agreement), false);
+    }
+
+    public function test_driver_payments_page_does_not_show_agreement_link_for_manual_invoice(): void
+    {
+        Invoice::query()->create([
+            'driver_id' => $this->driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-MAN-001',
+            'invoice_date' => now()->toDateString(),
+            'due_date' => now()->addWeek()->toDateString(),
+            'total_amount' => 100,
+            'paid_amount' => 0,
+            'balance_amount' => 100,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.driver', $this->driver));
+
+        $response->assertOk();
+        $response->assertDontSee('Agreement ID #', false);
     }
 
     private function setUpDatabase(): void
@@ -182,12 +241,31 @@ class PaymentNotesTest extends TestCase
         Schema::create('invoices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('driver_id')->nullable();
+            $table->unsignedBigInteger('source_id')->nullable();
+            $table->string('invoice_type')->nullable();
             $table->string('invoice_no')->nullable();
             $table->date('invoice_date')->nullable();
             $table->date('due_date')->nullable();
             $table->decimal('total_amount', 12, 2)->default(0);
+            $table->decimal('paid_amount', 12, 2)->default(0);
             $table->decimal('balance_amount', 12, 2)->default(0);
             $table->string('status')->default('pending');
+            $table->timestamps();
+        });
+
+        Schema::create('agreements', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('company_id')->nullable();
+            $table->foreignId('driver_id')->nullable();
+            $table->foreignId('car_id')->nullable();
+            $table->foreignId('status_id')->nullable();
+            $table->dateTime('start_date');
+            $table->date('end_date');
+            $table->decimal('agreed_rent', 10, 2)->default(0);
+            $table->string('rent_interval')->nullable();
+            $table->decimal('deposit_amount', 10, 2)->default(0);
+            $table->string('collection_type')->nullable();
             $table->timestamps();
         });
 

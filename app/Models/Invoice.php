@@ -106,6 +106,17 @@ class Invoice extends Model
         return $name !== '' ? $name : null;
     }
 
+    public function linkedAgreementId(): ?int
+    {
+        if (! in_array($this->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true)) {
+            return null;
+        }
+
+        $agreementId = (int) ($this->source_id ?? 0);
+
+        return $agreementId > 0 ? $agreementId : null;
+    }
+
     public function markAsPaid($amountPaid = null)
     {
         $payment = $amountPaid ?? $this->balance_amount;
