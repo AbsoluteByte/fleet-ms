@@ -246,6 +246,41 @@ class CarFleetRentStatusTest extends TestCase
         $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
     }
 
+    public function test_can_update_agreement_with_same_on_rent_car(): void
+    {
+        $agreement = $this->createAgreement($this->car, $this->activeStatus);
+        $this->service->syncForAgreement($agreement);
+
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->car->fresh()->fleet_status);
+
+        $response = $this->from(route('agreements.edit', $agreement))
+            ->put(route('agreements.update', $agreement), $this->updatePayload([
+                'agreed_rent' => 250,
+            ]));
+
+        $response->assertRedirect(route('agreements.index'));
+        $response->assertSessionHasNoErrors();
+        $this->assertEquals(250, (float) $agreement->fresh()->agreed_rent);
+    }
+
+    public function test_cannot_update_agreement_to_different_on_rent_car(): void
+    {
+        $firstAgreement = $this->createAgreement($this->car, $this->activeStatus);
+        $this->service->syncForAgreement($firstAgreement);
+
+        $secondAgreement = $this->createAgreement($this->secondCar, $this->activeStatus);
+        $this->service->syncForAgreement($secondAgreement);
+
+        $this->assertSame(Car::FLEET_STATUS_ON_RENT, $this->secondCar->fresh()->fleet_status);
+
+        $response = $this->from(route('agreements.edit', $firstAgreement))
+            ->put(route('agreements.update', $firstAgreement), $this->updatePayload([
+                'car_id' => $this->secondCar->id,
+            ]));
+
+        $response->assertSessionHasErrors('car_id');
+    }
+
     private function createAgreement(Car $car, Status $status, array $overrides = []): Agreement
     {
         return Agreement::create(array_merge([
@@ -264,6 +299,22 @@ class CarFleetRentStatusTest extends TestCase
             'createdBy' => 1,
             'updatedBy' => 1,
         ], $overrides));
+    }
+
+    private function updatePayload(array $overrides = []): array
+    {
+        return array_merge([
+            'company_id' => $this->company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $this->car->id,
+            'start_date' => '2026-06-17T09:00',
+            'end_date' => '2027-06-17',
+            'agreed_rent' => 200,
+            'rent_interval' => 'Weekly',
+            'collection_type' => 'weekly',
+            'deposit_amount' => 500,
+            'status_id' => $this->activeStatus->id,
+        ], $overrides);
     }
 
     private function createCompliantCar(string $registration, int $carModelId, int $counselId): Car
