@@ -71,7 +71,8 @@
                                 'prefillCarId',
                                 'prefillTargetStatus',
                                 'prefillStatusPayload',
-                                'editCurrentStatus'
+                                'editCurrentStatus',
+                                'bankAccounts'
                             ))
                         </form>
                     </div>

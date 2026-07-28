@@ -70,7 +70,23 @@
                                                 {{ $lastPaymentIso ? \Carbon\Carbon::parse($lastPaymentIso)->format('d M Y') : '—' }}
                                             </td>
                                             <td>
-                                                <strong class="{{ $driver->total_due > 0 ? 'text-danger' : 'text-muted' }}">
+                                                @php
+                                                    $pendingDfsAmount = (float) ($driver->pending_dfs_amount ?? 0);
+                                                    $hasPendingDfs = $driver->total_due > 0 && $pendingDfsAmount > 0;
+                                                    $totalDueClass = $driver->total_due > 0
+                                                        ? ($hasPendingDfs ? 'text-warning' : 'text-danger')
+                                                        : 'text-muted';
+                                                    $pendingDfsTooltip = $hasPendingDfs
+                                                        ? '£'.number_format($pendingDfsAmount, 2).' pending daily financial sheet approval.'
+                                                        : null;
+                                                @endphp
+                                                <strong class="{{ $totalDueClass }}{{ $hasPendingDfs ? ' js-dfs-pending-amount' : '' }}"
+                                                    @if($pendingDfsTooltip)
+                                                        data-toggle="tooltip"
+                                                        data-placement="top"
+                                                        title="{{ $pendingDfsTooltip }}"
+                                                    @endif
+                                                >
                                                     £{{ number_format($driver->total_due, 2) }}
                                                 </strong>
                                             </td>
@@ -331,6 +347,7 @@
         $(document).ready(function () {
             function initializeActionTooltips() {
                 $('.js-action-tooltip').tooltip({ container: 'body' });
+                $('.js-dfs-pending-amount[data-toggle="tooltip"]').tooltip({ container: 'body' });
             }
 
             const dataTable = $('#dataTable').DataTable({

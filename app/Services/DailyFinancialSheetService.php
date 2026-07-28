@@ -8,6 +8,7 @@ use App\Models\DriverCreditTransaction;
 use App\Models\Expense;
 use App\Models\FinancialSheetAdjustment;
 use App\Models\Invoice;
+use App\Models\OtherPayment;
 use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -47,6 +48,12 @@ class DailyFinancialSheetService
             ->pluck('date')
             ->map(fn ($date) => Carbon::parse($date)->toDateString());
 
+        $otherPaymentDates = OtherPayment::query()
+            ->pending()
+            ->where('tenant_id', $tenantId)
+            ->pluck('payment_date')
+            ->map(fn ($date) => Carbon::parse($date)->toDateString());
+
         $refundDates = DepositRefund::query()
             ->pending()
             ->where('tenant_id', $tenantId)
@@ -61,6 +68,7 @@ class DailyFinancialSheetService
 
         return $paymentDates
             ->merge($expenseDates)
+            ->merge($otherPaymentDates)
             ->merge($refundDates)
             ->merge($creditDates)
             ->unique()
@@ -116,6 +124,13 @@ class DailyFinancialSheetService
             ->get()
             ->map(fn (Expense $expense) => $this->formatExpenseEntry($expense));
 
+        $otherPayments = OtherPayment::query()
+            ->with(['car.carModel', 'createdByUser', 'bankAccount'])
+            ->where('tenant_id', $tenantId)
+            ->whereDate('payment_date', $date)
+            ->get()
+            ->map(fn (OtherPayment $otherPayment) => $this->formatOtherPaymentEntry($otherPayment));
+
         $refundEntries = $refunds
             ->map(fn (DepositRefund $refund) => $this->formatDepositRefundEntry($refund));
 
@@ -135,6 +150,7 @@ class DailyFinancialSheetService
 
         return collect($payments)
             ->merge($expenses)
+            ->merge($otherPayments)
             ->merge($refundEntries)
             ->merge($creditEntries)
             ->merge($adjustmentEntries)
@@ -413,6 +429,7 @@ class DailyFinancialSheetService
         $batchTotals = $this->computeTotals($pendingEntries, pendingOnly: false);
         $paymentIds = $this->idsOfType($pendingEntries, 'payment');
         $expenseIds = $this->idsOfType($pendingEntries, 'expense');
+        $otherPaymentIds = $this->idsOfType($pendingEntries, 'other-payment');
         $refundIds = $this->idsOfType($pendingEntries, 'deposit-refund');
         $creditTransactionIds = $this->idsOfType($pendingEntries, 'driver-credit');
 
@@ -424,6 +441,7 @@ class DailyFinancialSheetService
             $batchTotals,
             $paymentIds,
             $expenseIds,
+            $otherPaymentIds,
             $refundIds,
             $creditTransactionIds
         ) {
@@ -448,6 +466,15 @@ class DailyFinancialSheetService
                     ->whereDate('date', $date)
                     ->whereIn('id', $expenseIds)
                     ->update(['posting_status' => Expense::POSTING_STATUS_POSTED]);
+            }
+
+            if ($otherPaymentIds !== []) {
+                OtherPayment::query()
+                    ->pending()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('payment_date', $date)
+                    ->whereIn('id', $otherPaymentIds)
+                    ->update(['posting_status' => OtherPayment::POSTING_STATUS_POSTED]);
             }
 
             if ($refundIds !== []) {
@@ -586,6 +613,7 @@ class DailyFinancialSheetService
             'payment'
         );
         $expenseIds = $this->idsOfType($pendingEntries, 'expense');
+        $otherPaymentIds = $this->idsOfType($pendingEntries, 'other-payment');
         $refundIds = $this->idsOfType($pendingEntries, 'deposit-refund');
         $creditTransactionIds = $this->idsOfType($pendingEntries, 'driver-credit');
 
@@ -595,6 +623,7 @@ class DailyFinancialSheetService
             $actorId,
             $paymentIds,
             $expenseIds,
+            $otherPaymentIds,
             $refundIds,
             $creditTransactionIds
         ) {
@@ -666,6 +695,21 @@ class DailyFinancialSheetService
 
                 foreach ($expenses as $expense) {
                     $expense->delete();
+                    $rejectedCount++;
+                }
+            }
+
+            if ($otherPaymentIds !== []) {
+                $otherPayments = OtherPayment::query()
+                    ->pending()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('payment_date', $date)
+                    ->whereIn('id', $otherPaymentIds)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($otherPayments as $otherPayment) {
+                    $otherPayment->delete();
                     $rejectedCount++;
                 }
             }
@@ -981,6 +1025,37 @@ class DailyFinancialSheetService
         }
 
         return $invoice->source_id ? (int) $invoice->source_id : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatOtherPaymentEntry(OtherPayment $otherPayment): array
+    {
+        $description = trim((string) $otherPayment->title);
+        if ($otherPayment->notes) {
+            $description = trim($description.' — '.$otherPayment->notes);
+        }
+
+        $isVehiclePayment = $otherPayment->other_payment_type === OtherPayment::TYPE_VEHICLE;
+        $category = $isVehiclePayment ? 'Other payment — Vehicle' : 'Other payment — Office';
+        $carRegistration = $isVehiclePayment ? $otherPayment->car?->registration : null;
+
+        return [
+            'id' => 'other-payment-'.$otherPayment->id,
+            'sort_at' => $otherPayment->created_at?->timestamp ?? 0,
+            'direction' => 'in',
+            'employee' => $otherPayment->createdByUser?->name ?? '—',
+            'description' => $description,
+            'category' => $category,
+            'car_registration' => $carRegistration,
+            'payment_method' => $otherPayment->payment_method ?: 'Cash',
+            'bank_account_id' => $otherPayment->bank_account_id,
+            'bank_name' => $otherPayment->bankAccount?->bank_name,
+            'account_number' => $otherPayment->bankAccount?->account_number,
+            'amount' => (float) $otherPayment->amount,
+            'posting_status' => $otherPayment->posting_status,
+        ];
     }
 
     /**

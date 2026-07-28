@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\CarModel;
 use App\Models\CarMot;
@@ -383,7 +384,22 @@ class CarController extends Controller
                 ->get()
                 ->keyBy('id');
 
-        return view($this->dir.'show', compact('car', 'statusHistoryDrivers'));
+        $statusHistoryBankAccountIds = $car->statusHistories
+            ->pluck('status_data')
+            ->filter(fn ($data) => is_array($data) && ! empty($data['bank_account_id']))
+            ->map(fn (array $data) => (int) $data['bank_account_id'])
+            ->unique()
+            ->values();
+
+        $statusHistoryBankAccounts = $statusHistoryBankAccountIds->isEmpty()
+            ? collect()
+            : BankAccount::query()
+                ->where('tenant_id', $tenant->id)
+                ->whereIn('id', $statusHistoryBankAccountIds)
+                ->get()
+                ->keyBy('id');
+
+        return view($this->dir.'show', compact('car', 'statusHistoryDrivers', 'statusHistoryBankAccounts'));
     }
 
     // ✅ Updated Edit

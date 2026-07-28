@@ -245,6 +245,9 @@ class Driver extends Model
             ->withSum(['payments as total_paid' => function ($paymentQuery) {
                 $paymentQuery->posted();
             }], 'amount')
+            ->withSum(['payments as pending_dfs_amount' => function ($paymentQuery) {
+                $paymentQuery->pending();
+            }], 'amount')
             ->addSelect([
                 'total_allocated' => PaymentAllocation::query()
                     ->selectRaw('coalesce(sum(payment_allocations.allocated_amount), 0)')

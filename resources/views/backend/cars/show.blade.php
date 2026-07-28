@@ -323,6 +323,7 @@
                                             'entry' => $entry,
                                             'car' => $car,
                                             'statusHistoryDrivers' => $statusHistoryDrivers ?? collect(),
+                                            'statusHistoryBankAccounts' => $statusHistoryBankAccounts ?? collect(),
                                         ])
                                     @endforeach
                                 </div>

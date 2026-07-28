@@ -216,6 +216,42 @@ class PaymentsIndexTest extends TestCase
         $response->assertSee('£200.00');
     }
 
+    public function test_payments_index_shows_warning_total_due_when_pending_dfs_payment_exists(): void
+    {
+        $driver = $this->createDriver('Pending', 'Dfs', 'pending-dfs@example.com');
+
+        Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-PENDING-1',
+            'invoice_date' => '2026-07-01',
+            'due_date' => '2026-07-08',
+            'total_amount' => 150,
+            'paid_amount' => 0,
+            'balance_amount' => 150,
+            'status' => 'pending',
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-05',
+            'amount' => 75,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'auto_allocate' => false,
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertSee('text-warning', false);
+        $response->assertSee('js-dfs-pending-amount', false);
+        $response->assertSee('£75.00 pending daily financial sheet approval.', false);
+        $response->assertSee('£150.00', false);
+        $response->assertDontSee('text-danger', false);
+    }
+
     private function setUpHttpTestExtras(): void
     {
         Schema::table('tenants', function (Blueprint $table) {

@@ -173,6 +173,9 @@ Route::prefix('admin')->middleware('auth')->group(function () {
         ->name('payments.follow-up.due');
     Route::patch('payments/{payment}/notes', [App\Http\Controllers\Backend\PaymentController::class, 'updateNotes'])->name('payments.notes.update');
     Route::resource('payments', App\Http\Controllers\Backend\PaymentController::class);
+    Route::get('other-payments', [App\Http\Controllers\Backend\OtherPaymentController::class, 'index'])->name('other-payments.index');
+    Route::get('other-payments/create', [App\Http\Controllers\Backend\OtherPaymentController::class, 'create'])->name('other-payments.create');
+    Route::post('other-payments', [App\Http\Controllers\Backend\OtherPaymentController::class, 'store'])->name('other-payments.store');
     Route::resource('payment-settings', App\Http\Controllers\Backend\PaymentSettingController::class)
         ->parameters(['payment-settings' => 'paymentSetting']);
     Route::resource('users', App\Http\Controllers\Backend\UserController::class);
