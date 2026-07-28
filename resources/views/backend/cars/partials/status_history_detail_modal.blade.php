@@ -103,6 +103,15 @@
                                         @else
                                             Driver #{{ $value }}
                                         @endif
+                                    @elseif($key === 'bank_account_id' && $value)
+                                        @php
+                                            $historyBankAccount = ($statusHistoryBankAccounts ?? collect())->get((int) $value);
+                                        @endphp
+                                        @if($historyBankAccount)
+                                            {{ $historyBankAccount->bank_name }} ({{ $historyBankAccount->account_number }})
+                                        @else
+                                            Bank account #{{ $value }}
+                                        @endif
                                     @else
                                         {{ $value }}
                                     @endif

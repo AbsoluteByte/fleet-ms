@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Driver;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Tenant;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Tests\Concerns\SetupAgreementChangeCarDatabase;
@@ -56,6 +58,7 @@ class PaymentNotificationsTest extends TestCase
 
         $this->actingAs($this->user);
         $this->user->switchTenant($this->tenant->id);
+        $this->user->assignRole('admin');
     }
 
     protected function tearDown(): void
@@ -63,6 +66,8 @@ class PaymentNotificationsTest extends TestCase
         Carbon::setTestNow();
 
         Schema::dropIfExists('tenant_user');
+        Schema::dropIfExists('model_has_roles');
+        Schema::dropIfExists('roles');
         Schema::dropIfExists('car_services');
         $this->tearDownAgreementChangeCarDatabase();
 
@@ -163,6 +168,80 @@ class PaymentNotificationsTest extends TestCase
         $this->assertContains($invoice->id, $invoiceIds);
     }
 
+    public function test_ajax_row_includes_driver_follow_up_fields(): void
+    {
+        $this->driver->update([
+            'payment_follow_up_notes' => 'Call driver about overdue rent',
+            'payment_remind_at' => '2026-07-21 15:00:00',
+            'payment_reminder_dismissed_at' => null,
+        ]);
+
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 50,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
+
+        $this->assertNotNull($row);
+        $this->assertTrue($row['follow_up_has_note']);
+        $this->assertTrue($row['follow_up_has_reminder']);
+        $this->assertSame('Call driver about overdue rent', $row['follow_up_notes']);
+        $this->assertNotEmpty($row['follow_up_remind_at']);
+        $this->assertSame(route('payments.follow-up.update', $this->driver), $row['follow_up_update_url']);
+    }
+
+    public function test_notifications_page_includes_follow_up_modal(): void
+    {
+        $response = $this->get(route('payments.notifications'));
+
+        $response->assertOk();
+        $response->assertSee('id="driverFollowUpModal"', false);
+        $response->assertSee('js-driver-follow-up', false);
+    }
+
+    public function test_overdue_notification_uses_warning_amount_when_pending_dfs_payment_exists(): void
+    {
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-19',
+            'amount' => 80,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'auto_allocate' => false,
+            'created_by' => $this->user->id,
+        ]);
+
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 50,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
+
+        $this->assertNotNull($row);
+        $this->assertSame('warning', $row['amount_color']);
+        $this->assertSame('£80.00 pending daily financial sheet approval.', $row['amount_tooltip']);
+        $this->assertSame('danger', $row['color']);
+    }
+
+    public function test_overdue_notification_keeps_danger_amount_without_pending_dfs_payment(): void
+    {
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 50,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
+
+        $this->assertNotNull($row);
+        $this->assertSame('danger', $row['amount_color']);
+        $this->assertNull($row['amount_tooltip']);
+    }
+
     /**
      * @return list<int>
      */
@@ -230,6 +309,9 @@ class PaymentNotificationsTest extends TestCase
             $table->boolean('is_active')->default(true);
             $table->date('driver_license_expiry_date')->nullable();
             $table->date('phd_license_expiry_date')->nullable();
+            $table->text('payment_follow_up_notes')->nullable();
+            $table->dateTime('payment_remind_at')->nullable();
+            $table->dateTime('payment_reminder_dismissed_at')->nullable();
         });
 
         Schema::table('car_insurances', function (Blueprint $table) {
@@ -257,5 +339,26 @@ class PaymentNotificationsTest extends TestCase
             $table->timestamp('joined_at')->nullable();
             $table->timestamps();
         });
+
+        Schema::create('roles', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('guard_name');
+            $table->timestamps();
+        });
+
+        Schema::create('model_has_roles', function (Blueprint $table) {
+            $table->unsignedBigInteger('role_id');
+            $table->string('model_type');
+            $table->unsignedBigInteger('model_id');
+        });
+
+        DB::table('roles')->insert([
+            'id' => 1,
+            'name' => 'admin',
+            'guard_name' => 'web',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }

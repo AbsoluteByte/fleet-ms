@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\CarStatusHistory;
@@ -11,6 +12,7 @@ use App\Models\VehicleSwap;
 use App\Services\CarStatusChangeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class CarStatusController extends Controller
@@ -100,6 +102,8 @@ class CarStatusController extends Controller
             }
         }
 
+        $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+
         return view('backend.car_status.wizard', compact(
             'cars',
             'drivers',
@@ -107,7 +111,8 @@ class CarStatusController extends Controller
             'editCurrentStatus',
             'prefillCarId',
             'prefillTargetStatus',
-            'prefillStatusPayload'
+            'prefillStatusPayload',
+            'bankAccounts'
         ));
     }
 
@@ -216,7 +221,7 @@ class CarStatusController extends Controller
             'written_off' => $this->validateWrittenOffPayload($request, $tenantId),
             'stolen' => $this->validateStolenPayload($request, $tenantId),
             'for_sale' => $this->validateForSalePayload($request),
-            'sold' => $this->validateSoldPayload($request),
+            'sold' => $this->validateSoldPayload($request, $tenantId),
             default => abort(422, 'This status does not support inline field edits.'),
         };
     }
@@ -356,18 +361,41 @@ class CarStatusController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function validateSoldPayload(Request $request): array
+    private function validateSoldPayload(Request $request, int $tenantId): array
     {
         $validated = $request->validate([
             'payload.sell_date' => 'required|date',
             'payload.sell_price' => 'required|numeric|min:0',
             'payload.payment_terms' => ['required', Rule::in(['cash', 'bank', 'auto_total'])],
+            'payload.bank_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => ($request->input('payload.payment_terms') ?? '') === 'bank'),
+                Rule::exists('bank_accounts', 'id')->where(fn ($q) => $q->where('tenant_id', $tenantId)),
+            ],
             'payload.buyer_name' => 'required|string|max:255',
             'payload.buyer_contact' => 'required|string|max:255',
             'payload.buyer_address' => 'required|string',
             'payload.notes' => 'nullable|string',
         ]);
 
-        return $validated['payload'] ?? [];
+        $payload = $validated['payload'] ?? [];
+
+        if (($payload['payment_terms'] ?? '') !== 'bank') {
+            unset($payload['bank_account_id']);
+        }
+
+        return $payload;
+    }
+
+    private function bankAccountsForTenant(int $tenantId)
+    {
+        if (! Schema::hasTable('bank_accounts')) {
+            return collect();
+        }
+
+        return BankAccount::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('bank_name')
+            ->get();
     }
 }

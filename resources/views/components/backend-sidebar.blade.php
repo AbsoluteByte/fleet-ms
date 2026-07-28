@@ -224,7 +224,7 @@
                         <span class="menu-title">Drivers</span>
                     </a>
                 </li>
-                <li class="nav-item {{ Request::is('admin/payments*') ? 'sidebar-group-active open' : '' }}">
+                <li class="nav-item {{ Request::is('admin/payments*') || Request::is('admin/other-payments*') ? 'sidebar-group-active open' : '' }}">
                     <a href="#">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"
                              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -244,6 +244,11 @@
                         <li class="{{ Request::is('admin/payments/create') ? 'active' : '' }}">
                             <a href="{{ route('payments.create') }}">
                                 <span class="menu-title">Add Payment</span>
+                            </a>
+                        </li>
+                        <li class="{{ Request::is('admin/other-payments*') ? 'active' : '' }}">
+                            <a href="{{ route('other-payments.index') }}">
+                                <span class="menu-title">Other Payments</span>
                             </a>
                         </li>
                     </ul>

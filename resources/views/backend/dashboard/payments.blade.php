@@ -235,6 +235,8 @@
         </div>
     </div>
 
+    @include('backend.payments.partials.follow-up-modal')
+
 @endsection
 
 @section('css')
@@ -286,6 +288,15 @@
         let paymentsTable;
         let currentFilter = '';
 
+        function escapeHtmlAttr(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
         $(document).ready(function() {
             initializeDataTable();
             toggleGeneratedDateFilter();
@@ -301,6 +312,8 @@
                     paymentsTable.ajax.reload();
                 }
             });
+
+            initPaymentNotificationsFollowUp();
         });
 
         function toggleGeneratedDateFilter() {
@@ -309,6 +322,10 @@
             } else {
                 $('#paymentsGeneratedDateFilter').hide();
             }
+        }
+
+        function initializeDfsPendingTooltips() {
+            $('.js-dfs-pending-amount[data-toggle="tooltip"]').tooltip({ container: 'body' });
         }
 
         function initializeDataTable() {
@@ -355,7 +372,13 @@
                     {
                         data: 'amount',
                         render: function(data, type, row) {
-                            return `<span class="font-weight-bold text-${row.color}">${data}</span>`;
+                            const color = row.amount_color || row.color;
+                            const tooltipAttr = row.amount_tooltip
+                                ? ` data-toggle="tooltip" data-placement="top" title="${escapeHtmlAttr(row.amount_tooltip)}"`
+                                : '';
+                            const pendingClass = row.amount_tooltip ? ' js-dfs-pending-amount' : '';
+
+                            return `<span class="font-weight-bold text-${color}${pendingClass}"${tooltipAttr}>${data}</span>`;
                         }
                     },
                     {
@@ -378,6 +401,22 @@
                         data: null,
                         orderable: false,
                         render: function(data, type, row) {
+                            const hasFollowUp = row.follow_up_has_note || row.follow_up_has_reminder;
+                            const followUpBtnClass = hasFollowUp ? 'btn-warning' : 'btn-outline-secondary';
+                            const followUpBtn = row.driver_id && row.follow_up_update_url
+                                ? `<button type="button"
+                                    class="btn btn-sm ${followUpBtnClass} js-driver-follow-up"
+                                    title="Notes/Reminder"
+                                    aria-label="Notes/Reminder"
+                                    data-driver-id="${row.driver_id}"
+                                    data-driver-name="${escapeHtmlAttr(row.driver_name || '')}"
+                                    data-notes="${escapeHtmlAttr(row.follow_up_notes || '')}"
+                                    data-remind-at="${escapeHtmlAttr(row.follow_up_remind_at || '')}"
+                                    data-update-url="${escapeHtmlAttr(row.follow_up_update_url)}">
+                                    <i class="fa fa-sticky-note"></i>
+                                </button>`
+                                : '';
+
                             return `
                         <div class="btn-group">
                             <a href="${row.action_url}" class="btn btn-sm btn-outline-primary">
@@ -386,6 +425,7 @@
                             <a href="{{ route('payments.create') }}?driver_id=${row.driver_id}" class="btn btn-sm btn-${row.color}">
                                 <i class="feather icon-credit-card"></i> Pay
                             </a>
+                            ${followUpBtn}
                         </div>
                     `;
                         }
@@ -399,6 +439,12 @@
                     lengthMenu: "Show _MENU_ payments",
                     info: "Showing _START_ to _END_ of _TOTAL_ payments"
                 }
+            });
+
+            initializeDfsPendingTooltips();
+            paymentsTable.on('draw.dt', function () {
+                $('.tooltip').remove();
+                initializeDfsPendingTooltips();
             });
         }
 
@@ -577,5 +623,135 @@
 
         $('#paymentsExportCsv').on('click', exportPaymentsCsv);
         $('#paymentsExportPdf').on('click', exportPaymentsPdf);
+
+        function initPaymentNotificationsFollowUp() {
+            const $followUpModal = $('#driverFollowUpModal');
+            const $followUpForm = $('#driverFollowUpForm');
+            const $followUpNotes = $('#driverFollowUpNotes');
+            const $followUpSetReminder = $('#driverFollowUpSetReminder');
+            const $followUpRemindAtGroup = $('#driverFollowUpRemindAtGroup');
+            const $followUpRemindAt = $('#driverFollowUpRemindAt');
+            const $followUpError = $('#driverFollowUpError');
+            const $followUpSubtitle = $('#driverFollowUpModalSubtitle');
+            let activeFollowUpButton = null;
+
+            if (!$followUpModal.length) {
+                return;
+            }
+
+            function pad2(n) {
+                return String(n).padStart(2, '0');
+            }
+
+            function toDatetimeLocalValue(value) {
+                if (!value) {
+                    return '';
+                }
+                const date = new Date(value);
+                if (isNaN(date.getTime())) {
+                    return String(value).slice(0, 16);
+                }
+                return date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate()) +
+                    'T' + pad2(date.getHours()) + ':' + pad2(date.getMinutes());
+            }
+
+            function datetimeLocalToIso(value) {
+                if (!value) {
+                    return null;
+                }
+                const date = new Date(value);
+                if (isNaN(date.getTime())) {
+                    return value;
+                }
+                return date.toISOString();
+            }
+
+            function toggleFollowUpRemindAt() {
+                if ($followUpSetReminder.is(':checked')) {
+                    $followUpRemindAtGroup.show();
+                } else {
+                    $followUpRemindAtGroup.hide();
+                    $followUpRemindAt.val('');
+                }
+            }
+
+            function updateFollowUpButtonsForDriver(driver) {
+                if (!driver || !driver.id) {
+                    return;
+                }
+
+                const selector = '.js-driver-follow-up[data-driver-id="' + driver.id + '"]';
+                $(selector).each(function () {
+                    const $btn = $(this);
+                    $btn.attr('data-notes', driver.notes || '');
+                    $btn.attr('data-remind-at', driver.remind_at || '');
+                    $btn
+                        .removeClass('btn-warning btn-outline-secondary')
+                        .addClass(driver.has_note || driver.has_reminder ? 'btn-warning' : 'btn-outline-secondary');
+                });
+            }
+
+            $followUpSetReminder.on('change', toggleFollowUpRemindAt);
+
+            $(document).on('click', '.js-driver-follow-up', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                activeFollowUpButton = $(this);
+                $followUpError.hide().text('');
+                $followUpForm.attr('action', activeFollowUpButton.attr('data-update-url') || '');
+                $followUpSubtitle.text(activeFollowUpButton.attr('data-driver-name') || '');
+                $followUpNotes.val(activeFollowUpButton.attr('data-notes') || '');
+                const remindAt = activeFollowUpButton.attr('data-remind-at') || '';
+                $followUpSetReminder.prop('checked', !!remindAt);
+                $followUpRemindAt.val(toDatetimeLocalValue(remindAt));
+                toggleFollowUpRemindAt();
+                $followUpModal.modal('show');
+            });
+
+            $followUpForm.on('submit', function (e) {
+                e.preventDefault();
+                $followUpError.hide().text('');
+
+                const payload = {
+                    notes: $followUpNotes.val(),
+                    set_reminder: $followUpSetReminder.is(':checked') ? 1 : 0,
+                    remind_at: $followUpSetReminder.is(':checked') ? datetimeLocalToIso($followUpRemindAt.val()) : null,
+                    _method: 'PATCH',
+                    _token: '{{ csrf_token() }}'
+                };
+
+                $('#driverFollowUpSaveBtn').prop('disabled', true);
+
+                $.ajax({
+                    url: $followUpForm.attr('action'),
+                    method: 'POST',
+                    data: payload,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                }).done(function (response) {
+                    const driver = response.driver || {};
+                    updateFollowUpButtonsForDriver(driver);
+                    if (window.clearPaymentFollowUpSnooze && driver.id) {
+                        window.clearPaymentFollowUpSnooze(driver.id);
+                    }
+                    $followUpModal.modal('hide');
+                    if (window.toastr) {
+                        toastr.success(response.message || 'Saved');
+                    }
+                }).fail(function (xhr) {
+                    let message = 'Unable to save note / reminder.';
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        message = Object.values(xhr.responseJSON.errors).flat().join(' ');
+                    } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                        message = xhr.responseJSON.message;
+                    }
+                    $followUpError.text(message).show();
+                }).always(function () {
+                    $('#driverFollowUpSaveBtn').prop('disabled', false);
+                });
+            });
+        }
     </script>
 @endsection

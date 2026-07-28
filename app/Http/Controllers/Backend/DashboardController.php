@@ -15,6 +15,7 @@ use App\Models\Claim;
 use App\Models\Driver;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -953,9 +954,44 @@ class DashboardController extends Controller
                 ['invoice_id', 'desc'],
             ])->values();
 
+            $driverIds = $paymentNotifications
+                ->pluck('driver_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $driversById = $driverIds === []
+                ? collect()
+                : Driver::query()
+                    ->where('tenant_id', Auth::user()->currentTenant()?->id)
+                    ->whereIn('id', $driverIds)
+                    ->get()
+                    ->keyBy('id');
+
+            $pendingDfsByDriver = $driverIds === []
+                ? collect()
+                : Payment::query()
+                    ->pending()
+                    ->whereIn('driver_id', $driverIds)
+                    ->selectRaw('driver_id, coalesce(sum(amount), 0) as pending_dfs_amount')
+                    ->groupBy('driver_id')
+                    ->pluck('pending_dfs_amount', 'driver_id');
+
             // ✅ Transform for DataTable
-            $transformed = $paymentNotifications->map(function ($notification) {
+            $transformed = $paymentNotifications->map(function ($notification) use ($driversById, $pendingDfsByDriver) {
                 $amountRaw = isset($notification['amount']) ? str_replace(['£', ','], '', $notification['amount']) : 0;
+                $driverId = $notification['driver_id'] ?? null;
+                $driver = $driverId ? $driversById->get($driverId) : null;
+                $pendingDfsAmount = $driverId ? (float) ($pendingDfsByDriver[$driverId] ?? 0) : 0.0;
+                $originalColor = $notification['color'];
+                $amountColor = $originalColor;
+                $amountTooltip = null;
+
+                if ($originalColor === 'danger' && $pendingDfsAmount > 0) {
+                    $amountColor = 'warning';
+                    $amountTooltip = '£'.number_format($pendingDfsAmount, 2).' pending daily financial sheet approval.';
+                }
 
                 return [
                     'priority' => $notification['priority'],
@@ -972,9 +1008,16 @@ class DashboardController extends Controller
                         : '—',
                     'time_ago' => $notification['time_ago'],
                     'action_url' => $notification['action_url'] ?? '#',
-                    'driver_id' => $notification['driver_id'] ?? null,
+                    'driver_id' => $driverId,
                     'invoice_id' => $notification['invoice_id'] ?? null,
                     'color' => $notification['color'],
+                    'amount_color' => $amountColor,
+                    'amount_tooltip' => $amountTooltip,
+                    'follow_up_notes' => $driver?->payment_follow_up_notes,
+                    'follow_up_remind_at' => $driver?->payment_remind_at?->toIso8601String(),
+                    'follow_up_has_note' => $driver?->hasPaymentFollowUpNote() ?? false,
+                    'follow_up_has_reminder' => $driver?->hasPaymentReminder() ?? false,
+                    'follow_up_update_url' => $driver ? route('payments.follow-up.update', $driver) : null,
                 ];
             });
 

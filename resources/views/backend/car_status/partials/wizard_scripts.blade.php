@@ -118,6 +118,26 @@
             $preview.html('<strong>Selected:</strong> ' + names.join(', '));
         });
 
+        function toggleSoldBankAccountField() {
+            const $soldPanel = $('.fleet-status-panel[data-status="sold"]');
+            const $bankField = $soldPanel.find('[data-bank-account-field]');
+            const $bankSelect = $soldPanel.find('[data-bank-account-select]');
+            const paymentTerms = String($('#fleet_sold_payment_terms').val() || '');
+            const needsBank = paymentTerms === 'bank';
+            const hasBankAccounts = $bankSelect.length && $bankSelect.find('option').length > 1;
+
+            $bankField.toggleClass('d-none', !needsBank);
+
+            if ($bankSelect.length) {
+                $bankSelect.prop('required', needsBank && hasBankAccounts);
+                if (!needsBank) {
+                    $bankSelect.val('');
+                }
+            }
+        }
+
+        $('#fleet_sold_payment_terms').on('change', toggleSoldBankAccountField);
+
         function showPanel(status) {
             $('.fleet-status-panel').each(function () {
                 const match = $(this).data('status') === status;
@@ -249,6 +269,7 @@
             refreshBalance('fleet_rsv');
             toggleDamagedFault();
             toggleWrittenFault();
+            toggleSoldBankAccountField();
             updateStep2Summary();
             updateAvailableForRentWarning();
         });
@@ -287,6 +308,7 @@
             refreshBalance('fleet_rsv');
             toggleDamagedFault();
             toggleWrittenFault();
+            toggleSoldBankAccountField();
             updateStep2Summary();
             updateAvailableForRentWarning();
         }

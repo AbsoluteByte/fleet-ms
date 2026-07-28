@@ -563,6 +563,14 @@
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
+            @include('backend.payments.partials.bank-account-select', [
+                'bankAccounts' => $bankAccounts ?? collect(),
+                'selected' => $payloadOld('bank_account_id'),
+                'name' => 'payload[bank_account_id]',
+                'id' => 'fleet_sold_bank_account_id',
+                'errorKey' => 'payload.bank_account_id',
+                'wrapperClass' => 'bank-account-field col-md-6 form-group' . ($payloadOld('payment_terms') === 'bank' ? '' : ' d-none'),
+            ])
             <div class="col-md-6 form-group">
                 <label for="fleet_sold_buyer_name">Buyer name <span class="text-danger">*</span></label>
                 <input type="text" name="payload[buyer_name]" id="fleet_sold_buyer_name"

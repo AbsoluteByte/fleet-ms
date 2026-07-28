@@ -463,6 +463,11 @@ class CarStatusChangeService
             'payload.sell_date' => 'required|date',
             'payload.sell_price' => 'required|numeric|min:0',
             'payload.payment_terms' => ['required', Rule::in(['cash', 'bank', 'auto_total'])],
+            'payload.bank_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => ($request->input('payload.payment_terms') ?? '') === 'bank'),
+                Rule::exists('bank_accounts', 'id')->where(fn ($q) => $q->where('tenant_id', $car->tenant_id)),
+            ],
             'payload.buyer_name' => 'required|string|max:255',
             'payload.buyer_contact' => 'required|string|max:255',
             'payload.buyer_address' => 'required|string',
@@ -472,6 +477,10 @@ class CarStatusChangeService
         $this->cancelActiveReservationsAndSwapsForCar($car);
 
         $payload = $validated['payload'];
+
+        if (($payload['payment_terms'] ?? '') !== 'bank') {
+            unset($payload['bank_account_id']);
+        }
 
         $car->update([
             'fleet_status' => 'sold',
