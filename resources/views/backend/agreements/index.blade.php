@@ -16,6 +16,17 @@
                     <div class="card-content">
                         <div class="card-body card-dashboard">
                             @include('alerts')
+                            <div class="agreements-table-toolbar" id="agreementsTableToolbar">
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" id="agreementsExportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        <i class="fa fa-download mr-50"></i> Export
+                                    </button>
+                                    <div class="dropdown-menu dropdown-menu-right" aria-labelledby="agreementsExportDropdown">
+                                        <button type="button" class="dropdown-item" id="agreementsExportCsv">Export CSV</button>
+                                        <button type="button" class="dropdown-item" id="agreementsExportPdf">Export PDF</button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="table-responsive">
                                 <table id="dataTable" class="table datatable table-bordered table-striped">
                                     <thead>
@@ -333,6 +344,35 @@
             gap: .5rem;
         }
 
+        .agreements-table-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .agreements-table-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+
+        .card-dashboard .dataTables_wrapper .dataTables_filter {
+            margin-top: 0;
+            float: none;
+        }
+
+        #dataTable_filter label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0;
+        }
+
+        #dataTable_filter input {
+            margin-left: .5rem;
+        }
+
         .agreements-filter-button {
             border: 1px solid #d8d6de;
             background: #fff;
@@ -411,6 +451,8 @@
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/pdfmake.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
     <script>
         $(document).ready(function () {
             const filters = {
@@ -439,6 +481,15 @@
                 initializeActionTooltips();
             });
 
+            const $filter = $('#dataTable_filter');
+            const $toolbar = $('#agreementsTableToolbar');
+            if ($filter.length && $toolbar.length && !$filter.parent().hasClass('agreements-table-controls')) {
+                const $controls = $('<div class="agreements-table-controls"></div>');
+                $filter.before($controls);
+                $controls.append($toolbar);
+                $controls.append($filter);
+            }
+
             $('#dataTable_filter').append(
                 '<button type="button" class="agreements-filter-button" id="agreementsFilterOpen" title="Filter" aria-label="Filter"><i class="fa fa-filter"></i></button>'
             );
@@ -450,6 +501,249 @@
                 const date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
                 return isNaN(date.getTime()) ? null : date;
             }
+
+            function formatDisplayDate(iso) {
+                if (!iso) return '';
+                const date = parseDateYmd(iso);
+                if (!date) return iso;
+                return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+
+            function formatDateRangeLine(label, range) {
+                if (!isRangeActive(range)) {
+                    return '';
+                }
+
+                const fromLabel = range.from ? formatDisplayDate(range.from) : 'any';
+                const toLabel = range.to ? formatDisplayDate(range.to) : 'any';
+
+                return label + ': ' + fromLabel + ' to ' + toLabel;
+            }
+
+            function selectedOptionText(selectId) {
+                const select = document.getElementById(selectId);
+                if (!select || !select.value) {
+                    return '';
+                }
+
+                return select.options[select.selectedIndex]?.text || select.value;
+            }
+
+            const agreementsExportHeaders = [
+                'Company', 'Driver', 'Car', 'Start Date', 'End Date',
+                'Notice Date', 'Closing Date', 'Rent', 'E-Sign', 'Status'
+            ];
+            const agreementsExportFilenamePrefix = 'agreement-list';
+            const agreementsExportTitle = 'Agreement List';
+
+            function agreementsExportFilename(extension) {
+                return agreementsExportFilenamePrefix + '-' + new Date().toISOString().slice(0, 10) + extension;
+            }
+
+            function getAgreementsExportHeaders() {
+                return agreementsExportHeaders.slice();
+            }
+
+            function buildAgreementsExportMeta() {
+                syncFiltersFromForm();
+
+                const lines = [];
+                const searchTerm = (dataTable.search() || '').trim();
+
+                if (searchTerm) {
+                    lines.push('Search: ' + searchTerm);
+                }
+
+                if (filters.status) {
+                    lines.push('Status: ' + selectedOptionText('agreementsFilterStatus'));
+                }
+
+                const rentedLine = formatDateRangeLine('Rented between', filters.rented);
+                if (rentedLine) {
+                    lines.push(rentedLine);
+                }
+
+                if (isRangeActive(filters.closed)) {
+                    const fromLabel = filters.closed.from ? formatDisplayDate(filters.closed.from) : 'any';
+                    const toLabel = filters.closed.to
+                        ? formatDisplayDate(filters.closed.to)
+                        : (filters.closed.from ? formatDisplayDate(closedRangeTo(filters.closed)) : 'any');
+                    lines.push('Closed between: ' + fromLabel + ' to ' + toLabel);
+                }
+
+                if (filters.refundStatus) {
+                    lines.push('Refund status: ' + selectedOptionText('agreementsFilterRefundStatus'));
+                }
+
+                if (filters.hasNotice) {
+                    lines.push('Has termination notice: Yes');
+                }
+
+                const noticeLine = formatDateRangeLine('Notice date between', filters.notice);
+                if (noticeLine) {
+                    lines.push(noticeLine);
+                }
+
+                const dueLine = formatDateRangeLine('Due / ending between', filters.due);
+                if (dueLine) {
+                    lines.push(dueLine);
+                }
+
+                if (lines.length === 0) {
+                    lines.push('Filters: None');
+                }
+
+                return {
+                    title: agreementsExportTitle,
+                    lines: lines,
+                };
+            }
+
+            function csvEscape(value) {
+                const str = String(value ?? '').replace(/"/g, '""').trim();
+                return /[",\n\r]/.test(str) ? '"' + str + '"' : str;
+            }
+
+            function downloadCsv(filename, lines) {
+                const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            function collectAgreementsExportRows() {
+                const rows = [];
+                dataTable.rows({ search: 'applied', order: 'applied' }).every(function () {
+                    const node = this.node();
+                    if (!node) {
+                        return;
+                    }
+
+                    const cells = node.querySelectorAll('td');
+                    if (cells.length < 10) {
+                        return;
+                    }
+
+                    const row = [];
+                    for (let i = 0; i < 10; i++) {
+                        row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
+                    }
+
+                    rows.push(row);
+                });
+
+                return rows;
+            }
+
+            function exportAgreementsCsv() {
+                const exportMeta = buildAgreementsExportMeta();
+                const bodyRows = collectAgreementsExportRows();
+                const exportHeaders = getAgreementsExportHeaders();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                const lines = [csvEscape(exportMeta.title)];
+                exportMeta.lines.forEach(function (line) {
+                    lines.push(csvEscape(line));
+                });
+                lines.push('');
+                lines.push(exportHeaders.map(csvEscape).join(','));
+                bodyRows.forEach(function (row) {
+                    lines.push(row.map(csvEscape).join(','));
+                });
+
+                downloadCsv(agreementsExportFilename('.csv'), lines);
+            }
+
+            function exportAgreementsPdf() {
+                const exportMeta = buildAgreementsExportMeta();
+                const bodyRows = collectAgreementsExportRows();
+                const exportHeaders = getAgreementsExportHeaders();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                if (typeof pdfMake === 'undefined') {
+                    alert('PDF export is not available. Please refresh the page and try again.');
+                    return;
+                }
+
+                const tableBody = [
+                    exportHeaders.map(function (header) {
+                        return { text: header, style: 'tableHeader' };
+                    })
+                ];
+
+                bodyRows.forEach(function (row) {
+                    tableBody.push(row.map(function (cell) {
+                        return { text: cell, style: 'tableCell' };
+                    }));
+                });
+
+                const doc = {
+                    pageSize: 'A4',
+                    pageOrientation: 'landscape',
+                    pageMargins: [24, 48, 24, 32],
+                    content: [
+                        {
+                            text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                            style: 'title',
+                            margin: [0, 0, 0, 4]
+                        },
+                        ...exportMeta.lines.map(function (line) {
+                            return {
+                                text: line,
+                                style: 'subtitle',
+                                margin: [0, 0, 0, 2]
+                            };
+                        }),
+                        {
+                            text: '',
+                            margin: [0, 0, 0, 8]
+                        },
+                        {
+                            table: {
+                                headerRows: 1,
+                                widths: exportHeaders.map(function () { return '*'; }),
+                                body: tableBody
+                            },
+                            layout: 'lightHorizontalLines'
+                        }
+                    ],
+                    styles: {
+                        title: { fontSize: 14, bold: true },
+                        subtitle: { fontSize: 9, color: '#5e5873' },
+                        tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
+                        tableCell: { fontSize: 7 }
+                    },
+                    defaultStyle: { fontSize: 8 },
+                    footer: function (currentPage, pageCount) {
+                        return {
+                            text: 'Page ' + currentPage + ' of ' + pageCount,
+                            alignment: 'center',
+                            fontSize: 8,
+                            color: '#5e5873',
+                            margin: [0, 8, 0, 0]
+                        };
+                    }
+                };
+
+                pdfMake.createPdf(doc).download(agreementsExportFilename('.pdf'));
+            }
+
+            $('#agreementsExportCsv').on('click', exportAgreementsCsv);
+            $('#agreementsExportPdf').on('click', exportAgreementsPdf);
 
             function todayYmd() {
                 const d = new Date();

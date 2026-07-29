@@ -118,6 +118,23 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         $response->assertSee('Active or Swap agreements only.', false);
     }
 
+    public function test_agreements_index_includes_export_controls(): void
+    {
+        $this->createAgreement([
+            'status_id' => $this->activeStatus->id,
+        ]);
+
+        $response = $this->get(route('agreements.index'));
+
+        $response->assertOk();
+        $response->assertSee('id="agreementsExportDropdown"', false);
+        $response->assertSee('id="agreementsExportCsv"', false);
+        $response->assertSee('id="agreementsExportPdf"', false);
+        $response->assertSee('pdfmake.min.js', false);
+        $response->assertSee('exportAgreementsCsv', false);
+        $response->assertSee('exportAgreementsPdf', false);
+    }
+
     public function test_agreements_index_includes_notice_filter_data_for_swap_agreement(): void
     {
         $this->createAgreement([

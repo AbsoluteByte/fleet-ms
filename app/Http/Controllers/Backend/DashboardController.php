@@ -984,11 +984,10 @@ class DashboardController extends Controller
                 $driverId = $notification['driver_id'] ?? null;
                 $driver = $driverId ? $driversById->get($driverId) : null;
                 $pendingDfsAmount = $driverId ? (float) ($pendingDfsByDriver[$driverId] ?? 0) : 0.0;
-                $originalColor = $notification['color'];
-                $amountColor = $originalColor;
+                $amountColor = 'danger';
                 $amountTooltip = null;
 
-                if ($originalColor === 'danger' && $pendingDfsAmount > 0) {
+                if ($pendingDfsAmount > 0) {
                     $amountColor = 'warning';
                     $amountTooltip = '£'.number_format($pendingDfsAmount, 2).' pending daily financial sheet approval.';
                 }
@@ -1010,7 +1009,7 @@ class DashboardController extends Controller
                     'action_url' => $notification['action_url'] ?? '#',
                     'driver_id' => $driverId,
                     'invoice_id' => $notification['invoice_id'] ?? null,
-                    'color' => $notification['color'],
+                    'color' => $amountColor,
                     'amount_color' => $amountColor,
                     'amount_tooltip' => $amountTooltip,
                     'follow_up_notes' => $driver?->payment_follow_up_notes,
@@ -1113,7 +1112,10 @@ class DashboardController extends Controller
             return collect();
         }
 
-        return Agreement::with('car')->whereIn('id', $sourceIds)->get()->keyBy('id');
+        return Agreement::with([
+            'car',
+            'replacementVehicleAgreements' => fn ($query) => $query->currentlyActiveReplacement()->with('car'),
+        ])->whereIn('id', $sourceIds)->get()->keyBy('id');
     }
 
     private function invoiceVehicleRegistration(Invoice $invoice, Collection $agreementsById): string
@@ -1122,7 +1124,11 @@ class DashboardController extends Controller
             return 'N/A';
         }
 
-        return $agreementsById->get($invoice->source_id)?->car?->registration ?? 'N/A';
+        $agreement = $agreementsById->get($invoice->source_id);
+
+        return $agreement
+            ? $agreement->vehicleRegistrationsLabel('N/A')
+            : 'N/A';
     }
 
     /**

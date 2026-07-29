@@ -27,6 +27,8 @@ class PaymentsIndexTest extends TestCase
 
     private Status $activeAgreementStatus;
 
+    private Status $replacementAgreementStatus;
+
     private User $user;
 
     protected function setUp(): void
@@ -46,6 +48,10 @@ class PaymentsIndexTest extends TestCase
         ]);
         $this->activeAgreementStatus = Status::query()->create([
             'name' => 'Active',
+            'type' => 'agreement',
+        ]);
+        $this->replacementAgreementStatus = Status::query()->create([
+            'name' => 'Replacement Vehicle',
             'type' => 'agreement',
         ]);
 
@@ -108,6 +114,48 @@ class PaymentsIndexTest extends TestCase
         $response->assertOk();
         $response->assertSee('REGAAA, REGBBB');
         $response->assertDontSee('multi@example.com');
+    }
+
+    public function test_payments_index_shows_replacement_agreement_car_registration_with_active_agreement(): void
+    {
+        $driver = $this->createDriver('Replace', 'Driver', 'replace@example.com');
+        $activeCar = $this->createCar('REG111');
+        $replacementCar = $this->createCar('REPREPL');
+        $parentAgreement = $this->createAgreement($driver, $activeCar);
+        $this->createReplacementAgreement($driver, $replacementCar, $parentAgreement);
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertSee('REG111, REPREPL');
+    }
+
+    public function test_payments_index_excludes_ended_replacement_agreement_registration(): void
+    {
+        $driver = $this->createDriver('Ended', 'Replace', 'ended-replace@example.com');
+        $activeCar = $this->createCar('REG222');
+        $replacementCar = $this->createCar('OLDREPL');
+        $parentAgreement = $this->createAgreement($driver, $activeCar);
+        Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $driver->id,
+            'car_id' => $replacementCar->id,
+            'parent_agreement_id' => $parentAgreement->id,
+            'start_date' => now()->subMonths(2),
+            'end_date' => now()->subMonth()->toDateString(),
+            'agreed_rent' => 0,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+            'collection_type' => 'weekly',
+            'status_id' => $this->replacementAgreementStatus->id,
+        ]);
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertSee('REG222');
+        $response->assertDontSee('OLDREPL');
     }
 
     public function test_payments_index_shows_dash_when_driver_has_no_active_agreement(): void
@@ -283,6 +331,10 @@ class PaymentsIndexTest extends TestCase
             $table->boolean('is_active')->default(true);
             $table->dateTime('payment_remind_at')->nullable();
         });
+
+        Schema::table('agreements', function (Blueprint $table) {
+            $table->unsignedBigInteger('parent_agreement_id')->nullable();
+        });
     }
 
     private function createDriver(string $firstName, string $lastName, string $email): Driver
@@ -329,6 +381,24 @@ class PaymentsIndexTest extends TestCase
             'deposit_amount' => 300,
             'collection_type' => 'weekly',
             'status_id' => $this->activeAgreementStatus->id,
+        ]);
+    }
+
+    private function createReplacementAgreement(Driver $driver, Car $car, Agreement $parentAgreement): Agreement
+    {
+        return Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $driver->id,
+            'car_id' => $car->id,
+            'parent_agreement_id' => $parentAgreement->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 0,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+            'collection_type' => 'weekly',
+            'status_id' => $this->replacementAgreementStatus->id,
         ]);
     }
 }

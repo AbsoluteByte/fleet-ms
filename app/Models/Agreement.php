@@ -6,6 +6,7 @@ use App\Services\AgreementInvoiceService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 class Agreement extends Model
 {
@@ -265,6 +266,34 @@ class Agreement extends Model
         return null;
     }
 
+    public function vehicleRegistrationsIncludingReplacements(): Collection
+    {
+        $registrations = collect();
+
+        if ($registration = $this->car?->registration) {
+            $registrations->push($registration);
+        }
+
+        $replacements = $this->relationLoaded('replacementVehicleAgreements')
+            ? $this->replacementVehicleAgreements
+            : $this->replacementVehicleAgreements()->currentlyActiveReplacement()->with('car')->get();
+
+        foreach ($replacements as $replacement) {
+            if ($registration = $replacement->car?->registration) {
+                $registrations->push($registration);
+            }
+        }
+
+        return $registrations->filter()->unique()->values();
+    }
+
+    public function vehicleRegistrationsLabel(string $emptyLabel = '—'): string
+    {
+        $registrations = $this->vehicleRegistrationsIncludingReplacements();
+
+        return $registrations->isNotEmpty() ? $registrations->implode(', ') : $emptyLabel;
+    }
+
     public function documentCompany(): ?Company
     {
         return $this->car?->company ?? $this->company;
@@ -346,6 +375,16 @@ class Agreement extends Model
 
         return $query
             ->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today);
+    }
+
+    public function scopeCurrentlyActiveReplacement($query)
+    {
+        $today = now()->startOfDay();
+
+        return $query
+            ->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Replacement Vehicle'))
             ->whereDate('start_date', '<=', $today)
             ->whereDate('end_date', '>=', $today);
     }
