@@ -344,6 +344,139 @@ class AgreementBillingAnchorTest extends TestCase
         $this->assertNull($removed['discount_started_at']);
     }
 
+    public function test_changing_start_date_removes_unpaid_stale_invoices(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-24 10:00:00'));
+
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-05-20'), // Wednesday
+            'billing_anchor_date' => null,
+            'end_date' => Carbon::parse('2027-05-20'),
+            'agreed_rent' => 210,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+        ]);
+
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-07-24'));
+
+        $wednesdayDates = Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->where('invoice_type', 'agreement')
+            ->orderBy('invoice_date')
+            ->pluck('invoice_date')
+            ->map(fn ($date) => $date->toDateString())
+            ->all();
+
+        $this->assertContains('2026-05-20', $wednesdayDates);
+        $this->assertContains('2026-07-22', $wednesdayDates);
+        $this->assertGreaterThanOrEqual(2, count($wednesdayDates));
+
+        $agreement->update(['start_date' => Carbon::parse('2026-05-22')]); // Friday
+        $agreement->refresh();
+
+        $this->service->reconcileBillingScheduleInvoices($agreement);
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-07-24'));
+
+        $remainingDates = Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->where('invoice_type', 'agreement')
+            ->orderBy('invoice_date')
+            ->pluck('invoice_date')
+            ->map(fn ($date) => $date->toDateString())
+            ->all();
+
+        $this->assertNotContains('2026-05-20', $remainingDates);
+        $this->assertNotContains('2026-07-22', $remainingDates);
+        $this->assertContains('2026-05-22', $remainingDates);
+        $this->assertContains('2026-07-24', $remainingDates);
+        $this->assertSame(
+            Carbon::parse('2026-05-22')->dayOfWeek,
+            Carbon::parse($remainingDates[0])->dayOfWeek
+        );
+    }
+
+    public function test_changing_billing_anchor_removes_stale_unpaid_invoices(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-24 10:00:00'));
+
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-06-19'), // Friday
+            'billing_anchor_date' => null,
+            'end_date' => Carbon::parse('2027-06-19'),
+            'agreed_rent' => 500,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+        ]);
+
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-07-24'));
+
+        $this->assertTrue(Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->whereDate('invoice_date', '2026-06-19')
+            ->exists());
+
+        $agreement->update(['billing_anchor_date' => Carbon::parse('2026-06-22')]); // Monday anchor
+        $agreement->refresh();
+
+        $this->service->reconcileBillingScheduleInvoices($agreement);
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-07-24'));
+
+        $remainingDates = Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->where('invoice_type', 'agreement')
+            ->orderBy('invoice_date')
+            ->pluck('invoice_date')
+            ->map(fn ($date) => $date->toDateString())
+            ->all();
+
+        $this->assertNotContains('2026-06-26', $remainingDates);
+        $this->assertContains('2026-06-19', $remainingDates);
+        $this->assertContains('2026-06-22', $remainingDates);
+        $this->assertContains('2026-06-29', $remainingDates);
+    }
+
+    public function test_paid_stale_invoices_are_not_deleted_on_schedule_change(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-24 10:00:00'));
+
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-05-20'),
+            'billing_anchor_date' => null,
+            'end_date' => Carbon::parse('2027-05-20'),
+            'agreed_rent' => 210,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+        ]);
+
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-05-27'));
+
+        $paidInvoice = Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->whereDate('invoice_date', '2026-05-20')
+            ->firstOrFail();
+        $paidInvoice->update([
+            'paid_amount' => 210,
+            'balance_amount' => 0,
+            'status' => 'paid',
+        ]);
+
+        $agreement->update(['start_date' => Carbon::parse('2026-05-22')]);
+        $agreement->refresh();
+
+        $this->service->reconcileBillingScheduleInvoices($agreement);
+        $this->service->generateForAgreement($agreement, Carbon::parse('2026-07-24'));
+
+        $this->assertDatabaseHas('invoices', ['id' => $paidInvoice->id]);
+        $this->assertFalse(Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->whereDate('invoice_date', '2026-05-27')
+            ->exists());
+        $this->assertTrue(Invoice::query()
+            ->where('source_id', $agreement->id)
+            ->whereDate('invoice_date', '2026-05-22')
+            ->exists());
+    }
+
     private function makeAgreement(array $attributes): Agreement
     {
         return new Agreement(array_merge([

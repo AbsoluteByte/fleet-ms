@@ -346,12 +346,14 @@
                     {
                         data: 'priority',
                         render: function(data, type, row) {
-                            const badges = {
-                                1: '<span class="badge badge-danger priority-badge-1">CRITICAL</span>',
-                                2: '<span class="badge badge-warning priority-badge-2">HIGH</span>',
-                                3: '<span class="badge badge-info">MEDIUM</span>'
+                            const color = row.amount_color || row.color || 'danger';
+                            const labels = {
+                                1: 'CRITICAL',
+                                2: 'HIGH',
+                                3: 'MEDIUM'
                             };
-                            return badges[data] || badges[3];
+
+                            return `<span class="badge badge-${color} priority-badge-${data}">${labels[data] || labels[3]}</span>`;
                         }
                     },
                     {
@@ -390,9 +392,7 @@
                     {
                         data: 'time_ago',
                         render: function(data, type, row) {
-                            let color = 'success';
-                            if (row.priority === 1) color = 'danger';
-                            else if (row.priority === 2) color = 'warning';
+                            const color = row.amount_color || row.color || 'danger';
 
                             return `<small class="text-${color}">${data}</small>`;
                         }
@@ -422,7 +422,7 @@
                             <a href="${row.action_url}" class="btn btn-sm btn-outline-primary">
                                 <i class="feather icon-eye"></i>
                             </a>
-                            <a href="{{ route('payments.create') }}?driver_id=${row.driver_id}" class="btn btn-sm btn-${row.color}">
+                            <a href="{{ route('payments.create') }}?driver_id=${row.driver_id}" class="btn btn-sm btn-${row.amount_color || row.color || 'danger'}">
                                 <i class="feather icon-credit-card"></i> Pay
                             </a>
                             ${followUpBtn}

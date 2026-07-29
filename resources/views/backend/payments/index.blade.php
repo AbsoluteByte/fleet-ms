@@ -53,8 +53,7 @@
                                             <td>
                                                 @php
                                                     $registrations = $driver->agreements
-                                                        ->pluck('car.registration')
-                                                        ->filter()
+                                                        ->flatMap(fn ($agreement) => $agreement->vehicleRegistrationsIncludingReplacements())
                                                         ->unique()
                                                         ->values();
                                                 @endphp

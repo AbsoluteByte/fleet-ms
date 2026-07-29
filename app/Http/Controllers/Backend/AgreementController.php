@@ -491,7 +491,7 @@ class AgreementController extends Controller
                 if (! $isReplacementVehicle) {
                     if ($validated['auto_schedule_collections']) {
                         if ($oldAutoSchedule !== $validated['auto_schedule_collections'] ||
-                            $agreement->wasChanged(['start_date', 'end_date', 'collection_type', 'agreed_rent', 'billing_anchor_date'])) {
+                            $agreement->wasChanged(['start_date', 'end_date', 'collection_type', 'agreed_rent', 'billing_anchor_date', 'rent_interval'])) {
                             $agreement->generateCollections();
                         }
                     } else {
@@ -507,7 +507,18 @@ class AgreementController extends Controller
                         }
                     }
 
-                    app(AgreementInvoiceService::class)->generateForAgreement($agreement->fresh());
+                    $invoiceService = app(AgreementInvoiceService::class);
+                    $scheduleChanged = $agreement->wasChanged([
+                        'start_date',
+                        'billing_anchor_date',
+                        'rent_interval',
+                    ]);
+
+                    if ($scheduleChanged) {
+                        $invoiceService->reconcileBillingScheduleInvoices($agreement);
+                    }
+
+                    $invoiceService->generateForAgreement($agreement->fresh());
 
                     if ($agreementPaymentData !== []) {
                         $driver = $agreement->driver()->firstOrFail();

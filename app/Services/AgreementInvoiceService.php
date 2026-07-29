@@ -206,6 +206,95 @@ class AgreementInvoiceService
         return round($rentAmount / $periodDays * $partialDays, 2);
     }
 
+    /**
+     * @return list<string>
+     */
+    public function expectedInvoiceDates(Agreement $agreement, ?Carbon $throughDate = null): array
+    {
+        if (! $agreement->start_date || ! $agreement->end_date) {
+            return [];
+        }
+
+        $throughDate = $throughDate?->copy()->startOfDay() ?? $agreement->end_date->copy()->startOfDay();
+        $endDate = $agreement->end_date->copy()->startOfDay()->min($throughDate);
+
+        if ($agreement->upgraded_from_agreement_id) {
+            return $this->expectedInvoiceDatesForUpgradedAgreement($agreement, $endDate);
+        }
+
+        $dates = [];
+
+        if ($agreement->hasDeferredBillingAnchor()) {
+            $periodStart = $agreement->start_date->copy()->startOfDay();
+            $anchor = $agreement->billing_anchor_date->copy()->startOfDay();
+            $prorationSubtotal = $this->calculateProrationSubtotal(
+                $agreement,
+                $periodStart,
+                $anchor,
+                (float) $agreement->agreed_rent
+            );
+
+            if ($prorationSubtotal > 0 && $periodStart <= $endDate) {
+                $dates[] = $periodStart->toDateString();
+            }
+
+            $currentDate = $anchor->copy();
+        } else {
+            $currentDate = $agreement->start_date->copy()->startOfDay();
+        }
+
+        while ($currentDate <= $endDate) {
+            $dates[] = $currentDate->toDateString();
+            $currentDate = $this->nextInvoiceDate($currentDate, (string) $agreement->rent_interval);
+        }
+
+        return $dates;
+    }
+
+    public function reconcileBillingScheduleInvoices(Agreement $agreement): void
+    {
+        DB::transaction(function () use ($agreement) {
+            $agreement = Agreement::query()
+                ->with(['status', 'upgradedFromAgreement'])
+                ->whereKey($agreement->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $agreement->driver_id || ! $agreement->start_date || ! $agreement->end_date) {
+                return;
+            }
+
+            $expectedDates = array_flip($this->expectedInvoiceDates($agreement));
+
+            $invoices = Invoice::query()
+                ->where('invoice_type', 'agreement')
+                ->where('source_id', $agreement->id)
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($invoices as $invoice) {
+                if ((float) $invoice->paid_amount > 0 || $invoice->paymentAllocations()->count() > 0) {
+                    continue;
+                }
+
+                $notes = (string) $invoice->notes;
+                if (str_starts_with($notes, 'Final invoice prorated')) {
+                    continue;
+                }
+
+                $invoiceDate = $invoice->invoice_date->copy()->startOfDay()->toDateString();
+                if (isset($expectedDates[$invoiceDate])) {
+                    continue;
+                }
+
+                $this->releaseInvoiceCommitments($invoice, 0);
+                $this->removePendingManualAllocationTarget($invoice);
+                $this->releaseOneTimeDiscountFromInvoice($agreement, $invoice);
+                $invoice->delete();
+            }
+        });
+    }
+
     public function reconcileFinalInvoice(Agreement $agreement, Carbon $closingDate): void
     {
         DB::transaction(function () use ($agreement, $closingDate) {
@@ -388,6 +477,31 @@ class AgreementInvoiceService
         }
 
         return $generated;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function expectedInvoiceDatesForUpgradedAgreement(Agreement $agreement, Carbon $endDate): array
+    {
+        $old = $agreement->upgradedFromAgreement;
+
+        if (! $old || ! $old->start_date) {
+            return [];
+        }
+
+        $dates = [];
+        $upgradeDate = $agreement->start_date->copy()->startOfDay();
+        $originalStart = $old->start_date->copy()->startOfDay();
+        $rentInterval = (string) $agreement->rent_interval;
+        $currentDate = $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval)->copy();
+
+        while ($currentDate <= $endDate) {
+            $dates[] = $currentDate->toDateString();
+            $currentDate = $this->nextInvoiceDate($currentDate, $rentInterval);
+        }
+
+        return $dates;
     }
 
     private function syncDepositInvoice(Agreement $agreement): bool

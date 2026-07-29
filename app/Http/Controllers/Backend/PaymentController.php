@@ -46,7 +46,12 @@ class PaymentController extends Controller
         $drivers = Driver::query()
             ->where('tenant_id', $tenant->id)
             ->withPaymentIndexAggregates()
-            ->with(['agreements' => fn ($query) => $query->currentlyActive()->with('car')])
+            ->with(['agreements' => fn ($query) => $query->currentlyActive()->with([
+                'car',
+                'replacementVehicleAgreements' => fn ($replacementQuery) => $replacementQuery
+                    ->currentlyActiveReplacement()
+                    ->with('car'),
+            ])])
             ->withMax(['payments as last_posted_payment_date' => function ($query) {
                 $query->posted();
             }], 'payment_date')

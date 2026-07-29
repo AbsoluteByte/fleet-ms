@@ -2,9 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\Agreement;
+use App\Models\Car;
+use App\Models\Company;
 use App\Models\Driver;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\Status;
 use App\Models\Tenant;
 use App\Models\User;
 use Carbon\Carbon;
@@ -224,7 +228,7 @@ class PaymentNotificationsTest extends TestCase
         $this->assertNotNull($row);
         $this->assertSame('warning', $row['amount_color']);
         $this->assertSame('£80.00 pending daily financial sheet approval.', $row['amount_tooltip']);
-        $this->assertSame('danger', $row['color']);
+        $this->assertSame('warning', $row['color']);
     }
 
     public function test_overdue_notification_keeps_danger_amount_without_pending_dfs_payment(): void
@@ -240,6 +244,109 @@ class PaymentNotificationsTest extends TestCase
         $this->assertNotNull($row);
         $this->assertSame('danger', $row['amount_color']);
         $this->assertNull($row['amount_tooltip']);
+    }
+
+    public function test_due_today_notification_amount_is_danger_without_pending_dfs(): void
+    {
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-20',
+            'due_date' => '2026-07-27',
+            'balance_amount' => 100,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'due_today');
+
+        $this->assertNotNull($row);
+        $this->assertSame('danger', $row['amount_color']);
+        $this->assertNull($row['amount_tooltip']);
+        $this->assertSame('danger', $row['color']);
+    }
+
+    public function test_due_today_notification_uses_warning_when_pending_dfs_exists(): void
+    {
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-19',
+            'amount' => 60,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'auto_allocate' => false,
+            'created_by' => $this->user->id,
+        ]);
+
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-20',
+            'due_date' => '2026-07-27',
+            'balance_amount' => 100,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'due_today');
+
+        $this->assertNotNull($row);
+        $this->assertSame('warning', $row['amount_color']);
+        $this->assertSame('£60.00 pending daily financial sheet approval.', $row['amount_tooltip']);
+        $this->assertSame('warning', $row['color']);
+    }
+
+    public function test_due_this_week_notification_amount_is_danger_without_pending_dfs(): void
+    {
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-18',
+            'due_date' => '2026-07-24',
+            'balance_amount' => 90,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'due_this_week');
+
+        $this->assertNotNull($row);
+        $this->assertSame('danger', $row['amount_color']);
+        $this->assertNull($row['amount_tooltip']);
+        $this->assertSame('danger', $row['color']);
+    }
+
+    public function test_payment_notification_includes_replacement_agreement_car_registration(): void
+    {
+        [$parentAgreement] = $this->createAgreementWithReplacement('REG111', 'REPREPL');
+
+        $invoice = $this->createInvoice([
+            'invoice_type' => 'agreement',
+            'source_id' => $parentAgreement->id,
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 100,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
+
+        $this->assertNotNull($row);
+        $this->assertSame('REG111, REPREPL', $row['vehicle']);
+    }
+
+    public function test_payment_notification_vehicle_is_searchable_by_replacement_registration(): void
+    {
+        [$parentAgreement] = $this->createAgreementWithReplacement('REG111', 'REPREPL');
+
+        $invoice = $this->createInvoice([
+            'invoice_type' => 'agreement',
+            'source_id' => $parentAgreement->id,
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 100,
+        ]);
+
+        $response = $this->get(route('payments.notifications', [
+            'type' => 'overdue_payment',
+        ]), [
+            'X-Requested-With' => 'XMLHttpRequest',
+            'Accept' => 'application/json',
+        ]);
+
+        $response->assertOk();
+
+        $matchingRows = collect($response->json('data'))
+            ->filter(fn (array $row) => str_contains((string) ($row['vehicle'] ?? ''), 'REPREPL'));
+
+        $this->assertTrue($matchingRows->contains('invoice_id', $invoice->id));
     }
 
     /**
@@ -299,6 +406,81 @@ class PaymentNotificationsTest extends TestCase
         ], $overrides));
     }
 
+    /**
+     * @return array{0: Agreement, 1: Agreement}
+     */
+    private function createAgreementWithReplacement(string $activeRegistration, string $replacementRegistration): array
+    {
+        $company = Company::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Notifications Company',
+        ]);
+
+        $activeStatus = Status::query()->create([
+            'name' => 'Active',
+            'type' => 'agreement',
+        ]);
+        $replacementStatus = Status::query()->create([
+            'name' => 'Replacement Vehicle',
+            'type' => 'agreement',
+        ]);
+
+        $carModelId = (int) DB::table('car_models')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $activeCar = Car::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'car_model_id' => $carModelId,
+            'registration' => $activeRegistration,
+            'color' => 'Black',
+            'fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
+        ]);
+        $replacementCar = Car::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'car_model_id' => $carModelId,
+            'registration' => $replacementRegistration,
+            'color' => 'White',
+            'fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
+        ]);
+
+        $parentAgreement = Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $activeCar->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 300,
+            'collection_type' => 'weekly',
+            'status_id' => $activeStatus->id,
+        ]);
+
+        $replacementAgreement = Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $replacementCar->id,
+            'parent_agreement_id' => $parentAgreement->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 0,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+            'collection_type' => 'weekly',
+            'status_id' => $replacementStatus->id,
+        ]);
+
+        return [$parentAgreement, $replacementAgreement];
+    }
+
     private function setUpHttpTestExtras(): void
     {
         Schema::table('tenants', function (Blueprint $table) {
@@ -328,6 +510,10 @@ class PaymentNotificationsTest extends TestCase
             $table->date('service_date');
             $table->decimal('amount', 10, 2)->default(0);
             $table->timestamps();
+        });
+
+        Schema::table('agreements', function (Blueprint $table) {
+            $table->unsignedBigInteger('parent_agreement_id')->nullable();
         });
 
         Schema::create('tenant_user', function (Blueprint $table) {
