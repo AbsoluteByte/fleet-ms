@@ -40,6 +40,8 @@ class Agreement extends Model
         'termination_notes',
         'termination_recorded_by',
         'closing_date',
+        'refund_person_name',
+        'refund_account_number',
     ];
 
     protected $casts = [
@@ -238,6 +240,11 @@ class Agreement extends Model
         $name = strtolower(trim((string) optional($this->status)->name));
 
         return in_array($name, ['active', 'swap'], true);
+    }
+
+    public function startedOnDate(string $date): bool
+    {
+        return $this->start_date?->toDateString() === $date;
     }
 
     public function effectiveCloseDate(): ?Carbon

@@ -349,6 +349,69 @@ class PaymentNotificationsTest extends TestCase
         $this->assertTrue($matchingRows->contains('invoice_id', $invoice->id));
     }
 
+    public function test_notifications_page_merges_paying_company_into_driver_column(): void
+    {
+        $response = $this->get(route('payments.notifications'));
+
+        $response->assertOk();
+        $response->assertSee('formatDriverWithPayingCompany', false);
+        $response->assertDontSee('>PAYS VIA</th>', false);
+        $response->assertSee('>DRIVER</th>', false);
+    }
+
+    public function test_payment_notification_includes_paying_company_in_row_data(): void
+    {
+        $company = Company::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Notify Co',
+        ]);
+        $activeStatus = Status::query()->create([
+            'name' => 'Active',
+            'type' => 'agreement',
+        ]);
+        $carModelId = (int) DB::table('car_models')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $car = Car::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'car_model_id' => $carModelId,
+            'registration' => 'NOTIFCO',
+            'color' => 'Black',
+            'fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
+        ]);
+        $agreement = Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $car->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 300,
+            'collection_type' => 'weekly',
+            'status_id' => $activeStatus->id,
+            'paying_company_name' => 'Metro Cars PLC',
+        ]);
+
+        $invoice = $this->createInvoice([
+            'invoice_type' => 'agreement',
+            'source_id' => $agreement->id,
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 100,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
+
+        $this->assertNotNull($row);
+        $this->assertSame('Metro Cars PLC', $row['paying_company']);
+    }
+
     /**
      * @return list<int>
      */
@@ -514,6 +577,7 @@ class PaymentNotificationsTest extends TestCase
 
         Schema::table('agreements', function (Blueprint $table) {
             $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            $table->string('paying_company_name')->nullable();
         });
 
         Schema::create('tenant_user', function (Blueprint $table) {

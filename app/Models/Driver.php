@@ -59,6 +59,17 @@ class Driver extends Model
         return $this->hasMany(Agreement::class);
     }
 
+    public function primaryPayingCompanyName(): ?string
+    {
+        $name = $this->agreements
+            ->pluck('paying_company_name')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->first();
+
+        return $name !== null && $name !== '' ? $name : null;
+    }
+
     public function latestAgreement(): ?Agreement
     {
         return $this->agreements()

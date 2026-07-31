@@ -169,6 +169,9 @@
                     @if(!empty($entry['paying_company_name']))
                         <div class="text-muted">Pays via: {{ $entry['paying_company_name'] }}</div>
                     @endif
+                    @if(!empty($entry['is_new_rent_out']))
+                        <div class="text-muted">New car rent out</div>
+                    @endif
                 </td>
                 <td>{{ $entry['car_registration'] ?? '—' }}</td>
                 <td>{{ $entry['payment_method'] }}</td>

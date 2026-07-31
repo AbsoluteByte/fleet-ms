@@ -45,6 +45,12 @@
                 <i class="fa fa-file-text-o me-2"></i>
                 Permission Letter
             </a>
+            @if($agreement->isClosedForDepositRefund())
+                <a href="{{ route('agreements.financial-summary', $agreement) }}" class="btn btn-outline-info" target="_blank" rel="noopener noreferrer">
+                    <i class="fa fa-file-pdf-o me-2"></i>
+                    Export Financial
+                </a>
+            @endif
             <form action="{{ route('agreements.send-client-documents', $agreement) }}" method="POST" class="d-inline">
                 @csrf
                 <button type="submit" class="btn btn-outline-success" onclick="return confirm('Send client documents to jawad@samoretraders.com?')">
@@ -201,6 +207,20 @@
                                         <td><strong>Car Available From:</strong></td>
                                         <td>{{ $agreement->termination_available_from_date ? $agreement->termination_available_from_date->format('M d, Y') : '—' }}</td>
                                     </tr>
+                                @endif
+                                @if($agreement->refund_person_name || $agreement->refund_account_number)
+                                    @if($agreement->refund_person_name)
+                                        <tr>
+                                            <td><strong>Refund Person Name:</strong></td>
+                                            <td>{{ $agreement->refund_person_name }}</td>
+                                        </tr>
+                                    @endif
+                                    @if($agreement->refund_account_number)
+                                        <tr>
+                                            <td><strong>Account Number:</strong></td>
+                                            <td>{{ $agreement->refund_account_number }}</td>
+                                        </tr>
+                                    @endif
                                 @endif
                             </table>
                         </div>

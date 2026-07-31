@@ -183,6 +183,8 @@ class ReservationController extends Controller
             if ($reservation->car_id) {
                 $this->markCarReserved(Car::query()->find($reservation->car_id), $validated['pick_up_date']);
             }
+
+            $reservation->syncFinancialSheetStatus();
         });
 
         return redirect()->route('reservations.index')->with('success', 'Reservation created.');
@@ -229,6 +231,8 @@ class ReservationController extends Controller
         $oldCarId = $reservation->car_id;
 
         DB::transaction(function () use ($request, $reservation, $validated, $balance, $carId, $oldCarId, $tenant, $driverPersistence, $completeLinkedDriver, $linkedDriver) {
+            $previousAmountPaid = (float) $reservation->amount_paid;
+
             $driverId = $this->resolveDriverId(
                 $request,
                 $validated,
@@ -262,6 +266,9 @@ class ReservationController extends Controller
             if ($carId) {
                 $this->markCarReserved(Car::query()->find($carId), $validated['pick_up_date']);
             }
+
+            $reservation->refresh();
+            $reservation->syncFinancialSheetStatus($previousAmountPaid);
         });
 
         return redirect()->route('reservations.index')->with('success', 'Reservation updated.');
@@ -271,6 +278,7 @@ class ReservationController extends Controller
     {
         $this->authorizeTenant($reservation);
 
+        $reservation->cancelPendingFinancialSheet();
         $reservation->delete();
 
         return redirect()->route('reservations.index')->with('success', 'Reservation removed.');

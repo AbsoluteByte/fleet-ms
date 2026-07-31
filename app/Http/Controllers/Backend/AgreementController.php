@@ -235,23 +235,48 @@ class AgreementController extends Controller
                     if ($agreementPaymentData !== []) {
                         $driver = $agreement->driver()->firstOrFail();
                         $paymentService = app(PaymentAllocationService::class);
+                        $linkedReservation = $reservationId
+                            ? CarReservation::query()
+                                ->where('tenant_id', $tenant->id)
+                                ->whereKey($reservationId)
+                                ->first()
+                            : null;
+                        $postReservationPaymentImmediately = $linkedReservation
+                            && $linkedReservation->hasFinancialSheetPayment()
+                            && $linkedReservation->isPostedFinancialSheet();
 
                         foreach ($agreementPaymentData as $paymentData) {
                             $paymentService->createPaymentForInvoices(
                                 $driver,
                                 $paymentData,
                                 $agreement->id,
-                                ['agreement', 'agreement_deposit', 'agreement_additional_charge']
+                                ['agreement', 'agreement_deposit', 'agreement_additional_charge'],
+                                $postReservationPaymentImmediately
                             );
                         }
                     }
                 }
 
                 if ($reservationId) {
-                    CarReservation::query()
+                    $reservation = CarReservation::query()
                         ->where('tenant_id', $tenant->id)
                         ->whereKey($reservationId)
-                        ->delete();
+                        ->first();
+
+                    if ($reservation) {
+                        if ($reservation->hasFinancialSheetPayment()) {
+                            if ($reservation->isPendingFinancialSheet()) {
+                                $reservation->cancelPendingFinancialSheet();
+                            }
+
+                            $reservation->markConvertedToAgreement(
+                                $agreement->id,
+                                $reservation->isPostedFinancialSheet()
+                            );
+                        }
+
+                        $reservation->delete();
+                    }
                 }
 
                 return $agreement;
@@ -299,10 +324,21 @@ class AgreementController extends Controller
         $agreement->updateOverdueCollections();
 
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+        [$settlementPreview, $settlementRemainingDebt] = $this->settlementContextForAgreement($agreement);
+
+        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt'));
+    }
+
+    /**
+     * @return array{0: ?array, 1: float}
+     */
+    private function settlementContextForAgreement(Agreement $agreement): array
+    {
         $settlementPreview = $agreement->canRequestDepositRefund()
             ? app(AgreementDepositSettlementService::class)->preview($agreement)
             : null;
         $settlementRemainingDebt = $settlementPreview['remaining_debt_amount'] ?? 0;
+
         if ($agreement->depositRefund) {
             $currentDriverDebt = round((float) Invoice::query()
                 ->where('driver_id', $agreement->driver_id)
@@ -313,7 +349,7 @@ class AgreementController extends Controller
                 : $currentDriverDebt;
         }
 
-        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt'));
+        return [$settlementPreview, (float) $settlementRemainingDebt];
     }
 
     public function refundDeposit(
@@ -611,6 +647,8 @@ class AgreementController extends Controller
     {
         if (! $this->isClosingStatusId((int) ($validated['status_id'] ?? 0))) {
             $validated['closing_date'] = null;
+            $validated['refund_person_name'] = null;
+            $validated['refund_account_number'] = null;
         }
 
         return $validated;
@@ -709,6 +747,8 @@ class AgreementController extends Controller
                 $this->isClosingStatusId((int) $request->input('status_id')) ? 'required' : 'nullable',
                 'date',
             ],
+            'refund_person_name' => 'nullable|string|max:255',
+            'refund_account_number' => 'nullable|string|max:50',
         ];
 
         if ($isReplacementVehicle) {
@@ -1782,6 +1822,32 @@ class AgreementController extends Controller
             return $pdf->stream($filename);
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to generate permission letter: '.$e->getMessage());
+        }
+    }
+
+    public function financialSummaryPDF(Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        if (! $agreement->isClosedForDepositRefund()) {
+            abort(404);
+        }
+
+        try {
+            [$settlementPreview, $settlementRemainingDebt] = $this->settlementContextForAgreement($agreement);
+            [$pdf, $filename] = app(AgreementPdfService::class)->makeFinancialSummaryPdf(
+                $agreement,
+                $settlementPreview,
+                $settlementRemainingDebt
+            );
+
+            return $pdf->stream($filename);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to generate financial summary PDF: '.$e->getMessage());
         }
     }
 

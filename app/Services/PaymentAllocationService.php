@@ -38,16 +38,25 @@ class PaymentAllocationService
     /**
      * @param  list<string>  $invoiceTypes
      */
-    public function createPaymentForInvoices(Driver $driver, array $paymentData, int $sourceId, array $invoiceTypes): Payment
-    {
-        return DB::transaction(function () use ($driver, $paymentData, $sourceId, $invoiceTypes) {
+    public function createPaymentForInvoices(
+        Driver $driver,
+        array $paymentData,
+        int $sourceId,
+        array $invoiceTypes,
+        bool $postImmediately = false
+    ): Payment {
+        return DB::transaction(function () use ($driver, $paymentData, $sourceId, $invoiceTypes, $postImmediately) {
             $payment = $driver->payments()->create(array_merge([
-                'posting_status' => Payment::POSTING_STATUS_PENDING,
+                'posting_status' => $postImmediately ? Payment::POSTING_STATUS_POSTED : Payment::POSTING_STATUS_PENDING,
                 'created_by' => Auth::id(),
                 'auto_allocate' => false,
                 'allocation_source_id' => $sourceId,
                 'allocation_invoice_types' => $invoiceTypes,
             ], $paymentData));
+
+            if ($postImmediately) {
+                $this->postPayment($payment);
+            }
 
             return $payment->fresh(['driver', 'allocations.invoice']);
         });

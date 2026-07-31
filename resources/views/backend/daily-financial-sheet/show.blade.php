@@ -165,6 +165,9 @@
                                             @if(!empty($entry['paying_company_name']))
                                                 <div class="text-muted small">Pays via: {{ $entry['paying_company_name'] }}</div>
                                             @endif
+                                            @if(!empty($entry['is_new_rent_out']))
+                                                <div class="paying-company-subtitle">New car rent out</div>
+                                            @endif
                                         </td>
                                         <td>{{ $entry['car_registration'] ?? '—' }}</td>
                                         <td>{{ $entry['payment_method'] }}</td>
@@ -279,6 +282,11 @@
 
 @section('css')
     <style>
+        .paying-company-subtitle {
+            color: #6e6b7b;
+            font-size: 0.875rem;
+        }
+
         .navbar-floating .header-navbar-shadow {
             height: 90px !important;
         }

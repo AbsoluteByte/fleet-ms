@@ -152,7 +152,7 @@ class DailyFinancialSheetController extends Controller
             'entry_ids' => 'nullable|array',
             'entry_ids.*' => [
                 'string',
-                'regex:/^(payment|expense|deposit-refund|driver-credit)-\d+$/',
+                'regex:/^(payment|expense|other-payment|reservation-payment|deposit-refund|driver-credit)-\d+$/',
             ],
             'approve_mode' => ['nullable', Rule::in(['all', 'selected'])],
         ]);
@@ -201,7 +201,7 @@ class DailyFinancialSheetController extends Controller
             'entry_ids' => 'nullable|array',
             'entry_ids.*' => [
                 'string',
-                'regex:/^(payment|expense|deposit-refund|driver-credit)-\d+$/',
+                'regex:/^(payment|expense|other-payment|reservation-payment|deposit-refund|driver-credit)-\d+$/',
             ],
             'reject_mode' => ['nullable', Rule::in(['all', 'selected'])],
         ]);

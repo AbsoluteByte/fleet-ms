@@ -168,7 +168,6 @@
                             <th>PRIORITY</th>
                             <th>DRIVER</th>
                             <th>VEHICLE</th>
-                            <th>PAYS VIA</th>
                             <th>AMOUNT</th>
                             <th>GENERATED DATE</th>
                             <th>DUE DATE</th>
@@ -242,6 +241,11 @@
 @section('css')
     <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
     <style>
+        .paying-company-subtitle {
+            color: #6e6b7b;
+            font-size: 0.875rem;
+        }
+
         .cursor-pointer {
             cursor: pointer;
             transition: all 0.3s ease;
@@ -295,6 +299,24 @@
                 .replace(/'/g, '&#39;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
+        }
+
+        function formatDriverWithPayingCompany(name, payingCompany) {
+            const driverName = name || 'N/A';
+            if (!payingCompany) {
+                return driverName;
+            }
+
+            return `${driverName}<div class="paying-company-subtitle">Pays via: ${payingCompany}</div>`;
+        }
+
+        function formatDriverWithPayingCompanyExport(name, payingCompany) {
+            const driverName = name || '—';
+            if (!payingCompany) {
+                return driverName;
+            }
+
+            return driverName + ' — Pays via: ' + payingCompany;
         }
 
         $(document).ready(function() {
@@ -357,18 +379,15 @@
                         }
                     },
                     {
-                        data: 'driver_name'
+                        data: 'driver_name',
+                        render: function(data, type, row) {
+                            return formatDriverWithPayingCompany(data, row.paying_company);
+                        }
                     },
                     {
                         data: 'vehicle',
                         render: function(data) {
                             return `<span class="badge badge-light-secondary">${data}</span>`;
-                        }
-                    },
-                    {
-                        data: 'paying_company',
-                        render: function(data) {
-                            return data ? `<span class="badge badge-light-primary">Pays via: ${data}</span>` : '—';
                         }
                     },
                     {
@@ -465,7 +484,6 @@
             'Priority',
             'Driver',
             'Vehicle',
-            'Pays via',
             'Amount',
             'Generated Date',
             'Due Date',
@@ -526,9 +544,8 @@
                 const row = this.data();
                 rows.push([
                     paymentPriorityLabels[row.priority] || 'Medium',
-                    row.driver_name || '—',
+                    formatDriverWithPayingCompanyExport(row.driver_name, row.paying_company),
                     row.vehicle || '—',
-                    row.paying_company || '—',
                     row.amount || '—',
                     row.invoice_generated_date || '—',
                     row.due_date || '—',

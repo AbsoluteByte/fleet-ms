@@ -89,7 +89,10 @@ class DailyFinancialSheetTest extends TestCase
         Schema::dropIfExists('driver_credit_transaction_lines');
         Schema::dropIfExists('driver_credit_transactions');
         Schema::dropIfExists('deposit_refunds');
+        Schema::dropIfExists('other_payments');
+        Schema::dropIfExists('car_reservations');
         Schema::dropIfExists('agreements');
+        Schema::dropIfExists('statuses');
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
         Schema::dropIfExists('financial_sheet_adjustments');
@@ -275,6 +278,142 @@ class DailyFinancialSheetTest extends TestCase
         $response->assertSee('AB12CDE');
         $response->assertSee('Agreement #'.$agreement->id);
         $response->assertSee(route('agreements.show', $agreement->id));
+    }
+
+    public function test_sheet_marks_agreement_payment_as_new_rent_out_when_agreement_starts_same_day(): void
+    {
+        $date = now()->toDateString();
+        $car = $this->createCar('NEW001');
+        $agreement = $this->createAgreement($car, $date, $this->activeStatusId());
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 500,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => false,
+            'allocation_source_id' => $agreement->id,
+            'allocation_invoice_types' => ['agreement', 'agreement_deposit'],
+        ]);
+
+        $entry = app(DailyFinancialSheetService::class)
+            ->entriesForDate($this->tenant->id, $date)
+            ->firstWhere('id', 'payment-'.Payment::query()->value('id'));
+
+        $this->assertNotNull($entry);
+        $this->assertTrue($entry['is_new_rent_out']);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->get(route('daily-financial-sheet.show', $date));
+
+        $response->assertOk();
+        $response->assertSee('New car rent out');
+    }
+
+    public function test_sheet_marks_agreement_payment_as_new_rent_out_when_agreement_created_today_with_future_start(): void
+    {
+        $date = now()->toDateString();
+        $car = $this->createCar('NEW002');
+        $agreement = $this->createAgreement(
+            $car,
+            now()->addDay()->toDateString(),
+            $this->activeStatusId()
+        );
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 300,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => false,
+            'allocation_source_id' => $agreement->id,
+            'allocation_invoice_types' => ['agreement', 'agreement_deposit'],
+        ]);
+
+        $entry = app(DailyFinancialSheetService::class)
+            ->entriesForDate($this->tenant->id, $date)
+            ->firstWhere('id', 'payment-'.Payment::query()->value('id'));
+
+        $this->assertNotNull($entry);
+        $this->assertTrue($entry['is_new_rent_out']);
+    }
+
+    public function test_sheet_does_not_mark_new_rent_out_when_agreement_started_earlier(): void
+    {
+        $date = now()->toDateString();
+        $car = $this->createCar('OLD001');
+        $agreement = $this->createAgreement($car, now()->subDay()->toDateString(), $this->activeStatusId());
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 500,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => false,
+            'allocation_source_id' => $agreement->id,
+            'allocation_invoice_types' => ['agreement', 'agreement_deposit'],
+        ]);
+
+        $entry = app(DailyFinancialSheetService::class)
+            ->entriesForDate($this->tenant->id, $date)
+            ->firstWhere('id', 'payment-'.Payment::query()->value('id'));
+
+        $this->assertNotNull($entry);
+        $this->assertFalse($entry['is_new_rent_out']);
+    }
+
+    public function test_sheet_does_not_mark_replacement_vehicle_agreement_as_new_rent_out(): void
+    {
+        $date = now()->toDateString();
+        $car = $this->createCar('REPL001');
+        $parentCar = $this->createCar('PARENT1');
+        $parentAgreement = $this->createAgreement($parentCar, now()->subMonth()->toDateString(), $this->activeStatusId());
+        $replacementAgreement = $this->createAgreement(
+            $car,
+            $date,
+            $this->replacementStatusId(),
+            $parentAgreement->id
+        );
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 100,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => false,
+            'allocation_source_id' => $replacementAgreement->id,
+            'allocation_invoice_types' => ['agreement', 'agreement_deposit'],
+        ]);
+
+        $entry = app(DailyFinancialSheetService::class)
+            ->entriesForDate($this->tenant->id, $date)
+            ->firstWhere('id', 'payment-'.Payment::query()->value('id'));
+
+        $this->assertNotNull($entry);
+        $this->assertFalse($entry['is_new_rent_out']);
+    }
+
+    public function test_sheet_does_not_mark_unlinked_driver_payment_as_new_rent_out(): void
+    {
+        $date = now()->toDateString();
+        $payment = $this->createPendingPayment($date, 100);
+
+        $entry = app(DailyFinancialSheetService::class)
+            ->entriesForDate($this->tenant->id, $date)
+            ->firstWhere('id', 'payment-'.$payment->id);
+
+        $this->assertNotNull($entry);
+        $this->assertFalse($entry['is_new_rent_out']);
     }
 
     public function test_non_approver_cannot_approve_sheet(): void
@@ -870,6 +1009,41 @@ class DailyFinancialSheetTest extends TestCase
         ]);
     }
 
+    private function activeStatusId(): int
+    {
+        return (int) DB::table('statuses')
+            ->where('name', 'Active')
+            ->value('id');
+    }
+
+    private function replacementStatusId(): int
+    {
+        return (int) DB::table('statuses')
+            ->where('name', 'Replacement Vehicle')
+            ->value('id');
+    }
+
+    private function createAgreement(
+        Car $car,
+        string $startDate,
+        int $statusId,
+        ?int $parentAgreementId = null,
+    ): Agreement {
+        return Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $car->id,
+            'status_id' => $statusId,
+            'parent_agreement_id' => $parentAgreementId,
+            'start_date' => $startDate,
+            'end_date' => now()->addYear(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'weekly',
+            'deposit_amount' => 500,
+        ]);
+    }
+
     private function setUpDatabase(): void
     {
         Schema::create('tenants', function (Blueprint $table) {
@@ -1024,12 +1198,70 @@ class DailyFinancialSheetTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('other_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->string('other_payment_type')->nullable();
+            $table->unsignedBigInteger('car_id')->nullable();
+            $table->string('title')->nullable();
+            $table->decimal('amount', 12, 2)->default(0);
+            $table->string('payment_method')->nullable();
+            $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->date('payment_date')->nullable();
+            $table->text('notes')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('car_reservations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id')->nullable();
+            $table->foreignId('driver_id')->nullable();
+            $table->date('reservation_date')->nullable();
+            $table->decimal('amount_paid', 12, 2)->nullable();
+            $table->string('payment_method')->nullable();
+            $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->string('posting_status', 20)->nullable();
+            $table->string('status')->default('active');
+            $table->foreignId('created_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('statuses', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('type');
+            $table->timestamps();
+        });
+
+        DB::table('statuses')->insert([
+            [
+                'id' => 1,
+                'name' => 'Active',
+                'type' => 'agreement',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 2,
+                'name' => 'Replacement Vehicle',
+                'type' => 'agreement',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
         Schema::create('agreements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->nullable();
             $table->foreignId('company_id')->nullable();
             $table->foreignId('driver_id')->nullable();
             $table->foreignId('car_id')->nullable();
+            $table->foreignId('status_id')->nullable();
+            $table->unsignedBigInteger('parent_agreement_id')->nullable();
             $table->dateTime('start_date');
             $table->date('end_date');
             $table->decimal('agreed_rent', 10, 2)->default(0);

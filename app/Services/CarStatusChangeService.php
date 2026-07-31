@@ -247,10 +247,13 @@ class CarStatusChangeService
             'agreed_rent' => $validated['agreed_rent'],
             'agreed_advance' => $validated['agreed_advance'],
             'amount_paid' => $validated['amount_paid'],
+            'payment_method' => (float) $validated['amount_paid'] > 0 ? 'Cash' : null,
             'balance_payable_on_pickup' => $balance,
             'status' => 'active',
             'created_by' => Auth::id(),
         ]);
+
+        $reservation->syncFinancialSheetStatus();
 
         $car->update([
             'fleet_status' => 'reserved',

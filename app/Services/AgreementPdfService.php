@@ -104,6 +104,57 @@ class AgreementPdfService
         return [$pdf, $filename];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function financialSummaryPdfViewData(
+        Agreement $agreement,
+        ?array $settlementPreview = null,
+        float $settlementRemainingDebt = 0
+    ): array {
+        $agreement->load([
+            'company',
+            'driver',
+            'car.carModel',
+            'status',
+            'deductions',
+            'additionalCharges.invoice',
+            'discountConsumedInvoice',
+            'depositRefund',
+            'invoices' => function ($query) {
+                $query->orderByDesc('invoice_date')->orderByDesc('id');
+            },
+        ]);
+
+        return [
+            'agreement' => $agreement,
+            'company' => $agreement->documentCompany() ?? $agreement->company,
+            'settlementPreview' => $settlementPreview,
+            'settlementRemainingDebt' => $settlementRemainingDebt,
+            'generatedAt' => Carbon::now()->format('d M Y H:i'),
+        ];
+    }
+
+    /**
+     * @return array{0: DomPdfInstance, 1: string}
+     */
+    public function makeFinancialSummaryPdf(
+        Agreement $agreement,
+        ?array $settlementPreview = null,
+        float $settlementRemainingDebt = 0
+    ): array {
+        $pdf = PDF::loadView(
+            'backend.agreements.financial_summary_pdf',
+            $this->financialSummaryPdfViewData($agreement, $settlementPreview, $settlementRemainingDebt)
+        );
+        $pdf->setPaper('A4', 'portrait');
+
+        $driverName = str_replace(' ', '_', $agreement->driver?->full_name ?? 'Driver');
+        $filename = 'Agreement_Financial_'.$agreement->id.'_'.$driverName.'.pdf';
+
+        return [$pdf, $filename];
+    }
+
     public function writePdfToTempPath(DomPdfInstance $pdf, string $prefix, int $agreementId): string
     {
         $directory = storage_path('app/temp/agreement_client_docs');
