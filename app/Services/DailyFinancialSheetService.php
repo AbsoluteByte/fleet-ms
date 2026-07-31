@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Agreement;
+use App\Models\CarReservation;
 use App\Models\DailyFinancialSheet;
 use App\Models\DepositRefund;
 use App\Models\DriverCreditTransaction;
@@ -66,11 +68,18 @@ class DailyFinancialSheetService
             ->pluck('request_date')
             ->map(fn ($date) => Carbon::parse($date)->toDateString());
 
+        $reservationDates = CarReservation::query()
+            ->pendingFinancialSheet()
+            ->where('tenant_id', $tenantId)
+            ->pluck('reservation_date')
+            ->map(fn ($date) => Carbon::parse($date)->toDateString());
+
         return $paymentDates
             ->merge($expenseDates)
             ->merge($otherPaymentDates)
             ->merge($refundDates)
             ->merge($creditDates)
+            ->merge($reservationDates)
             ->unique()
             ->sort()
             ->values()
@@ -101,20 +110,22 @@ class DailyFinancialSheetService
                 'driver',
                 'bankAccount',
                 'createdByUser',
+                'sourceAgreement.status',
                 'sourceAgreement.car',
+                'allocations.invoice.sourceAgreement.status',
                 'allocations.invoice.sourceAgreement.car',
             ])
             ->whereDate('payment_date', $date)
             ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenantId))
             ->get()
-            ->map(function (Payment $payment) use ($refunds) {
+            ->map(function (Payment $payment) use ($refunds, $date) {
                 $linkedRefund = $refunds->first(fn (DepositRefund $refund) => in_array(
                     $payment->id,
                     array_filter([$refund->debt_payment_id, $refund->refund_credit_payment_id]),
                     true
                 ));
 
-                return $this->formatPaymentEntry($payment, $linkedRefund);
+                return $this->formatPaymentEntry($payment, $linkedRefund, $date);
             });
 
         $expenses = Expense::query()
@@ -130,6 +141,15 @@ class DailyFinancialSheetService
             ->whereDate('payment_date', $date)
             ->get()
             ->map(fn (OtherPayment $otherPayment) => $this->formatOtherPaymentEntry($otherPayment));
+
+        $reservationPayments = CarReservation::query()
+            ->withTrashed()
+            ->with(['car', 'driver', 'bankAccount', 'createdBy'])
+            ->visibleOnFinancialSheet()
+            ->where('tenant_id', $tenantId)
+            ->whereDate('reservation_date', $date)
+            ->get()
+            ->map(fn (CarReservation $reservation) => $this->formatReservationPaymentEntry($reservation));
 
         $refundEntries = $refunds
             ->map(fn (DepositRefund $refund) => $this->formatDepositRefundEntry($refund));
@@ -151,6 +171,7 @@ class DailyFinancialSheetService
         return collect($payments)
             ->merge($expenses)
             ->merge($otherPayments)
+            ->merge($reservationPayments)
             ->merge($refundEntries)
             ->merge($creditEntries)
             ->merge($adjustmentEntries)
@@ -430,6 +451,7 @@ class DailyFinancialSheetService
         $paymentIds = $this->idsOfType($pendingEntries, 'payment');
         $expenseIds = $this->idsOfType($pendingEntries, 'expense');
         $otherPaymentIds = $this->idsOfType($pendingEntries, 'other-payment');
+        $reservationPaymentIds = $this->idsOfType($pendingEntries, 'reservation-payment');
         $refundIds = $this->idsOfType($pendingEntries, 'deposit-refund');
         $creditTransactionIds = $this->idsOfType($pendingEntries, 'driver-credit');
 
@@ -442,6 +464,7 @@ class DailyFinancialSheetService
             $paymentIds,
             $expenseIds,
             $otherPaymentIds,
+            $reservationPaymentIds,
             $refundIds,
             $creditTransactionIds
         ) {
@@ -475,6 +498,15 @@ class DailyFinancialSheetService
                     ->whereDate('payment_date', $date)
                     ->whereIn('id', $otherPaymentIds)
                     ->update(['posting_status' => OtherPayment::POSTING_STATUS_POSTED]);
+            }
+
+            if ($reservationPaymentIds !== []) {
+                CarReservation::query()
+                    ->pendingFinancialSheet()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('reservation_date', $date)
+                    ->whereIn('id', $reservationPaymentIds)
+                    ->update(['posting_status' => CarReservation::POSTING_STATUS_POSTED]);
             }
 
             if ($refundIds !== []) {
@@ -614,6 +646,7 @@ class DailyFinancialSheetService
         );
         $expenseIds = $this->idsOfType($pendingEntries, 'expense');
         $otherPaymentIds = $this->idsOfType($pendingEntries, 'other-payment');
+        $reservationPaymentIds = $this->idsOfType($pendingEntries, 'reservation-payment');
         $refundIds = $this->idsOfType($pendingEntries, 'deposit-refund');
         $creditTransactionIds = $this->idsOfType($pendingEntries, 'driver-credit');
 
@@ -624,6 +657,7 @@ class DailyFinancialSheetService
             $paymentIds,
             $expenseIds,
             $otherPaymentIds,
+            $reservationPaymentIds,
             $refundIds,
             $creditTransactionIds
         ) {
@@ -714,6 +748,21 @@ class DailyFinancialSheetService
                 }
             }
 
+            if ($reservationPaymentIds !== []) {
+                $reservations = CarReservation::query()
+                    ->pendingFinancialSheet()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('reservation_date', $date)
+                    ->whereIn('id', $reservationPaymentIds)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($reservations as $reservation) {
+                    $reservation->update(['posting_status' => CarReservation::POSTING_STATUS_CANCELLED]);
+                    $rejectedCount++;
+                }
+            }
+
             if ($creditTransactionIds !== []) {
                 $creditTransactions = DriverCreditTransaction::query()
                     ->pending()
@@ -761,7 +810,7 @@ class DailyFinancialSheetService
             if ($id === '') {
                 continue;
             }
-            if (! preg_match('/^(payment|expense|deposit-refund|driver-credit)-\d+$/', $id)) {
+            if (! preg_match('/^(payment|expense|other-payment|reservation-payment|deposit-refund|driver-credit)-\d+$/', $id)) {
                 throw ValidationException::withMessages([
                     'entry_ids' => 'Invalid entry selection.',
                 ]);
@@ -872,8 +921,11 @@ class DailyFinancialSheetService
     /**
      * @return array<string, mixed>
      */
-    private function formatPaymentEntry(Payment $payment, ?DepositRefund $linkedRefund = null): array
-    {
+    private function formatPaymentEntry(
+        Payment $payment,
+        ?DepositRefund $linkedRefund = null,
+        ?string $sheetDate = null,
+    ): array {
         $driverName = trim(($payment->driver->first_name ?? '').' '.($payment->driver->last_name ?? ''));
         $targetInvoice = $this->resolveTargetInvoice($payment);
         $agreementId = $linkedRefund?->agreement_id
@@ -898,6 +950,12 @@ class DailyFinancialSheetService
             $carRegistration = $linkedRefund->agreement?->car?->registration;
         }
 
+        $agreement = $this->resolvePaymentAgreement($payment, $linkedRefund, $targetInvoice, $agreementId);
+        $sheetDate ??= $payment->payment_date?->toDateString();
+        $isNewRentOut = $direction === 'in'
+            && $sheetDate !== null
+            && $this->paymentIsNewRentOut($agreement, $sheetDate);
+
         return [
             'id' => 'payment-'.$payment->id,
             'sort_at' => $payment->created_at?->timestamp ?? 0,
@@ -909,6 +967,7 @@ class DailyFinancialSheetService
             'agreement_id' => $agreementId,
             'agreement_url' => $agreementId ? route('agreements.show', $agreementId) : null,
             'paying_company_name' => $this->resolvePaymentPayingCompanyName($payment, $linkedRefund, $targetInvoice),
+            'is_new_rent_out' => $isNewRentOut,
             'payment_method' => $payment->payment_method,
             'bank_account_id' => $payment->bank_account_id,
             'bank_name' => $payment->bankAccount?->bank_name,
@@ -935,7 +994,7 @@ class DailyFinancialSheetService
         $manualInvoiceIds = array_keys($payment->pending_manual_allocations ?? []);
         if ($manualInvoiceIds !== []) {
             $invoice = Invoice::query()
-                ->with('sourceAgreement.car')
+                ->with('sourceAgreement.status', 'sourceAgreement.car')
                 ->where('driver_id', $payment->driver_id)
                 ->whereIn('id', $manualInvoiceIds)
                 ->first();
@@ -981,7 +1040,7 @@ class DailyFinancialSheetService
     {
         if ($payment->allocation_source_id && is_array($payment->allocation_invoice_types)) {
             return Invoice::query()
-                ->with('sourceAgreement.car')
+                ->with('sourceAgreement.status', 'sourceAgreement.car')
                 ->where('driver_id', $payment->driver_id)
                 ->where('source_id', $payment->allocation_source_id)
                 ->whereIn('invoice_type', $payment->allocation_invoice_types)
@@ -995,7 +1054,7 @@ class DailyFinancialSheetService
         $manualInvoiceIds = array_keys($payment->pending_manual_allocations ?? []);
         if ($manualInvoiceIds !== []) {
             return Invoice::query()
-                ->with('sourceAgreement.car')
+                ->with('sourceAgreement.status', 'sourceAgreement.car')
                 ->where('driver_id', $payment->driver_id)
                 ->whereIn('id', $manualInvoiceIds)
                 ->orderBy('invoice_date')
@@ -1006,7 +1065,7 @@ class DailyFinancialSheetService
 
         if ($payment->auto_allocate) {
             return Invoice::query()
-                ->with('sourceAgreement.car')
+                ->with('sourceAgreement.status', 'sourceAgreement.car')
                 ->where('driver_id', $payment->driver_id)
                 ->where('balance_amount', '>', 0)
                 ->orderBy('invoice_date')
@@ -1025,6 +1084,62 @@ class DailyFinancialSheetService
         }
 
         return $invoice->source_id ? (int) $invoice->source_id : null;
+    }
+
+    private function resolvePaymentAgreement(
+        Payment $payment,
+        ?DepositRefund $linkedRefund = null,
+        ?Invoice $targetInvoice = null,
+        ?int $agreementId = null,
+    ): ?Agreement {
+        if ($linkedRefund?->relationLoaded('agreement') && $linkedRefund->agreement) {
+            return $linkedRefund->agreement;
+        }
+
+        if ($payment->relationLoaded('sourceAgreement') && $payment->sourceAgreement) {
+            return $payment->sourceAgreement;
+        }
+
+        foreach ($payment->allocations as $allocation) {
+            $agreement = $allocation->invoice?->sourceAgreement;
+            if ($agreement) {
+                return $agreement;
+            }
+        }
+
+        if ($targetInvoice?->relationLoaded('sourceAgreement') && $targetInvoice->sourceAgreement) {
+            return $targetInvoice->sourceAgreement;
+        }
+
+        if ($agreementId) {
+            return Agreement::query()->with('status')->find($agreementId);
+        }
+
+        return null;
+    }
+
+    private function paymentIsNewRentOut(?Agreement $agreement, string $sheetDate): bool
+    {
+        if (! $agreement || $agreement->isReplacementVehicle()) {
+            return false;
+        }
+
+        $agreement->loadMissing('status');
+
+        if (! $agreement->isBillableStatus()) {
+            return false;
+        }
+
+        if ($agreement->startedOnDate($sheetDate)) {
+            return true;
+        }
+
+        $createdDate = $agreement->created_at?->toDateString();
+        $startDate = $agreement->start_date?->toDateString();
+
+        return $createdDate === $sheetDate
+            && $startDate !== null
+            && $startDate >= $sheetDate;
     }
 
     /**
@@ -1055,6 +1170,31 @@ class DailyFinancialSheetService
             'account_number' => $otherPayment->bankAccount?->account_number,
             'amount' => (float) $otherPayment->amount,
             'posting_status' => $otherPayment->posting_status,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatReservationPaymentEntry(CarReservation $reservation): array
+    {
+        $clientName = $reservation->clientName();
+        $description = trim('Reservation #'.$reservation->id.' — '.$clientName);
+
+        return [
+            'id' => 'reservation-payment-'.$reservation->id,
+            'sort_at' => $reservation->created_at?->timestamp ?? 0,
+            'direction' => 'in',
+            'employee' => $reservation->createdBy?->name ?? '—',
+            'description' => $description,
+            'category' => 'Reservation payment',
+            'car_registration' => $reservation->car?->registration,
+            'payment_method' => $reservation->payment_method ?: 'Cash',
+            'bank_account_id' => $reservation->bank_account_id,
+            'bank_name' => $reservation->bankAccount?->bank_name,
+            'account_number' => $reservation->bankAccount?->account_number,
+            'amount' => (float) $reservation->amount_paid,
+            'posting_status' => $reservation->posting_status,
         ];
     }
 

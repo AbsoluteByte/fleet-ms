@@ -49,6 +49,10 @@
                                         >
                                             <td>
                                                 <strong>{{ $driver->selectOptionLabel() ?: 'N/A' }}</strong>
+                                                @if($payingCompany = $driver->primaryPayingCompanyName())
+                                                    <br>
+                                                    <span class="paying-company-subtitle d-block">Pays via: {{ $payingCompany }}</span>
+                                                @endif
                                             </td>
                                             <td>
                                                 @php
@@ -251,6 +255,11 @@
 
         #dataTable_filter input {
             margin-left: .5rem;
+        }
+
+        .paying-company-subtitle {
+            color: #6e6b7b;
+            font-size: 0.875rem;
         }
 
         .payments-filter-button {

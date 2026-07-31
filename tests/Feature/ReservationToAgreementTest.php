@@ -835,6 +835,7 @@ class ReservationToAgreementTest extends TestCase
         });
 
         Schema::table('drivers', function (Blueprint $table) {
+            $table->boolean('is_active')->default(true);
             $table->date('dob')->nullable();
             $table->string('address1')->nullable();
             $table->string('post_code')->nullable();
@@ -875,8 +876,11 @@ class ReservationToAgreementTest extends TestCase
             $table->decimal('amount_paid', 12, 2)->nullable();
             $table->string('payment_method')->nullable();
             $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->string('posting_status', 20)->nullable();
+            $table->unsignedBigInteger('converted_agreement_id')->nullable();
             $table->decimal('balance_payable_on_pickup', 12, 2)->nullable();
             $table->foreignId('created_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
         });
 
         Schema::create('bank_accounts', function (Blueprint $table) {
@@ -912,6 +916,17 @@ class ReservationToAgreementTest extends TestCase
             $table->date('payment_date')->nullable();
             $table->text('notes')->nullable();
             $table->boolean('is_auto_generated')->default(false);
+            $table->timestamps();
+        });
+
+        Schema::create('car_status_histories', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id');
+            $table->string('previous_status')->nullable();
+            $table->string('new_status');
+            $table->json('status_data')->nullable();
+            $table->unsignedBigInteger('changed_by')->nullable();
             $table->timestamps();
         });
     }

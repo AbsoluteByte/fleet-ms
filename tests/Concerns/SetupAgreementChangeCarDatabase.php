@@ -167,6 +167,8 @@ trait SetupAgreementChangeCarDatabase
             $table->text('termination_notes')->nullable();
             $table->unsignedBigInteger('termination_recorded_by')->nullable();
             $table->dateTime('closing_date')->nullable();
+            $table->string('refund_person_name', 255)->nullable();
+            $table->string('refund_account_number', 50)->nullable();
             $table->unsignedBigInteger('createdBy')->nullable();
             $table->unsignedBigInteger('updatedBy')->nullable();
             $table->timestamps();

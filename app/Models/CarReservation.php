@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,6 +12,14 @@ class CarReservation extends Model
 {
     use HasFactory;
     use SoftDeletes;
+
+    public const POSTING_STATUS_PENDING = 'pending';
+
+    public const POSTING_STATUS_POSTED = 'posted';
+
+    public const POSTING_STATUS_CANCELLED = 'cancelled';
+
+    public const POSTING_STATUS_CONVERTED = 'converted';
 
     protected $fillable = [
         'tenant_id',
@@ -29,6 +38,8 @@ class CarReservation extends Model
         'amount_paid',
         'payment_method',
         'bank_account_id',
+        'posting_status',
+        'converted_agreement_id',
         'balance_payable_on_pickup',
         'created_by',
     ];
@@ -210,5 +221,94 @@ class CarReservation extends Model
         $tenant = auth()->user()?->currentTenant();
 
         return $query->where('tenant_id', $tenant->id ?? 0);
+    }
+
+    public function convertedAgreement()
+    {
+        return $this->belongsTo(Agreement::class, 'converted_agreement_id');
+    }
+
+    public function hasFinancialSheetPayment(): bool
+    {
+        return (float) $this->amount_paid > 0;
+    }
+
+    public function isPendingFinancialSheet(): bool
+    {
+        return $this->posting_status === self::POSTING_STATUS_PENDING;
+    }
+
+    public function isPostedFinancialSheet(): bool
+    {
+        return $this->posting_status === self::POSTING_STATUS_POSTED;
+    }
+
+    public function scopePendingFinancialSheet(Builder $query): Builder
+    {
+        return $query
+            ->where('amount_paid', '>', 0)
+            ->where('posting_status', self::POSTING_STATUS_PENDING);
+    }
+
+    public function scopePostedFinancialSheet(Builder $query): Builder
+    {
+        return $query
+            ->where('amount_paid', '>', 0)
+            ->where('posting_status', self::POSTING_STATUS_POSTED);
+    }
+
+    public function scopeVisibleOnFinancialSheet(Builder $query): Builder
+    {
+        return $query
+            ->where('amount_paid', '>', 0)
+            ->whereIn('posting_status', [
+                self::POSTING_STATUS_PENDING,
+                self::POSTING_STATUS_POSTED,
+            ]);
+    }
+
+    public function syncFinancialSheetStatus(?float $previousAmountPaid = null): void
+    {
+        $amountPaid = round((float) $this->amount_paid, 2);
+        $previousAmountPaid = $previousAmountPaid === null
+            ? null
+            : round($previousAmountPaid, 2);
+
+        if ($amountPaid <= 0) {
+            if ($this->isPendingFinancialSheet()) {
+                $this->forceFill(['posting_status' => self::POSTING_STATUS_CANCELLED])->save();
+            }
+
+            return;
+        }
+
+        if ($this->isPostedFinancialSheet()) {
+            return;
+        }
+
+        if ($this->posting_status === null
+            || $this->posting_status === self::POSTING_STATUS_CANCELLED
+            || $this->posting_status === self::POSTING_STATUS_CONVERTED
+            || $this->isPendingFinancialSheet()
+            || ($previousAmountPaid !== null && $previousAmountPaid <= 0)) {
+            $this->forceFill(['posting_status' => self::POSTING_STATUS_PENDING])->save();
+        }
+    }
+
+    public function cancelPendingFinancialSheet(): void
+    {
+        if ($this->isPendingFinancialSheet()) {
+            $this->forceFill(['posting_status' => self::POSTING_STATUS_CANCELLED])->save();
+        }
+    }
+
+    public function markConvertedToAgreement(int $agreementId, bool $wasPosted): void
+    {
+        $this->forceFill([
+            'converted_agreement_id' => $agreementId,
+            'posting_status' => $wasPosted
+                ? self::POSTING_STATUS_POSTED
+                : self::POSTING_STATUS_CANCELLED,
+        ])->save();
     }
 }

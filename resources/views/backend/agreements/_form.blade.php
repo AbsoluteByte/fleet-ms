@@ -152,6 +152,30 @@
                 </div>
             </div>
 
+            <div class="col-md-6" id="agreement-refund-details-section" style="display: none;">
+                <div class="mb-3">
+                    <label for="refund_person_name" class="form-label">Refund Person Name</label>
+                    <input type="text" name="refund_person_name" id="refund_person_name"
+                           class="form-control @error('refund_person_name') is-invalid @enderror"
+                           value="{{ old('refund_person_name', isset($model) ? ($model->refund_person_name ?? $model->driver?->full_name ?? '') : '') }}">
+                    @error('refund_person_name')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="col-md-6" id="agreement-refund-account-section" style="display: none;">
+                <div class="mb-3">
+                    <label for="refund_account_number" class="form-label">Account Number</label>
+                    <input type="text" name="refund_account_number" id="refund_account_number"
+                           class="form-control @error('refund_account_number') is-invalid @enderror"
+                           value="{{ old('refund_account_number', isset($model) ? ($model->refund_account_number ?? '') : '') }}">
+                    @error('refund_account_number')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
             <div class="col-md-6" id="parent-agreement-section" style="display: none;">
                 <div class="mb-3">
                     <label for="parent_agreement_id" class="form-label">Original agreement *</label>
@@ -1646,13 +1670,51 @@
 
         function toggleClosingDateSection() {
             const section = document.getElementById('agreement-closing-section');
+            const refundNameSection = document.getElementById('agreement-refund-details-section');
+            const refundAccountSection = document.getElementById('agreement-refund-account-section');
             const show = isClosingStatusSelected();
 
             if (section) {
                 section.style.display = show ? '' : 'none';
             }
 
+            if (refundNameSection) {
+                refundNameSection.style.display = show ? '' : 'none';
+            }
+
+            if (refundAccountSection) {
+                refundAccountSection.style.display = show ? '' : 'none';
+            }
+
             setFieldRequired('closing_date', show);
+
+            if (show) {
+                prefillRefundPersonNameIfEmpty();
+            }
+        }
+
+        function selectedDriverDisplayName() {
+            const driverSelect = document.getElementById('driver_id');
+
+            if (!driverSelect || !driverSelect.selectedOptions.length) {
+                return '';
+            }
+
+            return String(driverSelect.selectedOptions[0].textContent || '').trim();
+        }
+
+        function prefillRefundPersonNameIfEmpty() {
+            const field = document.getElementById('refund_person_name');
+
+            if (!field || String(field.value || '').trim() !== '') {
+                return;
+            }
+
+            const driverName = selectedDriverDisplayName();
+
+            if (driverName) {
+                field.value = driverName;
+            }
         }
 
         function isReplacementVehicleStatusSelected() {
@@ -2304,6 +2366,7 @@
             });
             document.getElementById('driver_id')?.addEventListener('change', function() {
                 updateDriverActiveAgreementWarning();
+                prefillRefundPersonNameIfEmpty();
 
                 if (isReplacementVehicleStatusSelected()) {
                     populateOriginalAgreementOptions('parent_agreement_id', selectedParentAgreementId);
@@ -2318,6 +2381,7 @@
             if (typeof $ !== 'undefined') {
                 $('#driver_id').on('change', function() {
                     updateDriverActiveAgreementWarning();
+                    prefillRefundPersonNameIfEmpty();
 
                     if (isReplacementVehicleStatusSelected()) {
                         populateOriginalAgreementOptions('parent_agreement_id', selectedParentAgreementId);

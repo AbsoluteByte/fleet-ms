@@ -300,6 +300,81 @@ class PaymentsIndexTest extends TestCase
         $response->assertDontSee('text-danger', false);
     }
 
+    public function test_payments_index_shows_paying_company_name_below_driver(): void
+    {
+        $driver = $this->createDriver('Paying', 'Company', 'paying@example.com');
+        $car = $this->createCar('REGPAY');
+        Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $driver->id,
+            'car_id' => $car->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 300,
+            'collection_type' => 'weekly',
+            'status_id' => $this->activeAgreementStatus->id,
+            'paying_company_name' => 'Metro Cars PLC',
+        ]);
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertSee('<span class="paying-company-subtitle d-block">Pays via: Metro Cars PLC</span>', false);
+    }
+
+    public function test_payments_index_hides_paying_company_when_not_set(): void
+    {
+        $driver = $this->createDriver('No', 'PayingCo', 'no-paying@example.com');
+        $this->createAgreement($driver, $this->createCar('REGNOPAY'));
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertDontSee('<span class="paying-company-subtitle', false);
+    }
+
+    public function test_payments_index_uses_first_active_agreement_paying_company_only(): void
+    {
+        $driver = $this->createDriver('First', 'Only', 'first-only@example.com');
+        Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $driver->id,
+            'car_id' => $this->createCar('REGA')->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 300,
+            'collection_type' => 'weekly',
+            'status_id' => $this->activeAgreementStatus->id,
+            'paying_company_name' => 'First Company Ltd',
+        ]);
+        Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $driver->id,
+            'car_id' => $this->createCar('REGB')->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 300,
+            'collection_type' => 'weekly',
+            'status_id' => $this->activeAgreementStatus->id,
+            'paying_company_name' => 'Second Company Ltd',
+        ]);
+
+        $response = $this->get(route('payments.index'));
+
+        $response->assertOk();
+        $response->assertSee('Pays via: First Company Ltd');
+        $response->assertDontSee('Pays via: Second Company Ltd');
+    }
+
     private function setUpHttpTestExtras(): void
     {
         Schema::table('tenants', function (Blueprint $table) {
@@ -334,6 +409,7 @@ class PaymentsIndexTest extends TestCase
 
         Schema::table('agreements', function (Blueprint $table) {
             $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            $table->string('paying_company_name')->nullable();
         });
     }
 
