@@ -930,7 +930,7 @@
         ['payment_method' => '', 'bank_account_id' => '', 'payment_date' => now()->toDateString(), 'amount' => '', 'notes' => ''],
     ];
     if ($reservationPrefill && ($reservationPrefill['add_payment'] ?? false) && ! old('agreement_payments')) {
-        $defaultPaymentRows = [[
+        $defaultPaymentRows = $reservationPrefill['agreement_payment_rows'] ?? [[
             'payment_method' => $reservationPrefill['payment_method'] ?? '',
             'bank_account_id' => $reservationPrefill['bank_account_id'] ?? '',
             'payment_date' => $reservationPrefill['payment_date'] ?? now()->toDateString(),

@@ -663,6 +663,8 @@ class AgreementController extends Controller
         Agreement $model,
         $statuses
     ): array {
+        $reservation->loadMissing('reservationPayments');
+
         $driverId = (int) ($request->input('driver_id') ?: $reservation->driver_id);
         $carId = (int) ($request->input('car_id') ?: $reservation->car_id);
         $pickUpDate = $request->input('pick_up_date')
@@ -687,6 +689,27 @@ class AgreementController extends Controller
             $model->company_id = $car?->company_id;
         }
 
+        $agreementPaymentRows = $reservation->reservationPayments
+            ->map(fn ($payment) => [
+                'payment_method' => $payment->payment_method,
+                'bank_account_id' => $payment->bank_account_id,
+                'payment_date' => $pickUpDate,
+                'amount' => $payment->amount,
+                'notes' => 'Payment from reservation #'.$reservation->id,
+            ])
+            ->values()
+            ->all();
+
+        if ($agreementPaymentRows === [] && $amountPaid > 0) {
+            $agreementPaymentRows = [[
+                'payment_method' => $reservation->payment_method,
+                'bank_account_id' => $reservation->bank_account_id,
+                'payment_date' => $pickUpDate,
+                'amount' => $amountPaid,
+                'notes' => 'Payment from reservation #'.$reservation->id,
+            ]];
+        }
+
         return [
             'reservation_id' => $reservation->id,
             'amount_paid' => $amountPaid,
@@ -694,6 +717,7 @@ class AgreementController extends Controller
             'payment_date' => $pickUpDate,
             'payment_method' => $reservation->payment_method,
             'bank_account_id' => $reservation->bank_account_id,
+            'agreement_payment_rows' => $agreementPaymentRows,
         ];
     }
 

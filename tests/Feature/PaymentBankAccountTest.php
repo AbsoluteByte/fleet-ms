@@ -11,10 +11,12 @@ use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
+use Tests\Concerns\BuildsBatchPaymentPayload;
 use Tests\TestCase;
 
 class PaymentBankAccountTest extends TestCase
 {
+    use BuildsBatchPaymentPayload;
     private Tenant $tenant;
 
     private Tenant $otherTenant;
@@ -105,15 +107,17 @@ class PaymentBankAccountTest extends TestCase
 
     public function test_store_saves_bank_account_for_bank_transfer_payment(): void
     {
-        $response = $this->post(route('payments.store'), [
+        $response = $this->post(route('payments.store'), array_merge([
             'driver_id' => $this->driver->id,
-            'payment_method' => 'Bank Transfer',
-            'bank_account_id' => $this->bankAccount->id,
-            'payment_date' => now()->toDateString(),
-            'amount' => 100,
-            'notes' => 'Test payment',
             'auto_manage_invoices' => 1,
-        ]);
+        ], $this->batchPaymentsField([
+            [
+                'payment_method' => 'Bank Transfer',
+                'bank_account_id' => $this->bankAccount->id,
+                'amount' => 100,
+                'notes' => 'Test payment',
+            ],
+        ])));
 
         $response->assertRedirect(route('payments.driver', $this->driver->id));
 
@@ -127,63 +131,65 @@ class PaymentBankAccountTest extends TestCase
     public function test_store_requires_bank_account_for_bank_transfer(): void
     {
         $response = $this->from(route('payments.create'))
-            ->post(route('payments.store'), [
+            ->post(route('payments.store'), array_merge([
                 'driver_id' => $this->driver->id,
-                'payment_method' => 'Bank Transfer',
-                'payment_date' => now()->toDateString(),
-                'amount' => 100,
                 'auto_manage_invoices' => 1,
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Bank Transfer', 'amount' => 100],
+            ])));
 
         $response->assertRedirect(route('payments.create'));
-        $response->assertSessionHasErrors('bank_account_id');
+        $response->assertSessionHasErrors('payments.0.bank_account_id');
         $this->assertDatabaseCount('payments', 0);
     }
 
     public function test_store_rejects_bank_account_from_another_tenant(): void
     {
         $response = $this->from(route('payments.create'))
-            ->post(route('payments.store'), [
+            ->post(route('payments.store'), array_merge([
                 'driver_id' => $this->driver->id,
-                'payment_method' => 'Bank Transfer',
-                'bank_account_id' => $this->otherBankAccount->id,
-                'payment_date' => now()->toDateString(),
-                'amount' => 100,
                 'auto_manage_invoices' => 1,
-            ]);
+            ], $this->batchPaymentsField([
+                [
+                    'payment_method' => 'Bank Transfer',
+                    'bank_account_id' => $this->otherBankAccount->id,
+                    'amount' => 100,
+                ],
+            ])));
 
         $response->assertRedirect(route('payments.create'));
-        $response->assertSessionHasErrors('bank_account_id');
+        $response->assertSessionHasErrors('payments.0.bank_account_id');
         $this->assertDatabaseCount('payments', 0);
     }
 
     public function test_store_requires_bank_account_for_card_payment(): void
     {
         $response = $this->from(route('payments.create'))
-            ->post(route('payments.store'), [
+            ->post(route('payments.store'), array_merge([
                 'driver_id' => $this->driver->id,
-                'payment_method' => 'Card Payment',
-                'payment_date' => now()->toDateString(),
-                'amount' => 100,
                 'auto_manage_invoices' => 1,
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Card Payment', 'amount' => 100],
+            ])));
 
         $response->assertRedirect(route('payments.create'));
-        $response->assertSessionHasErrors('bank_account_id');
+        $response->assertSessionHasErrors('payments.0.bank_account_id');
         $this->assertDatabaseCount('payments', 0);
     }
 
     public function test_store_saves_bank_account_for_card_payment(): void
     {
-        $response = $this->post(route('payments.store'), [
+        $response = $this->post(route('payments.store'), array_merge([
             'driver_id' => $this->driver->id,
-            'payment_method' => 'Card Payment',
-            'bank_account_id' => $this->bankAccount->id,
-            'payment_date' => now()->toDateString(),
-            'amount' => 100,
-            'notes' => 'Card test payment',
             'auto_manage_invoices' => 1,
-        ]);
+        ], $this->batchPaymentsField([
+            [
+                'payment_method' => 'Card Payment',
+                'bank_account_id' => $this->bankAccount->id,
+                'amount' => 100,
+                'notes' => 'Card test payment',
+            ],
+        ])));
 
         $response->assertRedirect(route('payments.driver', $this->driver->id));
 

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\CarReservation;
+use App\Models\CarReservationPayment;
 use App\Models\Company;
 use App\Models\Driver;
 use App\Models\Status;
@@ -36,6 +37,7 @@ class ReservationToAgreementTest extends TestCase
     protected function tearDown(): void
     {
         Carbon::setTestNow();
+        Schema::dropIfExists('car_reservation_payments');
         Schema::dropIfExists('bank_accounts');
         Schema::dropIfExists('agreement_collections');
         Schema::dropIfExists('car_status_histories');
@@ -828,6 +830,180 @@ class ReservationToAgreementTest extends TestCase
         ]);
     }
 
+    public function test_multi_row_reservation_prefills_and_creates_multiple_agreement_payments(): void
+    {
+        $tenant = Tenant::query()->create([
+            'company_name' => 'Multi Pay Tenant',
+            'status' => Tenant::STATUS_ACTIVE,
+        ]);
+        $company = Company::query()->create(['tenant_id' => $tenant->id, 'name' => 'Co']);
+        $driver = Driver::query()->create($this->agreementReadyDriverAttributes($tenant->id, [
+            'first_name' => 'Multi',
+            'last_name' => 'Pay',
+            'email' => 'multi-pay@example.com',
+            'phone_number' => '07000000099',
+            'driver_license_number' => 'LIC000099',
+        ]));
+
+        $bankAccountId = DB::table('bank_accounts')->insertGetId([
+            'tenant_id' => $tenant->id,
+            'company_id' => $company->id,
+            'bank_name' => 'Barclays',
+            'account_number' => '11223344',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $carModelId = DB::table('car_models')->insertGetId([
+            'tenant_id' => $tenant->id,
+            'name' => 'Test Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $counselId = DB::table('counsels')->insertGetId([
+            'name' => 'Test Counsel',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $car = Car::query()->create([
+            'tenant_id' => $tenant->id,
+            'company_id' => $company->id,
+            'car_model_id' => $carModelId,
+            'registration' => 'MULTI01',
+            'color' => 'Black',
+            'vin' => 'VINMULTI01',
+            'manufacture_year' => 2020,
+            'registration_year' => 2020,
+            'purchase_date' => '2020-01-01',
+            'purchase_price' => 10000,
+            'purchase_type' => 'uk',
+            'fleet_status' => 'reserved',
+            'sorn_applied' => false,
+        ]);
+
+        foreach (['car_mots', 'car_road_taxes', 'car_phvs'] as $table) {
+            if ($table === 'car_mots') {
+                DB::table($table)->insert([
+                    'car_id' => $car->id,
+                    'expiry_date' => '2027-01-01',
+                    'amount' => 50,
+                    'term' => '12 months',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } elseif ($table === 'car_road_taxes') {
+                DB::table($table)->insert([
+                    'car_id' => $car->id,
+                    'start_date' => '2026-01-01',
+                    'term' => '12 months',
+                    'amount' => 200,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } else {
+                DB::table($table)->insert([
+                    'car_id' => $car->id,
+                    'counsel_id' => $counselId,
+                    'amount' => 100,
+                    'start_date' => '2026-01-01',
+                    'expiry_date' => '2027-01-01',
+                    'notify_before_expiry' => 30,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
+
+        $activeStatus = Status::query()->create(['name' => 'Active', 'type' => 'agreement']);
+
+        $user = User::factory()->create();
+        $user->tenants()->attach($tenant->id, [
+            'role' => 'admin',
+            'is_primary' => true,
+            'joined_at' => now(),
+        ]);
+        $this->actingAs($user);
+        $user->switchTenant($tenant->id);
+
+        $reservation = CarReservation::query()->create([
+            'tenant_id' => $tenant->id,
+            'car_id' => $car->id,
+            'driver_id' => $driver->id,
+            'customer_name' => 'Multi Pay',
+            'reservation_date' => '2026-06-25',
+            'pick_up_date' => '2026-06-30',
+            'agreed_rent' => 150,
+            'agreed_advance' => 200,
+            'amount_paid' => 150,
+            'balance_payable_on_pickup' => 200,
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        CarReservationPayment::query()->create([
+            'car_reservation_id' => $reservation->id,
+            'payment_method' => 'Cash',
+            'amount' => 50,
+            'posting_status' => CarReservationPayment::POSTING_STATUS_PENDING,
+        ]);
+        CarReservationPayment::query()->create([
+            'car_reservation_id' => $reservation->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $bankAccountId,
+            'amount' => 100,
+            'posting_status' => CarReservationPayment::POSTING_STATUS_PENDING,
+        ]);
+
+        $response = $this->from(route('agreements.create'))
+            ->post(route('agreements.store'), [
+                'reservation_id' => $reservation->id,
+                'company_id' => $company->id,
+                'driver_id' => $driver->id,
+                'car_id' => $car->id,
+                'start_date' => '2026-06-30T09:00',
+                'end_date' => '2027-06-30',
+                'agreed_rent' => 150,
+                'rent_interval' => 'Weekly',
+                'collection_type' => 'weekly',
+                'deposit_amount' => 200,
+                'status_id' => $activeStatus->id,
+                'add_payment' => 1,
+                'agreement_payments' => [
+                    [
+                        'payment_method' => 'Cash',
+                        'payment_date' => '2026-06-30',
+                        'amount' => 50,
+                        'notes' => 'Payment from reservation #'.$reservation->id,
+                    ],
+                    [
+                        'payment_method' => 'Bank Transfer',
+                        'bank_account_id' => $bankAccountId,
+                        'payment_date' => '2026-06-30',
+                        'amount' => 100,
+                        'notes' => 'Payment from reservation #'.$reservation->id,
+                    ],
+                ],
+            ]);
+
+        $response->assertRedirect(route('agreements.index'));
+        $response->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertDatabaseHas('payments', [
+            'driver_id' => $driver->id,
+            'payment_method' => 'Cash',
+            'amount' => 50,
+        ]);
+        $this->assertDatabaseHas('payments', [
+            'driver_id' => $driver->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $bankAccountId,
+            'amount' => 100,
+        ]);
+    }
+
     private function setUpHttpTestExtras(): void
     {
         Schema::table('tenants', function (Blueprint $table) {
@@ -891,6 +1067,16 @@ class ReservationToAgreementTest extends TestCase
             $table->string('account_number', 50);
             $table->unsignedBigInteger('createdBy')->nullable();
             $table->unsignedBigInteger('updatedBy')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('car_reservation_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('car_reservation_id');
+            $table->string('payment_method')->nullable();
+            $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('posting_status', 20)->default('pending');
             $table->timestamps();
         });
 

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\CarReservation;
+use App\Models\CarReservationPayment;
 use App\Models\Company;
 use App\Models\DailyFinancialSheet;
 use App\Models\Driver;
@@ -18,11 +19,13 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
+use Tests\Concerns\BuildsBatchPaymentPayload;
 use Tests\Concerns\SetupAgreementChangeCarDatabase;
 use Tests\TestCase;
 
 class ReservationFinancialSheetTest extends TestCase
 {
+    use BuildsBatchPaymentPayload;
     use SetupAgreementChangeCarDatabase;
 
     private Tenant $tenant;
@@ -146,6 +149,7 @@ class ReservationFinancialSheetTest extends TestCase
     {
         Carbon::setTestNow();
 
+        Schema::dropIfExists('car_reservation_payments');
         Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('daily_financial_sheets');
         Schema::dropIfExists('financial_sheet_adjustments');
@@ -168,7 +172,7 @@ class ReservationFinancialSheetTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('reservations.store'), [
+        $response = $this->post(route('reservations.store'), array_merge([
             'driver_mode' => 'existing',
             'driver_id' => $this->driver->id,
             'car_id' => $this->car->id,
@@ -177,8 +181,9 @@ class ReservationFinancialSheetTest extends TestCase
             'agreed_rent' => 150,
             'agreed_advance' => 200,
             'amount_paid' => 75,
-            'payment_method' => 'Cash',
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 75],
+        ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.index'));
 
@@ -188,7 +193,7 @@ class ReservationFinancialSheetTest extends TestCase
 
         $service = app(DailyFinancialSheetService::class);
         $entries = $service->entriesForDate($this->tenant->id, '2026-06-25');
-        $entry = $entries->firstWhere('id', 'reservation-payment-'.$reservation->id);
+        $entry = $entries->firstWhere('id', $this->reservationPaymentEntryId($reservation));
 
         $this->assertNotNull($entry);
         $this->assertSame('Reservation payment', $entry['category']);
@@ -233,7 +238,7 @@ class ReservationFinancialSheetTest extends TestCase
             $this->tenant->id,
             '2026-06-25',
             $this->approver->id,
-            ['reservation-payment-'.$reservation->id]
+            [$this->reservationPaymentEntryId($reservation)]
         );
 
         $this->assertSame(
@@ -244,7 +249,7 @@ class ReservationFinancialSheetTest extends TestCase
         $pendingEntries = $service->entriesForDate($this->tenant->id, '2026-06-25')
             ->where('posting_status', Payment::POSTING_STATUS_PENDING);
 
-        $this->assertFalse($pendingEntries->contains('id', 'reservation-payment-'.$reservation->id));
+        $this->assertFalse($pendingEntries->contains('id', $this->reservationPaymentEntryId($reservation)));
     }
 
     public function test_update_reservation_amount_while_pending_updates_financial_sheet_entry(): void
@@ -256,7 +261,7 @@ class ReservationFinancialSheetTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->put(route('reservations.update', $reservation), [
+        $response = $this->put(route('reservations.update', $reservation), array_merge([
             'driver_mode' => 'existing',
             'driver_id' => $this->driver->id,
             'car_id' => $this->car->id,
@@ -265,14 +270,17 @@ class ReservationFinancialSheetTest extends TestCase
             'agreed_rent' => 150,
             'agreed_advance' => 200,
             'amount_paid' => 100,
-            'payment_method' => 'Cash',
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 100],
+        ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.index'));
 
+        $reservation->refresh()->load('reservationPayments');
+
         $service = app(DailyFinancialSheetService::class);
         $entry = $service->entriesForDate($this->tenant->id, '2026-06-25')
-            ->firstWhere('id', 'reservation-payment-'.$reservation->id);
+            ->firstWhere('id', $this->reservationPaymentEntryId($reservation));
 
         $this->assertNotNull($entry);
         $this->assertEquals(100.0, $entry['amount']);
@@ -331,7 +339,7 @@ class ReservationFinancialSheetTest extends TestCase
         $this->assertFalse($agreementDateEntries->contains('id', 'payment-'.$payment->id));
 
         $reservationDateEntries = $service->entriesForDate($this->tenant->id, '2026-06-25');
-        $this->assertTrue($reservationDateEntries->contains('id', 'reservation-payment-'.$reservation->id));
+        $this->assertTrue($reservationDateEntries->contains('id', $this->reservationPaymentEntryId($reservation)));
 
         $this->assertSame($agreement->id, CarReservation::withTrashed()->find($reservation->id)?->converted_agreement_id);
     }
@@ -382,7 +390,7 @@ class ReservationFinancialSheetTest extends TestCase
         $service = app(DailyFinancialSheetService::class);
         $reservationDateEntries = $service->entriesForDate($this->tenant->id, '2026-06-25')
             ->where('posting_status', Payment::POSTING_STATUS_PENDING);
-        $this->assertFalse($reservationDateEntries->contains('id', 'reservation-payment-'.$reservation->id));
+        $this->assertFalse($reservationDateEntries->contains('id', $this->reservationPaymentEntryId($reservation)));
 
         $payment = Payment::query()->first();
         $this->assertNotNull($payment);
@@ -392,12 +400,47 @@ class ReservationFinancialSheetTest extends TestCase
         $this->assertTrue($agreementDateEntries->contains('id', 'payment-'.$payment->id));
     }
 
+    public function test_batch_reservation_payments_create_two_financial_sheet_entries(): void
+    {
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->post(route('reservations.store'), array_merge([
+            'driver_mode' => 'existing',
+            'driver_id' => $this->driver->id,
+            'car_id' => $this->car->id,
+            'reservation_date' => '2026-06-25',
+            'pick_up_date' => '2026-06-30',
+            'agreed_rent' => 150,
+            'agreed_advance' => 200,
+            'amount_paid' => 125,
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 50],
+            ['payment_method' => 'Cash', 'amount' => 75],
+        ], 'reservation_payments')));
+
+        $response->assertRedirect(route('reservations.index'));
+
+        $reservation = CarReservation::query()->with('reservationPayments')->first();
+        $this->assertCount(2, $reservation->reservationPayments);
+
+        $service = app(DailyFinancialSheetService::class);
+        $entries = $service->entriesForDate($this->tenant->id, '2026-06-25')
+            ->filter(fn (array $entry) => str_starts_with($entry['id'], 'reservation-payment-'));
+
+        $this->assertCount(2, $entries);
+        $this->assertEquals(125.0, $entries->sum('amount'));
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
     private function createReservation(array $overrides = []): CarReservation
     {
-        return CarReservation::query()->create(array_merge([
+        $postingStatus = $overrides['posting_status'] ?? CarReservation::POSTING_STATUS_PENDING;
+        unset($overrides['posting_status']);
+
+        $reservation = CarReservation::query()->create(array_merge([
             'tenant_id' => $this->tenant->id,
             'car_id' => $this->car->id,
             'driver_id' => $this->driver->id,
@@ -412,7 +455,26 @@ class ReservationFinancialSheetTest extends TestCase
             'balance_payable_on_pickup' => 275,
             'status' => 'active',
             'created_by' => $this->employee->id,
+            'posting_status' => $postingStatus,
         ], $overrides));
+
+        CarReservationPayment::query()->create([
+            'car_reservation_id' => $reservation->id,
+            'payment_method' => 'Cash',
+            'amount' => $reservation->amount_paid,
+            'posting_status' => $postingStatus,
+        ]);
+
+        return $reservation->fresh(['reservationPayments']);
+    }
+
+    private function reservationPaymentEntryId(CarReservation $reservation): string
+    {
+        $paymentId = $reservation->relationLoaded('reservationPayments')
+            ? $reservation->reservationPayments->first()?->id
+            : CarReservationPayment::query()->where('car_reservation_id', $reservation->id)->value('id');
+
+        return 'reservation-payment-'.$paymentId;
     }
 
     private function setUpHttpTestExtras(): void
@@ -486,6 +548,16 @@ class ReservationFinancialSheetTest extends TestCase
             $table->decimal('balance_payable_on_pickup', 12, 2)->nullable();
             $table->foreignId('created_by')->nullable();
             $table->unsignedBigInteger('deleted_by')->nullable();
+        });
+
+        Schema::create('car_reservation_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('car_reservation_id');
+            $table->string('payment_method')->nullable();
+            $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('posting_status', 20)->default('pending');
+            $table->timestamps();
         });
 
         Schema::create('bank_accounts', function (Blueprint $table) {

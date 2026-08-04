@@ -98,15 +98,9 @@
                                                 @enderror
                                             </div>
                                             <div class="col-md-4 form-group">
-                                                <label for="amount_paid">Amount paid <span
-                                                            class="text-danger">*</span></label>
-                                                <input type="number" name="amount_paid" id="amount_paid"
-                                                       class="form-control @error('amount_paid') is-invalid @enderror"
-                                                       step="0.01" min="0" required
-                                                       value="{{ old('amount_paid') }}">
-                                                @error('amount_paid')
-                                                <div class="invalid-feedback">{{ $message }}</div>
-                                                @enderror
+                                                <label for="amount_paid_display">Amount paid</label>
+                                                <input type="text" id="amount_paid_display" class="form-control" readonly tabindex="-1" value="">
+                                                <small class="text-muted">Total of deposit payment rows below.</small>
                                             </div>
                                             @include('backend.reservations._payment_fields', [
                                                 'bankAccounts' => $bankAccounts,
@@ -160,9 +154,10 @@
                 const rent = parseMoney('#agreed_rent');
                 const advance = parseMoney('#agreed_advance');
                 const paid = parseMoney('#amount_paid');
-                const hasAny = ['#agreed_rent', '#agreed_advance', '#amount_paid'].some(function (sel) {
+                const hasAny = ['#agreed_rent', '#agreed_advance'].some(function (sel) {
                     return String($(sel).val()).trim() !== '';
-                });
+                }) || paid > 0;
+                $('#amount_paid_display').val(paid > 0 ? paid.toFixed(2) : '');
                 if (!hasAny) {
                     $('#balance_payable_on_pickup_display').val('');
                     return;
@@ -171,7 +166,9 @@
                 $('#balance_payable_on_pickup_display').val(bal.toFixed(2));
             }
 
-            $('#agreed_rent, #agreed_advance, #amount_paid').on('input change', refreshBalanceDisplay);
+            window.refreshReservationBalanceDisplay = refreshBalanceDisplay;
+
+            $('#agreed_rent, #agreed_advance').on('input change', refreshBalanceDisplay);
             refreshBalanceDisplay();
         });
     </script>

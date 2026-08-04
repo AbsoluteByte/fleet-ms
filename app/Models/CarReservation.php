@@ -150,6 +150,101 @@ class CarReservation extends Model
         return $this->belongsTo(BankAccount::class);
     }
 
+    public function reservationPayments()
+    {
+        return $this->hasMany(CarReservationPayment::class);
+    }
+
+    public function totalReservationPaymentsAmount(): float
+    {
+        if ($this->relationLoaded('reservationPayments')) {
+            return round((float) $this->reservationPayments->sum('amount'), 2);
+        }
+
+        return round((float) $this->reservationPayments()->sum('amount'), 2);
+    }
+
+    /**
+     * @param  list<array{payment_method: string, bank_account_id: ?int, amount: float}>  $paymentRows
+     */
+    public function syncReservationPayments(array $paymentRows): void
+    {
+        $this->reservationPayments()->delete();
+
+        foreach ($paymentRows as $paymentRow) {
+            $this->reservationPayments()->create([
+                'payment_method' => $paymentRow['payment_method'],
+                'bank_account_id' => $paymentRow['bank_account_id'],
+                'amount' => $paymentRow['amount'],
+                'posting_status' => CarReservationPayment::POSTING_STATUS_PENDING,
+            ]);
+        }
+
+        $amountPaid = round(array_sum(array_column($paymentRows, 'amount')), 2);
+        $legacyMethod = count($paymentRows) === 1 ? ($paymentRows[0]['payment_method'] ?? null) : null;
+        $legacyBankAccountId = count($paymentRows) === 1 ? ($paymentRows[0]['bank_account_id'] ?? null) : null;
+
+        $this->forceFill([
+            'amount_paid' => $amountPaid,
+            'payment_method' => $amountPaid > 0 ? $legacyMethod : null,
+            'bank_account_id' => $amountPaid > 0 ? $legacyBankAccountId : null,
+        ])->save();
+    }
+
+    public function cancelPendingReservationPayments(): void
+    {
+        $this->reservationPayments()
+            ->pendingFinancialSheet()
+            ->update(['posting_status' => CarReservationPayment::POSTING_STATUS_CANCELLED]);
+
+        $this->syncParentPostingStatusFromPayments();
+    }
+
+    public function markReservationPaymentsConverted(bool $wasPosted): void
+    {
+        $targetStatus = $wasPosted
+            ? CarReservationPayment::POSTING_STATUS_POSTED
+            : CarReservationPayment::POSTING_STATUS_CANCELLED;
+
+        $this->reservationPayments()
+            ->whereIn('posting_status', [
+                CarReservationPayment::POSTING_STATUS_PENDING,
+                CarReservationPayment::POSTING_STATUS_POSTED,
+            ])
+            ->update(['posting_status' => $targetStatus]);
+
+        $this->syncParentPostingStatusFromPayments();
+    }
+
+    public function syncParentPostingStatusFromPayments(): void
+    {
+        $payments = $this->reservationPayments()->get();
+
+        if ($payments->isEmpty() || (float) $this->amount_paid <= 0) {
+            if ($this->isPendingFinancialSheet()) {
+                $this->forceFill(['posting_status' => self::POSTING_STATUS_CANCELLED])->save();
+            }
+
+            return;
+        }
+
+        if ($payments->every(fn (CarReservationPayment $payment) => $payment->posting_status === CarReservationPayment::POSTING_STATUS_CANCELLED)) {
+            $this->forceFill(['posting_status' => self::POSTING_STATUS_CANCELLED])->save();
+
+            return;
+        }
+
+        if ($payments->every(fn (CarReservationPayment $payment) => $payment->isPostedFinancialSheet())) {
+            $this->forceFill(['posting_status' => self::POSTING_STATUS_POSTED])->save();
+
+            return;
+        }
+
+        if ($payments->contains(fn (CarReservationPayment $payment) => $payment->isPendingFinancialSheet())) {
+            $this->forceFill(['posting_status' => self::POSTING_STATUS_PENDING])->save();
+        }
+    }
+
     public function clientName(): string
     {
         if ($this->relationLoaded('driver') || $this->driver_id) {
@@ -275,6 +370,8 @@ class CarReservation extends Model
             : round($previousAmountPaid, 2);
 
         if ($amountPaid <= 0) {
+            $this->cancelPendingReservationPayments();
+
             if ($this->isPendingFinancialSheet()) {
                 $this->forceFill(['posting_status' => self::POSTING_STATUS_CANCELLED])->save();
             }
@@ -292,11 +389,17 @@ class CarReservation extends Model
             || $this->isPendingFinancialSheet()
             || ($previousAmountPaid !== null && $previousAmountPaid <= 0)) {
             $this->forceFill(['posting_status' => self::POSTING_STATUS_PENDING])->save();
+
+            $this->reservationPayments()
+                ->where('posting_status', CarReservationPayment::POSTING_STATUS_CANCELLED)
+                ->update(['posting_status' => CarReservationPayment::POSTING_STATUS_PENDING]);
         }
     }
 
     public function cancelPendingFinancialSheet(): void
     {
+        $this->cancelPendingReservationPayments();
+
         if ($this->isPendingFinancialSheet()) {
             $this->forceFill(['posting_status' => self::POSTING_STATUS_CANCELLED])->save();
         }
@@ -304,6 +407,8 @@ class CarReservation extends Model
 
     public function markConvertedToAgreement(int $agreementId, bool $wasPosted): void
     {
+        $this->markReservationPaymentsConverted($wasPosted);
+
         $this->forceFill([
             'converted_agreement_id' => $agreementId,
             'posting_status' => $wasPosted

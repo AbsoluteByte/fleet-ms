@@ -24,81 +24,97 @@
                 @enderror
             </div>
 
-            <div class="col-md-6 mb-2">
-                <label for="payment_date" class="form-label">Payment Date <span class="text-danger">*</span></label>
-                <input type="date" name="payment_date" id="payment_date"
-                       class="form-control @error('payment_date') is-invalid @enderror"
-                       value="{{ old('payment_date', optional($model->payment_date)->toDateString() ?? now()->toDateString()) }}" required>
-                @error('payment_date')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
+            @if($isEdit ?? false)
+                <div class="col-md-6 mb-2">
+                    <label for="payment_date" class="form-label">Payment Date <span class="text-danger">*</span></label>
+                    <input type="date" name="payment_date" id="payment_date"
+                           class="form-control @error('payment_date') is-invalid @enderror"
+                           value="{{ old('payment_date', optional($model->payment_date)->toDateString() ?? now()->toDateString()) }}" required>
+                    @error('payment_date')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
 
-            <div class="col-md-6 mb-2">
-                <label for="payment_method" class="form-label">Payment Method <span class="text-danger">*</span></label>
-                @php
-                    $selectedPaymentMethod = old('payment_method', $model->payment_method ?? '');
-                    $paymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
-                    $defaultCardBankAccountId = ($bankAccounts ?? collect())->firstWhere(
-                        'account_number',
-                        \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER
-                    )?->id;
-                    $selectedBankAccountId = old(
-                        'bank_account_id',
-                        $model->bank_account_id
-                            ?? ($selectedPaymentMethod === 'Card Payment' ? $defaultCardBankAccountId : null)
-                    );
-                @endphp
-                <select name="payment_method" id="payment_method"
-                        class="form-control @error('payment_method') is-invalid @enderror" required>
-                    <option value="">Select Method</option>
-                    @foreach($paymentMethods as $paymentMethod)
-                        <option value="{{ $paymentMethod }}" {{ $selectedPaymentMethod === $paymentMethod ? 'selected' : '' }}>
-                            {{ $paymentMethod }}
-                        </option>
-                    @endforeach
-                </select>
-                @error('payment_method')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
+                <div class="col-md-6 mb-2">
+                    <label for="payment_method" class="form-label">Payment Method <span class="text-danger">*</span></label>
+                    @php
+                        $selectedPaymentMethod = old('payment_method', $model->payment_method ?? '');
+                        $paymentMethods = \App\Support\BatchPaymentInput::PAYMENT_METHODS;
+                        $defaultCardBankAccountId = ($bankAccounts ?? collect())->firstWhere(
+                            'account_number',
+                            \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER
+                        )?->id;
+                        $selectedBankAccountId = old(
+                            'bank_account_id',
+                            $model->bank_account_id
+                                ?? ($selectedPaymentMethod === 'Card Payment' ? $defaultCardBankAccountId : null)
+                        );
+                    @endphp
+                    <select name="payment_method" id="payment_method"
+                            class="form-control @error('payment_method') is-invalid @enderror" required>
+                        <option value="">Select Method</option>
+                        @foreach($paymentMethods as $paymentMethod)
+                            <option value="{{ $paymentMethod }}" {{ $selectedPaymentMethod === $paymentMethod ? 'selected' : '' }}>
+                                {{ $paymentMethod }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('payment_method')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
 
-            <div class="col-md-6 mb-2">
-                @include('backend.payments.partials.bank-account-select', [
-                    'bankAccounts' => $bankAccounts ?? collect(),
-                    'selected' => $selectedBankAccountId,
-                    'name' => 'bank_account_id',
-                    'id' => 'bank_account_id',
-                    'errorKey' => 'bank_account_id',
-                    'wrapperClass' => 'bank-account-field d-none',
-                ])
-            </div>
+                <div class="col-md-6 mb-2">
+                    @include('backend.payments.partials.bank-account-select', [
+                        'bankAccounts' => $bankAccounts ?? collect(),
+                        'selected' => $selectedBankAccountId,
+                        'name' => 'bank_account_id',
+                        'id' => 'bank_account_id',
+                        'errorKey' => 'bank_account_id',
+                        'wrapperClass' => 'bank-account-field d-none',
+                    ])
+                </div>
 
-            <div class="col-md-6 mb-2">
-                <label for="amount" class="form-label">Amount <span class="text-danger">*</span></label>
-                <input type="number" name="amount" id="amount"
-                       class="form-control @error('amount') is-invalid @enderror"
-                       value="{{ old('amount', $model->amount ?? '') }}"
-                       min="0.01" step="0.01" placeholder="0.00" required>
-                @error('amount')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
+                <div class="col-md-6 mb-2">
+                    <label for="amount" class="form-label">Amount <span class="text-danger">*</span></label>
+                    <input type="number" name="amount" id="amount"
+                           class="form-control @error('amount') is-invalid @enderror"
+                           value="{{ old('amount', $model->amount ?? '') }}"
+                           min="0.01" step="0.01" placeholder="0.00" required>
+                    @error('amount')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
 
-            <div class="col-12 mb-2">
-                <label for="notes" class="form-label">Notes</label>
-                <textarea name="notes" id="notes" rows="3"
-                          class="form-control @error('notes') is-invalid @enderror"
-                          placeholder="Optional payment notes">{{ old('notes', $model->notes ?? '') }}</textarea>
-                @error('notes')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
-            </div>
+                <div class="col-12 mb-2">
+                    <label for="notes" class="form-label">Notes</label>
+                    <textarea name="notes" id="notes" rows="3"
+                              class="form-control @error('notes') is-invalid @enderror"
+                              placeholder="Optional payment notes">{{ old('notes', $model->notes ?? '') }}</textarea>
+                    @error('notes')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            @else
+                <div class="col-12 mb-2">
+                    <p class="text-muted mb-2">
+                        Add one or more payments if the driver paid using different methods (for example, part cash and part bank transfer).
+                    </p>
+                    @include('backend.payments.partials.batch-payment-rows', [
+                        'fieldName' => 'payments',
+                        'containerId' => 'driver-payments',
+                        'bankAccounts' => $bankAccounts ?? collect(),
+                        'helpText' => 'Each payment row is recorded separately on the daily financial sheet.',
+                        'onAmountChangeCallback' => 'refreshDriverPaymentAllocationPreview',
+                        'onRowCountChangeCallback' => 'handleDriverPaymentRowCountChange',
+                    ])
+                </div>
+            @endif
         </div>
     </div>
 </div>
 
-<div class="card mb-1">
+<div class="card mb-1" id="invoice-allocation-card">
     <div class="card-header" style="position: static; width: 100%; z-index: unset; border-bottom: 0 !important; padding-bottom: 0 !important;">
         <h5 class="card-title mb-0">
             <i class="fa fa-random"></i> Invoice Allocation
@@ -110,14 +126,17 @@
                 Allocations for posted payments are recalculated automatically when you save, using the same rules as when the payment was posted.
             </div>
         @else
+        <div id="batch-allocation-notice" class="alert alert-info" style="display: none;">
+            Multiple payments will auto-allocate to invoices in the order they are listed above.
+        </div>
         <input type="hidden" name="auto_manage_invoices" value="0">
-        <div class="custom-control custom-checkbox mb-2">
+        <div class="custom-control custom-checkbox mb-2" id="auto-manage-wrapper">
             <input type="checkbox" class="custom-control-input" id="auto_manage_invoices"
                    name="auto_manage_invoices" value="1"
                 {{ old('auto_manage_invoices', ($model->auto_allocate ?? true) ? '1' : '0') ? 'checked' : '' }}>
             <label class="custom-control-label" for="auto_manage_invoices">Auto manage invoices</label>
         </div>
-        <p class="text-muted">
+        <p class="text-muted" id="auto-manage-help">
             When enabled, this payment will automatically clear the oldest active invoices first. Any extra amount remains as driver credit.
         </p>
 
@@ -203,6 +222,7 @@
 @push('js')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const isEdit = @json($isEdit ?? false);
             const driverSelect = document.getElementById('driver_id');
             const paymentMethodSelect = document.getElementById('payment_method');
             const bankAccountField = document.querySelector('[data-bank-account-field]');
@@ -214,13 +234,34 @@
             const allocationRows = document.querySelectorAll('#allocation-section tbody tr[data-invoice-balance]');
             const allocationSummary = document.getElementById('allocation-summary');
             const manualAllocationWarning = document.getElementById('manual-allocation-warning');
+            const batchAllocationNotice = document.getElementById('batch-allocation-notice');
+            const autoManageWrapper = document.getElementById('auto-manage-wrapper');
+            const autoManageHelp = document.getElementById('auto-manage-help');
 
             function money(value) {
                 return '£' + Number(value || 0).toFixed(2);
             }
 
+            function currentPaymentAmount() {
+                if (isEdit) {
+                    return Number(amountInput?.value || 0);
+                }
+
+                if (!window.BatchPaymentRows) {
+                    return 0;
+                }
+
+                let total = 0;
+                window.BatchPaymentRows.rows('driver-payments').forEach(function (row) {
+                    const input = row.querySelector('[data-payment-amount]');
+                    total += Number(input?.value || 0);
+                });
+
+                return total;
+            }
+
             function updateAutoAllocationPreview() {
-                let remainingAmount = Number(amountInput?.value || 0);
+                let remainingAmount = currentPaymentAmount();
                 let allocatedTotal = 0;
 
                 allocationRows.forEach(function (row) {
@@ -263,7 +304,7 @@
             }
 
             function updateManualAllocationLimits(changedInput = null) {
-                const paymentAmount = Number(amountInput?.value || 0);
+                const paymentAmount = currentPaymentAmount();
                 let showWarning = false;
 
                 manualInputs.forEach(function (input) {
@@ -299,7 +340,7 @@
 
                 const needsBank = paymentMethodSelect.value === 'Bank Transfer'
                     || paymentMethodSelect.value === 'Card Payment';
-                const defaultCardBankId = @json($defaultCardBankAccountId ?? null);
+                const defaultCardBankId = @json(($bankAccounts ?? collect())->firstWhere('account_number', \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER)?->id);
                 bankAccountField.classList.toggle('d-none', !needsBank);
 
                 if (bankAccountSelect) {
@@ -312,6 +353,44 @@
                     }
                 }
             }
+
+            window.refreshDriverPaymentAllocationPreview = function () {
+                updateAutoAllocationPreview();
+                updateManualAllocationLimits();
+            };
+
+            window.handleDriverPaymentRowCountChange = function (count) {
+                const isBatch = count > 1;
+
+                if (batchAllocationNotice) {
+                    batchAllocationNotice.style.display = isBatch ? 'block' : 'none';
+                }
+
+                if (autoManageWrapper) {
+                    autoManageWrapper.style.display = isBatch ? 'none' : '';
+                }
+
+                if (autoManageHelp) {
+                    autoManageHelp.style.display = isBatch ? 'none' : '';
+                }
+
+                if (autoManage) {
+                    if (isBatch) {
+                        autoManage.checked = true;
+                    }
+                    autoManage.disabled = isBatch;
+                }
+
+                manualColumns.forEach(function (column) {
+                    column.style.display = isBatch || autoManage.checked ? 'none' : '';
+                });
+
+                manualInputs.forEach(function (input) {
+                    input.disabled = isBatch || autoManage.checked;
+                });
+
+                updateAutoAllocationPreview();
+            };
 
             if (paymentMethodSelect) {
                 paymentMethodSelect.addEventListener('change', toggleBankAccountField);
@@ -330,18 +409,27 @@
                 });
             }
 
-            autoManage.addEventListener('change', toggleManualAllocation);
+            if (autoManage) {
+                autoManage.addEventListener('change', toggleManualAllocation);
+            }
+
             amountInput?.addEventListener('input', function () {
                 updateAutoAllocationPreview();
                 updateManualAllocationLimits();
             });
+
             manualInputs.forEach(function (input) {
                 input.addEventListener('input', function () {
                     updateManualAllocationLimits(input);
                 });
             });
+
             toggleManualAllocation();
             updateAutoAllocationPreview();
+
+            if (!isEdit && window.BatchPaymentRows) {
+                window.handleDriverPaymentRowCountChange(window.BatchPaymentRows.rows('driver-payments').length);
+            }
         });
     </script>
 @endpush

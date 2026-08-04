@@ -7,8 +7,10 @@ use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\Expense;
 use App\Models\Payment;
+use App\Support\BatchPaymentInput;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class DailyExpenseController extends Controller
@@ -81,7 +83,7 @@ class DailyExpenseController extends Controller
                 ->with('error', 'No active company found!');
         }
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'daily_expense_type' => ['required', Rule::in([
                 Expense::DAILY_TYPE_OFFICE,
                 Expense::DAILY_TYPE_VEHICLE,
@@ -92,17 +94,12 @@ class DailyExpenseController extends Controller
                 Rule::exists('cars', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
             ],
             'title' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:0.01',
-            'payment_method' => 'required|string|in:Bank Transfer,Cash,Cheque,Card Payment,Direct Debit',
-            'bank_account_id' => [
-                'nullable',
-                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
-                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
-            ],
             'date' => 'required|date',
             'document' => 'nullable|file',
             'notes' => 'nullable|string',
-        ]);
+        ], BatchPaymentInput::validationRules($request, $tenant->id)));
+
+        $paymentRows = BatchPaymentInput::normalizeRows($validated);
 
         $documentName = null;
         if ($request->hasFile('document')) {
@@ -123,29 +120,34 @@ class DailyExpenseController extends Controller
             $file->move($path, $documentName);
         }
 
-        Expense::query()->create([
-            'tenant_id' => $tenant->id,
-            'car_id' => $validated['daily_expense_type'] === Expense::DAILY_TYPE_VEHICLE
-                ? $validated['car_id']
-                : null,
-            'type' => Expense::TYPE_DAILY,
-            'daily_expense_type' => $validated['daily_expense_type'],
-            'title' => $validated['title'],
-            'date' => $validated['date'],
-            'description' => $validated['title'],
-            'amount' => $validated['amount'],
-            'payment_method' => $validated['payment_method'],
-            'bank_account_id' => Payment::bankAccountIdForMethod(
-                $validated['payment_method'],
-                $validated['bank_account_id'] ?? null
-            ),
-            'document' => $documentName,
-            'notes' => $validated['notes'] ?? null,
-            'posting_status' => Expense::POSTING_STATUS_PENDING,
-            'created_by' => Auth::id(),
-        ]);
+        DB::transaction(function () use ($tenant, $validated, $paymentRows, $documentName) {
+            foreach ($paymentRows as $paymentRow) {
+                Expense::query()->create([
+                    'tenant_id' => $tenant->id,
+                    'car_id' => $validated['daily_expense_type'] === Expense::DAILY_TYPE_VEHICLE
+                        ? $validated['car_id']
+                        : null,
+                    'type' => Expense::TYPE_DAILY,
+                    'daily_expense_type' => $validated['daily_expense_type'],
+                    'title' => $validated['title'],
+                    'date' => $paymentRow['payment_date'] ?? $validated['date'],
+                    'description' => $validated['title'],
+                    'amount' => $paymentRow['amount'],
+                    'payment_method' => $paymentRow['payment_method'],
+                    'bank_account_id' => $paymentRow['bank_account_id'],
+                    'document' => $documentName,
+                    'notes' => $validated['notes'] ?? null,
+                    'posting_status' => Expense::POSTING_STATUS_PENDING,
+                    'created_by' => Auth::id(),
+                ]);
+            }
+        });
+
+        $message = count($paymentRows) > 1
+            ? count($paymentRows).' daily expenses recorded. They will appear on the daily financial sheet until approval.'
+            : 'Daily expense recorded. It will appear on the daily financial sheet until approval.';
 
         return redirect()->route('daily-expenses.index')
-            ->with('success', 'Daily expense recorded. It will appear on the daily financial sheet until approval.');
+            ->with('success', $message);
     }
 }

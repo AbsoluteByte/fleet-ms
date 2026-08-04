@@ -21,10 +21,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
+use Tests\Concerns\BuildsBatchPaymentPayload;
 use Tests\TestCase;
 
 class DailyFinancialSheetTest extends TestCase
 {
+    use BuildsBatchPaymentPayload;
     private Tenant $tenant;
 
     private Company $company;
@@ -121,13 +123,12 @@ class DailyFinancialSheetTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('payments.store'), [
+        $response = $this->post(route('payments.store'), array_merge([
             'driver_id' => $this->driver->id,
-            'payment_method' => 'Cash',
-            'payment_date' => $date,
-            'amount' => 100,
             'auto_manage_invoices' => 1,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 100, 'payment_date' => $date],
+        ])));
 
         $response->assertRedirect(route('payments.driver', $this->driver->id));
 
@@ -605,13 +606,12 @@ class DailyFinancialSheetTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('payments.store'), [
+        $response = $this->post(route('payments.store'), array_merge([
             'driver_id' => $this->driver->id,
-            'payment_method' => 'Cash',
-            'payment_date' => $date,
-            'amount' => 50,
             'auto_manage_invoices' => 1,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 50, 'payment_date' => $date],
+        ])));
 
         $response->assertRedirect(route('payments.driver', $this->driver->id));
         $this->assertDatabaseCount('payments', 1);

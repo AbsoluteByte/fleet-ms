@@ -4,17 +4,6 @@
         $model->daily_expense_type ?? \App\Models\Expense::DAILY_TYPE_OFFICE
     );
     $selectedCarId = (string) old('car_id', $model->car_id ?? '');
-    $selectedPaymentMethod = old('payment_method', $model->payment_method ?? '');
-    $paymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
-    $defaultCardBankAccountId = ($bankAccounts ?? collect())->firstWhere(
-        'account_number',
-        \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER
-    )?->id;
-    $selectedBankAccountId = old(
-        'bank_account_id',
-        $model->bank_account_id
-            ?? ($selectedPaymentMethod === 'Card Payment' ? $defaultCardBankAccountId : null)
-    );
 @endphp
 
 <div class="row">
@@ -74,53 +63,6 @@
 
     <div class="col-md-6 mb-2">
         <div class="form-group">
-            <label for="amount">Amount <span class="text-danger">*</span></label>
-            <div class="input-group">
-                <div class="input-group-prepend">
-                    <span class="input-group-text">£</span>
-                </div>
-                <input type="number" name="amount" id="amount"
-                       class="form-control @error('amount') is-invalid @enderror"
-                       value="{{ old('amount', $model->amount ?? '') }}"
-                       min="0.01" step="0.01" placeholder="0.00" required>
-            </div>
-            @error('amount')
-            <div class="invalid-feedback d-block">{{ $message }}</div>
-            @enderror
-        </div>
-    </div>
-
-    <div class="col-md-6 mb-2">
-        <div class="form-group">
-            <label for="payment_method">Payment Method <span class="text-danger">*</span></label>
-            <select name="payment_method" id="payment_method"
-                    class="form-control @error('payment_method') is-invalid @enderror" required>
-                <option value="">Select Method</option>
-                @foreach($paymentMethods as $paymentMethod)
-                    <option value="{{ $paymentMethod }}" {{ $selectedPaymentMethod === $paymentMethod ? 'selected' : '' }}>
-                        {{ $paymentMethod }}
-                    </option>
-                @endforeach
-            </select>
-            @error('payment_method')
-            <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
-        </div>
-    </div>
-
-    <div class="col-md-6 mb-2 d-none" id="daily-expense-bank-column">
-        @include('backend.payments.partials.bank-account-select', [
-            'bankAccounts' => $bankAccounts ?? collect(),
-            'selected' => $selectedBankAccountId,
-            'name' => 'bank_account_id',
-            'id' => 'bank_account_id',
-            'errorKey' => 'bank_account_id',
-            'wrapperClass' => 'bank-account-field d-none',
-        ])
-    </div>
-
-    <div class="col-md-6 mb-2">
-        <div class="form-group">
             <label for="date">Date <span class="text-danger">*</span></label>
             <input type="date" name="date" id="date"
                    class="form-control @error('date') is-invalid @enderror"
@@ -130,6 +72,19 @@
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
         </div>
+    </div>
+
+    <div class="col-12 mb-2">
+        <label class="form-label d-block">Payments <span class="text-danger">*</span></label>
+        <p class="text-muted">Add separate rows when the expense was paid using more than one method.</p>
+        @include('backend.payments.partials.batch-payment-rows', [
+            'fieldName' => 'payments',
+            'containerId' => 'daily-expense-payments',
+            'bankAccounts' => $bankAccounts ?? collect(),
+            'defaultPaymentDate' => old('date', optional($model->date)->format('Y-m-d') ?? now()->toDateString()),
+            'showNotes' => false,
+            'helpText' => 'Each payment row appears separately on the daily financial sheet.',
+        ])
     </div>
 
     <div class="col-md-6 mb-2">
@@ -165,15 +120,10 @@
 @push('js')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const paymentMethodSelect = document.getElementById('payment_method');
-            const bankAccountColumn = document.getElementById('daily-expense-bank-column');
-            const bankAccountField = document.querySelector('[data-bank-account-field]');
-            const bankAccountSelect = document.querySelector('[data-bank-account-select]');
             const expenseTypeSelect = document.getElementById('daily_expense_type');
             const carField = document.getElementById('daily-expense-car-field');
             const carSelect = document.getElementById('car_id');
-            const defaultCardBankId = @json($defaultCardBankAccountId ?? null);
-            const hasBankAccounts = @json(($bankAccounts ?? collect())->isNotEmpty());
+            const expenseDateInput = document.getElementById('date');
 
             function toggleCarField() {
                 if (!expenseTypeSelect || !carField || !carSelect) {
@@ -193,36 +143,27 @@
                 }
             }
 
-            function toggleBankAccountField() {
-                if (!paymentMethodSelect || !bankAccountField) {
+            function syncPaymentDates() {
+                if (!expenseDateInput || !window.BatchPaymentRows) {
                     return;
                 }
 
-                const needsBank = paymentMethodSelect.value === 'Bank Transfer'
-                    || paymentMethodSelect.value === 'Card Payment';
-                if (bankAccountColumn) {
-                    bankAccountColumn.classList.toggle('d-none', !needsBank);
-                }
-                bankAccountField.classList.toggle('d-none', !needsBank);
-
-                if (bankAccountSelect) {
-                    bankAccountSelect.required = needsBank && hasBankAccounts;
-
-                    if (!needsBank) {
-                        bankAccountSelect.value = '';
-                    } else if (paymentMethodSelect.value === 'Card Payment' && !bankAccountSelect.value && defaultCardBankId) {
-                        bankAccountSelect.value = String(defaultCardBankId);
+                window.BatchPaymentRows.rows('daily-expense-payments').forEach(function (row) {
+                    const dateInput = row.querySelector('[data-payment-date]');
+                    if (dateInput) {
+                        dateInput.value = expenseDateInput.value;
                     }
-                }
+                });
             }
 
-            if (paymentMethodSelect) {
-                paymentMethodSelect.addEventListener('change', toggleBankAccountField);
-                toggleBankAccountField();
-            }
             if (expenseTypeSelect) {
                 expenseTypeSelect.addEventListener('change', toggleCarField);
                 toggleCarField();
+            }
+
+            if (expenseDateInput) {
+                expenseDateInput.addEventListener('change', syncPaymentDates);
+                syncPaymentDates();
             }
         });
     </script>

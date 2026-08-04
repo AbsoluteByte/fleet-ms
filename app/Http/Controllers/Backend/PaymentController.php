@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\Driver;
 use App\Models\Payment;
+use App\Support\BatchPaymentInput;
 use App\Services\DriverCreditService;
 use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -198,46 +200,45 @@ class PaymentController extends Controller
                 ->with('error', 'No active company found!');
         }
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'driver_id' => [
                 'required',
                 Rule::exists('drivers', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
             ],
-            'payment_method' => 'required|string|max:255',
-            'bank_account_id' => [
-                'nullable',
-                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
-                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
-            ],
-            'payment_date' => 'required|date',
-            'amount' => 'required|numeric|min:0.01',
-            'notes' => 'nullable|string',
             'auto_manage_invoices' => 'boolean',
             'allocations' => 'nullable|array',
             'allocations.*' => 'nullable|numeric|min:0',
-        ]);
+        ], BatchPaymentInput::validationRules($request, $tenant->id)));
 
         $driver = Driver::where('tenant_id', $tenant->id)->findOrFail($validated['driver_id']);
-        $autoManageInvoices = $request->boolean('auto_manage_invoices', true);
+        $paymentRows = BatchPaymentInput::normalizeRows($validated);
+        $isBatch = count($paymentRows) > 1;
+        $autoManageInvoices = $isBatch ? true : $request->boolean('auto_manage_invoices', true);
+        $manualAllocations = $isBatch ? [] : ($validated['allocations'] ?? []);
 
-        $payment = $paymentAllocationService->createPayment(
-            $driver,
-            [
-                'payment_method' => $validated['payment_method'],
-                'bank_account_id' => Payment::bankAccountIdForMethod(
-                    $validated['payment_method'],
-                    $validated['bank_account_id'] ?? null
-                ),
-                'payment_date' => $validated['payment_date'],
-                'amount' => $validated['amount'],
-                'notes' => $validated['notes'] ?? null,
-            ],
-            $autoManageInvoices,
-            $validated['allocations'] ?? []
-        );
+        DB::transaction(function () use ($paymentAllocationService, $driver, $paymentRows, $autoManageInvoices, $manualAllocations) {
+            foreach ($paymentRows as $index => $paymentRow) {
+                $paymentAllocationService->createPayment(
+                    $driver,
+                    [
+                        'payment_method' => $paymentRow['payment_method'],
+                        'bank_account_id' => $paymentRow['bank_account_id'],
+                        'payment_date' => $paymentRow['payment_date'],
+                        'amount' => $paymentRow['amount'],
+                        'notes' => $paymentRow['notes'],
+                    ],
+                    $autoManageInvoices,
+                    $index === 0 ? $manualAllocations : []
+                );
+            }
+        });
 
-        return redirect()->route('payments.driver', $payment->driver_id)
-            ->with('success', 'Payment recorded. It will apply to invoices after daily financial sheet approval.');
+        $message = count($paymentRows) > 1
+            ? count($paymentRows).' payments recorded. They will apply to invoices after daily financial sheet approval.'
+            : 'Payment recorded. It will apply to invoices after daily financial sheet approval.';
+
+        return redirect()->route('payments.driver', $driver->id)
+            ->with('success', $message);
     }
 
     public function show(Payment $payment)

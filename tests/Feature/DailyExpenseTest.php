@@ -14,10 +14,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
+use Tests\Concerns\BuildsBatchPaymentPayload;
 use Tests\TestCase;
 
 class DailyExpenseTest extends TestCase
 {
+    use BuildsBatchPaymentPayload;
     private Tenant $tenant;
 
     private User $employee;
@@ -85,6 +87,10 @@ class DailyExpenseTest extends TestCase
     protected function tearDown(): void
     {
         Schema::dropIfExists('daily_financial_sheets');
+        Schema::dropIfExists('financial_sheet_adjustments');
+        Schema::dropIfExists('car_reservation_payments');
+        Schema::dropIfExists('car_reservations');
+        Schema::dropIfExists('other_payments');
         Schema::dropIfExists('expenses');
         Schema::dropIfExists('driver_credit_transactions');
         Schema::dropIfExists('deposit_refunds');
@@ -110,15 +116,15 @@ class DailyExpenseTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('daily-expenses.store'), [
+        $response = $this->post(route('daily-expenses.store'), array_merge([
             'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
             'car_id' => $this->car->id,
             'title' => 'Office supplies',
-            'amount' => 25.50,
-            'payment_method' => 'Cash',
             'date' => $date,
             'notes' => 'Stationery',
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 25.50],
+        ])));
 
         $response->assertRedirect(route('daily-expenses.index'));
 
@@ -142,13 +148,13 @@ class DailyExpenseTest extends TestCase
         $this->employee->switchTenant($this->tenant->id);
 
         $response = $this->from(route('daily-expenses.create'))
-            ->post(route('daily-expenses.store'), [
+            ->post(route('daily-expenses.store'), array_merge([
                 'daily_expense_type' => Expense::DAILY_TYPE_VEHICLE,
                 'title' => 'Vehicle wash',
-                'amount' => 20,
-                'payment_method' => 'Cash',
                 'date' => now()->toDateString(),
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 20],
+            ])));
 
         $response->assertRedirect(route('daily-expenses.create'));
         $response->assertSessionHasErrors('car_id');
@@ -164,7 +170,7 @@ class DailyExpenseTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('class="form-control select-search', false);
-        $response->assertSee('id="daily-expense-bank-column"', false);
+        $response->assertSee('data-batch-payment-rows', false);
         $response->assertSee('id="daily-expense-car-field"', false);
     }
 
@@ -174,14 +180,14 @@ class DailyExpenseTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('daily-expenses.store'), [
+        $response = $this->post(route('daily-expenses.store'), array_merge([
             'daily_expense_type' => Expense::DAILY_TYPE_VEHICLE,
             'car_id' => $this->car->id,
             'title' => 'Vehicle wash',
-            'amount' => 20,
-            'payment_method' => 'Cash',
             'date' => $date,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 20],
+        ])));
 
         $response->assertRedirect(route('daily-expenses.index'));
         $expense = Expense::query()->firstOrFail();
@@ -235,14 +241,14 @@ class DailyExpenseTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
         $response = $this->from(route('daily-expenses.create'))
-            ->post(route('daily-expenses.store'), [
+            ->post(route('daily-expenses.store'), array_merge([
                 'daily_expense_type' => Expense::DAILY_TYPE_VEHICLE,
                 'car_id' => $otherCar->id,
                 'title' => 'Invalid vehicle expense',
-                'amount' => 20,
-                'payment_method' => 'Cash',
                 'date' => now()->toDateString(),
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 20],
+            ])));
 
         $response->assertRedirect(route('daily-expenses.create'));
         $response->assertSessionHasErrors('car_id');
@@ -255,16 +261,16 @@ class DailyExpenseTest extends TestCase
         $this->employee->switchTenant($this->tenant->id);
 
         $response = $this->from(route('daily-expenses.create'))
-            ->post(route('daily-expenses.store'), [
+            ->post(route('daily-expenses.store'), array_merge([
                 'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
                 'title' => 'Utilities',
-                'amount' => 100,
-                'payment_method' => 'Bank Transfer',
                 'date' => now()->toDateString(),
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Bank Transfer', 'amount' => 100],
+            ])));
 
         $response->assertRedirect(route('daily-expenses.create'));
-        $response->assertSessionHasErrors('bank_account_id');
+        $response->assertSessionHasErrors('payments.0.bank_account_id');
         $this->assertDatabaseCount('expenses', 0);
     }
 
@@ -273,14 +279,17 @@ class DailyExpenseTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('daily-expenses.store'), [
+        $response = $this->post(route('daily-expenses.store'), array_merge([
             'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
             'title' => 'Utilities',
-            'amount' => 100,
-            'payment_method' => 'Bank Transfer',
-            'bank_account_id' => $this->bankAccount->id,
             'date' => now()->toDateString(),
-        ]);
+        ], $this->batchPaymentsField([
+            [
+                'payment_method' => 'Bank Transfer',
+                'bank_account_id' => $this->bankAccount->id,
+                'amount' => 100,
+            ],
+        ])));
 
         $response->assertRedirect(route('daily-expenses.index'));
 
@@ -295,13 +304,13 @@ class DailyExpenseTest extends TestCase
 
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
-        $this->post(route('daily-expenses.store'), [
+        $this->post(route('daily-expenses.store'), array_merge([
             'daily_expense_type' => Expense::DAILY_TYPE_OFFICE,
             'title' => 'Parking fees',
-            'amount' => 40,
-            'payment_method' => 'Cash',
             'date' => $date,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 40],
+        ])));
 
         $show = $this->get(route('daily-financial-sheet.show', $date));
         $show->assertOk();
@@ -497,6 +506,61 @@ class DailyExpenseTest extends TestCase
             $table->string('document')->nullable();
             $table->text('notes')->nullable();
             $table->string('posting_status', 20)->default('pending');
+            $table->foreignId('created_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('other_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->string('other_payment_type', 20)->default('office');
+            $table->foreignId('car_id')->nullable();
+            $table->string('title');
+            $table->decimal('amount', 12, 2);
+            $table->string('payment_method');
+            $table->foreignId('bank_account_id')->nullable();
+            $table->date('payment_date');
+            $table->text('notes')->nullable();
+            $table->string('document')->nullable();
+            $table->string('posting_status', 20)->default('pending');
+            $table->foreignId('created_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('car_reservations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id')->nullable();
+            $table->date('reservation_date')->nullable();
+            $table->decimal('amount_paid', 12, 2)->default(0);
+            $table->string('posting_status', 20)->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('car_reservation_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('car_reservation_id');
+            $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('posting_status', 20)->default('pending');
+            $table->timestamps();
+        });
+
+        Schema::create('financial_sheet_adjustments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->date('sheet_date');
+            $table->string('source_type')->default('payment');
+            $table->unsignedBigInteger('source_id')->nullable();
+            $table->string('event_type');
+            $table->string('direction');
+            $table->decimal('amount', 12, 2);
+            $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
+            $table->text('description');
+            $table->json('metadata')->nullable();
             $table->foreignId('created_by')->nullable();
             $table->timestamps();
         });

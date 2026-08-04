@@ -24,6 +24,22 @@
     $existingSoldDocs = ($editCurrentStatus && $activeTargetStatus === 'sold' && is_array($prefillStatusPayload['documents'] ?? null))
         ? array_values(array_filter($prefillStatusPayload['documents'], fn ($doc) => is_string($doc) && $doc !== ''))
         : [];
+    $soldPaymentDefaultRows = null;
+    if ($activeTargetStatus === 'sold') {
+        if (isset($prefillStatusPayload['payments']) && is_array($prefillStatusPayload['payments'])) {
+            $soldPaymentDefaultRows = $prefillStatusPayload['payments'];
+        } elseif (! empty($prefillStatusPayload['payment_terms'])) {
+            $legacyMethod = ($prefillStatusPayload['payment_terms'] ?? '') === 'bank' ? 'Bank Transfer' : 'Cash';
+            $soldPaymentDefaultRows = [[
+                'payment_method' => $legacyMethod,
+                'bank_account_id' => $prefillStatusPayload['bank_account_id'] ?? null,
+                'amount' => $prefillStatusPayload['sell_price'] ?? '',
+                'payment_date' => $prefillStatusPayload['sell_date'] ?? now()->toDateString(),
+                'notes' => '',
+            ]];
+        }
+    }
+    $soldDefaultPaymentDate = $payloadOld('sell_date', now()->toDateString());
 
     $carFleetFlags = $carFleetFlags ?? [];
     $fleetAvailWarnShow = false;
@@ -143,13 +159,20 @@
                 @enderror
             </div>
             <div class="col-md-4 form-group">
-                <label for="fleet_rsv_amount_paid">Amount paid <span class="text-danger">*</span></label>
-                <input type="number" name="amount_paid" id="fleet_rsv_amount_paid"
-                       class="form-control @error('amount_paid') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('amount_paid') }}">
-                @error('amount_paid')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
+                <label for="fleet_rsv_amount_paid_display">Amount paid</label>
+                <input type="text" id="fleet_rsv_amount_paid_display" class="form-control" readonly tabindex="-1" value="">
+                <input type="hidden" name="amount_paid" id="fleet_rsv_amount_paid" value="{{ old('amount_paid', 0) }}">
+                <small class="text-muted">Total of deposit payment rows below.</small>
+            </div>
+            <div class="col-12 form-group">
+                @include('backend.payments.partials.batch-payment-rows', [
+                    'fieldName' => 'reservation_payments',
+                    'containerId' => 'fleet-reservation-payments',
+                    'bankAccounts' => $bankAccounts ?? collect(),
+                    'showPaymentDate' => false,
+                    'showNotes' => false,
+                    'onAmountChangeCallback' => 'refreshFleetReservationAmountPaidTotal',
+                ])
             </div>
             <div class="col-md-12 form-group">
                 <label for="fleet_rsv_balance_payable_display">Balance payable on pick up</label>
@@ -541,36 +564,27 @@
                 @enderror
             </div>
             <div class="col-md-6 form-group">
-                <label for="fleet_sold_price">Sell price <span class="text-danger">*</span></label>
-                <input type="number" name="payload[sell_price]" id="fleet_sold_price"
-                       class="form-control @error('payload.sell_price') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ $payloadOld('sell_price') }}">
+                <label for="fleet_sold_price_display">Sell price (total)</label>
+                <input type="text" id="fleet_sold_price_display" class="form-control" readonly tabindex="-1"
+                       value="{{ $payloadOld('sell_price') !== '' ? number_format((float) $payloadOld('sell_price'), 2, '.', '') : '' }}">
+                <input type="hidden" name="payload[sell_price]" id="fleet_sold_price"
+                       value="{{ $payloadOld('sell_price') }}">
                 @error('payload.sell_price')
-                <div class="invalid-feedback">{{ $message }}</div>
+                <div class="invalid-feedback d-block">{{ $message }}</div>
                 @enderror
+                <small class="text-muted">Total of payment rows below.</small>
             </div>
-            <div class="col-md-6 form-group">
-                <label for="fleet_sold_payment_terms">Payment terms <span class="text-danger">*</span></label>
-                <select name="payload[payment_terms]" id="fleet_sold_payment_terms"
-                        class="form-control @error('payload.payment_terms') is-invalid @enderror">
-                    <option value="">— Select —</option>
-                    <option value="cash" {{ $payloadOld('payment_terms') === 'cash' ? 'selected' : '' }}>Cash</option>
-                    <option value="bank" {{ $payloadOld('payment_terms') === 'bank' ? 'selected' : '' }}>Bank</option>
-                    <option value="auto_total" {{ $payloadOld('payment_terms') === 'auto_total' ? 'selected' : '' }}>
-                        Auto Total</option>
-                </select>
-                @error('payload.payment_terms')
-                <div class="invalid-feedback">{{ $message }}</div>
-                @enderror
+            <div class="col-12 form-group">
+                @include('backend.payments.partials.batch-payment-rows', [
+                    'fieldName' => 'sold_payments',
+                    'containerId' => 'fleet-sold-payments',
+                    'bankAccounts' => $bankAccounts ?? collect(),
+                    'defaultRows' => $soldPaymentDefaultRows,
+                    'defaultPaymentDate' => $soldDefaultPaymentDate,
+                    'showNotes' => true,
+                    'onAmountChangeCallback' => 'refreshFleetSoldPriceTotal',
+                ])
             </div>
-            @include('backend.payments.partials.bank-account-select', [
-                'bankAccounts' => $bankAccounts ?? collect(),
-                'selected' => $payloadOld('bank_account_id'),
-                'name' => 'payload[bank_account_id]',
-                'id' => 'fleet_sold_bank_account_id',
-                'errorKey' => 'payload.bank_account_id',
-                'wrapperClass' => 'bank-account-field col-md-6 form-group' . ($payloadOld('payment_terms') === 'bank' ? '' : ' d-none'),
-            ])
             <div class="col-md-6 form-group">
                 <label for="fleet_sold_buyer_name">Buyer name <span class="text-danger">*</span></label>
                 <input type="text" name="payload[buyer_name]" id="fleet_sold_buyer_name"

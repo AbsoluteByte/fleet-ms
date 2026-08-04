@@ -14,10 +14,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
+use Tests\Concerns\BuildsBatchPaymentPayload;
 use Tests\TestCase;
 
 class OtherPaymentTest extends TestCase
 {
+    use BuildsBatchPaymentPayload;
     private Tenant $tenant;
 
     private User $employee;
@@ -86,6 +88,8 @@ class OtherPaymentTest extends TestCase
     {
         Schema::dropIfExists('daily_financial_sheets');
         Schema::dropIfExists('financial_sheet_adjustments');
+        Schema::dropIfExists('car_reservation_payments');
+        Schema::dropIfExists('car_reservations');
         Schema::dropIfExists('other_payments');
         Schema::dropIfExists('expenses');
         Schema::dropIfExists('driver_credit_transactions');
@@ -112,14 +116,13 @@ class OtherPaymentTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('other-payments.store'), [
+        $response = $this->post(route('other-payments.store'), array_merge([
             'other_payment_type' => OtherPayment::TYPE_OFFICE,
             'title' => 'Car sale — ABC123',
-            'amount' => 5000,
-            'payment_method' => 'Cash',
-            'payment_date' => $date,
             'notes' => 'Sold vehicle receipt',
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 5000, 'payment_date' => $date],
+        ])));
 
         $response->assertRedirect(route('other-payments.index'));
 
@@ -140,16 +143,15 @@ class OtherPaymentTest extends TestCase
         $this->employee->switchTenant($this->tenant->id);
 
         $response = $this->from(route('other-payments.create'))
-            ->post(route('other-payments.store'), [
+            ->post(route('other-payments.store'), array_merge([
                 'other_payment_type' => OtherPayment::TYPE_OFFICE,
                 'title' => 'Insurance payout',
-                'amount' => 1000,
-                'payment_method' => 'Bank Transfer',
-                'payment_date' => now()->toDateString(),
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Bank Transfer', 'amount' => 1000],
+            ])));
 
         $response->assertRedirect(route('other-payments.create'));
-        $response->assertSessionHasErrors('bank_account_id');
+        $response->assertSessionHasErrors('payments.0.bank_account_id');
         $this->assertDatabaseCount('other_payments', 0);
     }
 
@@ -158,14 +160,16 @@ class OtherPaymentTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('other-payments.store'), [
+        $response = $this->post(route('other-payments.store'), array_merge([
             'other_payment_type' => OtherPayment::TYPE_OFFICE,
             'title' => 'Insurance payout',
-            'amount' => 1000,
-            'payment_method' => 'Bank Transfer',
-            'bank_account_id' => $this->bankAccount->id,
-            'payment_date' => now()->toDateString(),
-        ]);
+        ], $this->batchPaymentsField([
+            [
+                'payment_method' => 'Bank Transfer',
+                'bank_account_id' => $this->bankAccount->id,
+                'amount' => 1000,
+            ],
+        ])));
 
         $response->assertRedirect(route('other-payments.index'));
 
@@ -195,17 +199,19 @@ class OtherPaymentTest extends TestCase
         $this->employee->switchTenant($this->tenant->id);
 
         $response = $this->from(route('other-payments.create'))
-            ->post(route('other-payments.store'), [
+            ->post(route('other-payments.store'), array_merge([
                 'other_payment_type' => OtherPayment::TYPE_OFFICE,
                 'title' => 'Invalid bank account',
-                'amount' => 100,
-                'payment_method' => 'Bank Transfer',
-                'bank_account_id' => $otherBankAccount->id,
-                'payment_date' => now()->toDateString(),
-            ]);
+            ], $this->batchPaymentsField([
+                [
+                    'payment_method' => 'Bank Transfer',
+                    'bank_account_id' => $otherBankAccount->id,
+                    'amount' => 100,
+                ],
+            ])));
 
         $response->assertRedirect(route('other-payments.create'));
-        $response->assertSessionHasErrors('bank_account_id');
+        $response->assertSessionHasErrors('payments.0.bank_account_id');
         $this->assertDatabaseCount('other_payments', 0);
     }
 
@@ -217,7 +223,7 @@ class OtherPaymentTest extends TestCase
         $this->get(route('other-payments.index'))->assertOk();
         $this->get(route('other-payments.create'))
             ->assertOk()
-            ->assertSee('id="other-payment-bank-column"', false)
+            ->assertSee('data-batch-payment-rows', false)
             ->assertSee('id="other-payment-car-field"', false);
     }
 
@@ -227,13 +233,12 @@ class OtherPaymentTest extends TestCase
         $this->employee->switchTenant($this->tenant->id);
 
         $response = $this->from(route('other-payments.create'))
-            ->post(route('other-payments.store'), [
+            ->post(route('other-payments.store'), array_merge([
                 'other_payment_type' => OtherPayment::TYPE_VEHICLE,
                 'title' => 'Vehicle sale',
-                'amount' => 3000,
-                'payment_method' => 'Cash',
-                'payment_date' => now()->toDateString(),
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 3000],
+            ])));
 
         $response->assertRedirect(route('other-payments.create'));
         $response->assertSessionHasErrors('car_id');
@@ -246,14 +251,13 @@ class OtherPaymentTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('other-payments.store'), [
+        $response = $this->post(route('other-payments.store'), array_merge([
             'other_payment_type' => OtherPayment::TYPE_VEHICLE,
             'car_id' => $this->car->id,
             'title' => 'Vehicle sale',
-            'amount' => 3000,
-            'payment_method' => 'Cash',
-            'payment_date' => $date,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 3000, 'payment_date' => $date],
+        ])));
 
         $response->assertRedirect(route('other-payments.index'));
         $otherPayment = OtherPayment::query()->firstOrFail();
@@ -298,14 +302,13 @@ class OtherPaymentTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
         $response = $this->from(route('other-payments.create'))
-            ->post(route('other-payments.store'), [
+            ->post(route('other-payments.store'), array_merge([
                 'other_payment_type' => OtherPayment::TYPE_VEHICLE,
                 'car_id' => $otherCar->id,
                 'title' => 'Invalid vehicle payment',
-                'amount' => 100,
-                'payment_method' => 'Cash',
-                'payment_date' => now()->toDateString(),
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 100],
+            ])));
 
         $response->assertRedirect(route('other-payments.create'));
         $response->assertSessionHasErrors('car_id');
@@ -318,13 +321,12 @@ class OtherPaymentTest extends TestCase
 
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
-        $this->post(route('other-payments.store'), [
+        $this->post(route('other-payments.store'), array_merge([
             'other_payment_type' => OtherPayment::TYPE_OFFICE,
             'title' => 'Misc receipt',
-            'amount' => 250,
-            'payment_method' => 'Cash',
-            'payment_date' => $date,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 250, 'payment_date' => $date],
+        ])));
 
         $show = $this->get(route('daily-financial-sheet.show', $date));
         $show->assertOk();
@@ -535,6 +537,27 @@ class OtherPaymentTest extends TestCase
             $table->string('document')->nullable();
             $table->string('posting_status', 20)->default('pending');
             $table->foreignId('created_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('car_reservations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id')->nullable();
+            $table->date('reservation_date')->nullable();
+            $table->decimal('amount_paid', 12, 2)->default(0);
+            $table->string('posting_status', 20)->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('car_reservation_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('car_reservation_id');
+            $table->string('payment_method')->nullable();
+            $table->foreignId('bank_account_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('posting_status', 20)->default('pending');
             $table->timestamps();
         });
 

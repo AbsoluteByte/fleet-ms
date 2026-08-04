@@ -59,11 +59,15 @@
             const rent = parseMoney('#' + prefix + '_agreed_rent');
             const advance = parseMoney('#' + prefix + '_agreed_advance');
             const paid = parseMoney('#' + prefix + '_amount_paid');
-            const ids = ['#' + prefix + '_agreed_rent', '#' + prefix + '_agreed_advance', '#' + prefix + '_amount_paid'];
+            const ids = ['#' + prefix + '_agreed_rent', '#' + prefix + '_agreed_advance'];
             const hasAny = ids.some(function (id) {
                 return String($(id).val()).trim() !== '';
-            });
+            }) || paid > 0;
             const out = '#' + prefix + '_balance_payable_display';
+            const paidDisplay = '#' + prefix + '_amount_paid_display';
+            if (paidDisplay) {
+                $(paidDisplay).val(paid > 0 ? paid.toFixed(2) : '');
+            }
             if (!hasAny) {
                 $(out).val('');
                 return;
@@ -72,7 +76,45 @@
             $(out).val(bal.toFixed(2));
         }
 
-        $('#fleet_rsv_agreed_rent, #fleet_rsv_agreed_advance, #fleet_rsv_amount_paid').on('input change', function () {
+        window.refreshFleetReservationAmountPaidTotal = function () {
+            var total = 0;
+            if (window.BatchPaymentRows) {
+                window.BatchPaymentRows.rows('fleet-reservation-payments').forEach(function (row) {
+                    var input = row.querySelector('[data-payment-amount]');
+                    total += Number(input?.value || 0);
+                });
+            }
+            $('#fleet_rsv_amount_paid').val(total > 0 ? total.toFixed(2) : '0');
+            refreshBalance('fleet_rsv');
+        };
+
+        window.refreshFleetSoldPriceTotal = function () {
+            var total = 0;
+            if (window.BatchPaymentRows) {
+                window.BatchPaymentRows.rows('fleet-sold-payments').forEach(function (row) {
+                    var input = row.querySelector('[data-payment-amount]');
+                    total += Number(input?.value || 0);
+                });
+            }
+            var formatted = total > 0 ? total.toFixed(2) : '';
+            $('#fleet_sold_price').val(formatted);
+            $('#fleet_sold_price_display').val(formatted);
+        };
+
+        $('#fleet_sold_sell_date').on('change input', function () {
+            var sellDate = String($(this).val() || '');
+            if (!sellDate || !window.BatchPaymentRows) {
+                return;
+            }
+            window.BatchPaymentRows.rows('fleet-sold-payments').forEach(function (row) {
+                var dateInput = row.querySelector('[data-payment-date]');
+                if (dateInput && !String(dateInput.value || '').trim()) {
+                    dateInput.value = sellDate;
+                }
+            });
+        });
+
+        $('#fleet_rsv_agreed_rent, #fleet_rsv_agreed_advance').on('input change', function () {
             refreshBalance('fleet_rsv');
         });
 
@@ -117,26 +159,6 @@
             }
             $preview.html('<strong>Selected:</strong> ' + names.join(', '));
         });
-
-        function toggleSoldBankAccountField() {
-            const $soldPanel = $('.fleet-status-panel[data-status="sold"]');
-            const $bankField = $soldPanel.find('[data-bank-account-field]');
-            const $bankSelect = $soldPanel.find('[data-bank-account-select]');
-            const paymentTerms = String($('#fleet_sold_payment_terms').val() || '');
-            const needsBank = paymentTerms === 'bank';
-            const hasBankAccounts = $bankSelect.length && $bankSelect.find('option').length > 1;
-
-            $bankField.toggleClass('d-none', !needsBank);
-
-            if ($bankSelect.length) {
-                $bankSelect.prop('required', needsBank && hasBankAccounts);
-                if (!needsBank) {
-                    $bankSelect.val('');
-                }
-            }
-        }
-
-        $('#fleet_sold_payment_terms').on('change', toggleSoldBankAccountField);
 
         function showPanel(status) {
             $('.fleet-status-panel').each(function () {
@@ -269,7 +291,7 @@
             refreshBalance('fleet_rsv');
             toggleDamagedFault();
             toggleWrittenFault();
-            toggleSoldBankAccountField();
+            refreshFleetSoldPriceTotal();
             updateStep2Summary();
             updateAvailableForRentWarning();
         });
@@ -308,7 +330,7 @@
             refreshBalance('fleet_rsv');
             toggleDamagedFault();
             toggleWrittenFault();
-            toggleSoldBankAccountField();
+            refreshFleetSoldPriceTotal();
             updateStep2Summary();
             updateAvailableForRentWarning();
         }
