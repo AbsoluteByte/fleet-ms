@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Agreement;
 use App\Models\CarReservation;
+use App\Models\CarReservationPayment;
 use App\Models\DailyFinancialSheet;
 use App\Models\DepositRefund;
 use App\Models\DriverCreditTransaction;
@@ -142,14 +143,16 @@ class DailyFinancialSheetService
             ->get()
             ->map(fn (OtherPayment $otherPayment) => $this->formatOtherPaymentEntry($otherPayment));
 
-        $reservationPayments = CarReservation::query()
-            ->withTrashed()
-            ->with(['car', 'driver', 'bankAccount', 'createdBy'])
+        $reservationPayments = CarReservationPayment::query()
+            ->with(['reservation.car', 'reservation.driver', 'bankAccount', 'reservation.createdBy'])
             ->visibleOnFinancialSheet()
-            ->where('tenant_id', $tenantId)
-            ->whereDate('reservation_date', $date)
+            ->whereHas('reservation', function ($query) use ($tenantId, $date) {
+                $query->withTrashed()
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('reservation_date', $date);
+            })
             ->get()
-            ->map(fn (CarReservation $reservation) => $this->formatReservationPaymentEntry($reservation));
+            ->map(fn (CarReservationPayment $payment) => $this->formatReservationPaymentEntry($payment));
 
         $refundEntries = $refunds
             ->map(fn (DepositRefund $refund) => $this->formatDepositRefundEntry($refund));
@@ -397,6 +400,75 @@ class DailyFinancialSheetService
     }
 
     /**
+     * @param  Collection<int, array<string, mixed>>  $entries
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function filterEntries(
+        Collection $entries,
+        ?string $paymentMethod = null,
+        ?int $bankAccountId = null
+    ): Collection {
+        $paymentMethod = is_string($paymentMethod) ? trim($paymentMethod) : null;
+        if ($paymentMethod === '') {
+            $paymentMethod = null;
+        }
+
+        return $entries->filter(function (array $entry) use ($paymentMethod, $bankAccountId) {
+            if ($paymentMethod !== null && ($entry['payment_method'] ?? null) !== $paymentMethod) {
+                return false;
+            }
+
+            if ($bankAccountId !== null && (int) ($entry['bank_account_id'] ?? 0) !== $bankAccountId) {
+                return false;
+            }
+
+            return true;
+        })->values();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $entries
+     * @return array{payment_methods: list<string>, bank_accounts: list<array{id: int, label: string}>}
+     */
+    public function filterOptionsForEntries(Collection $entries): array
+    {
+        $paymentMethods = $entries
+            ->pluck('payment_method')
+            ->filter(fn ($method) => is_string($method) && trim($method) !== '')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        $bankAccounts = [];
+        $seenBankIds = [];
+
+        foreach ($entries as $entry) {
+            $bankAccountId = (int) ($entry['bank_account_id'] ?? 0);
+            if ($bankAccountId <= 0 || isset($seenBankIds[$bankAccountId])) {
+                continue;
+            }
+
+            $seenBankIds[$bankAccountId] = true;
+            $bankName = trim((string) ($entry['bank_name'] ?? 'Bank'));
+            $accountNumber = trim((string) ($entry['account_number'] ?? ''));
+            $label = $accountNumber !== '' ? "{$bankName} ({$accountNumber})" : $bankName;
+
+            $bankAccounts[] = [
+                'id' => $bankAccountId,
+                'label' => $label,
+            ];
+        }
+
+        usort($bankAccounts, fn (array $a, array $b) => strcmp($a['label'], $b['label']));
+
+        return [
+            'payment_methods' => $paymentMethods,
+            'bank_accounts' => $bankAccounts,
+        ];
+    }
+
+    /**
      * Approve pending sheet entries for a date.
      *
      * When $entryIds is null or empty, all pending entries are approved.
@@ -501,12 +573,19 @@ class DailyFinancialSheetService
             }
 
             if ($reservationPaymentIds !== []) {
-                CarReservation::query()
+                $reservationPayments = CarReservationPayment::query()
                     ->pendingFinancialSheet()
-                    ->where('tenant_id', $tenantId)
-                    ->whereDate('reservation_date', $date)
                     ->whereIn('id', $reservationPaymentIds)
-                    ->update(['posting_status' => CarReservation::POSTING_STATUS_POSTED]);
+                    ->whereHas('reservation', fn ($query) => $query
+                        ->where('tenant_id', $tenantId)
+                        ->whereDate('reservation_date', $date))
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($reservationPayments as $reservationPayment) {
+                    $reservationPayment->update(['posting_status' => CarReservationPayment::POSTING_STATUS_POSTED]);
+                    $reservationPayment->reservation?->syncParentPostingStatusFromPayments();
+                }
             }
 
             if ($refundIds !== []) {
@@ -749,16 +828,18 @@ class DailyFinancialSheetService
             }
 
             if ($reservationPaymentIds !== []) {
-                $reservations = CarReservation::query()
+                $reservationPayments = CarReservationPayment::query()
                     ->pendingFinancialSheet()
-                    ->where('tenant_id', $tenantId)
-                    ->whereDate('reservation_date', $date)
                     ->whereIn('id', $reservationPaymentIds)
+                    ->whereHas('reservation', fn ($query) => $query
+                        ->where('tenant_id', $tenantId)
+                        ->whereDate('reservation_date', $date))
                     ->lockForUpdate()
                     ->get();
 
-                foreach ($reservations as $reservation) {
-                    $reservation->update(['posting_status' => CarReservation::POSTING_STATUS_CANCELLED]);
+                foreach ($reservationPayments as $reservationPayment) {
+                    $reservationPayment->update(['posting_status' => CarReservationPayment::POSTING_STATUS_CANCELLED]);
+                    $reservationPayment->reservation?->syncParentPostingStatusFromPayments();
                     $rejectedCount++;
                 }
             }
@@ -1176,25 +1257,26 @@ class DailyFinancialSheetService
     /**
      * @return array<string, mixed>
      */
-    private function formatReservationPaymentEntry(CarReservation $reservation): array
+    private function formatReservationPaymentEntry(CarReservationPayment $reservationPayment): array
     {
-        $clientName = $reservation->clientName();
-        $description = trim('Reservation #'.$reservation->id.' — '.$clientName);
+        $reservation = $reservationPayment->reservation;
+        $clientName = $reservation?->clientName() ?? '—';
+        $description = trim('Reservation #'.($reservation?->id ?? '—').' — '.$clientName);
 
         return [
-            'id' => 'reservation-payment-'.$reservation->id,
-            'sort_at' => $reservation->created_at?->timestamp ?? 0,
+            'id' => 'reservation-payment-'.$reservationPayment->id,
+            'sort_at' => $reservationPayment->created_at?->timestamp ?? 0,
             'direction' => 'in',
-            'employee' => $reservation->createdBy?->name ?? '—',
+            'employee' => $reservation?->createdBy?->name ?? '—',
             'description' => $description,
             'category' => 'Reservation payment',
-            'car_registration' => $reservation->car?->registration,
-            'payment_method' => $reservation->payment_method ?: 'Cash',
-            'bank_account_id' => $reservation->bank_account_id,
-            'bank_name' => $reservation->bankAccount?->bank_name,
-            'account_number' => $reservation->bankAccount?->account_number,
-            'amount' => (float) $reservation->amount_paid,
-            'posting_status' => $reservation->posting_status,
+            'car_registration' => $reservation?->car?->registration,
+            'payment_method' => $reservationPayment->payment_method ?: 'Cash',
+            'bank_account_id' => $reservationPayment->bank_account_id,
+            'bank_name' => $reservationPayment->bankAccount?->bank_name,
+            'account_number' => $reservationPayment->bankAccount?->account_number,
+            'amount' => (float) $reservationPayment->amount,
+            'posting_status' => $reservationPayment->posting_status,
         ];
     }
 

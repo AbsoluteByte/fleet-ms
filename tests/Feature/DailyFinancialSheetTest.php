@@ -21,10 +21,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
+use Tests\Concerns\BuildsBatchPaymentPayload;
 use Tests\TestCase;
 
 class DailyFinancialSheetTest extends TestCase
 {
+    use BuildsBatchPaymentPayload;
     private Tenant $tenant;
 
     private Company $company;
@@ -90,6 +92,7 @@ class DailyFinancialSheetTest extends TestCase
         Schema::dropIfExists('driver_credit_transactions');
         Schema::dropIfExists('deposit_refunds');
         Schema::dropIfExists('other_payments');
+        Schema::dropIfExists('car_reservation_payments');
         Schema::dropIfExists('car_reservations');
         Schema::dropIfExists('agreements');
         Schema::dropIfExists('statuses');
@@ -121,13 +124,12 @@ class DailyFinancialSheetTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('payments.store'), [
+        $response = $this->post(route('payments.store'), array_merge([
             'driver_id' => $this->driver->id,
-            'payment_method' => 'Cash',
-            'payment_date' => $date,
-            'amount' => 100,
             'auto_manage_invoices' => 1,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 100, 'payment_date' => $date],
+        ])));
 
         $response->assertRedirect(route('payments.driver', $this->driver->id));
 
@@ -605,13 +607,12 @@ class DailyFinancialSheetTest extends TestCase
         $this->actingAs($this->employee);
         $this->employee->switchTenant($this->tenant->id);
 
-        $response = $this->post(route('payments.store'), [
+        $response = $this->post(route('payments.store'), array_merge([
             'driver_id' => $this->driver->id,
-            'payment_method' => 'Cash',
-            'payment_date' => $date,
-            'amount' => 50,
             'auto_manage_invoices' => 1,
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 50, 'payment_date' => $date],
+        ])));
 
         $response->assertRedirect(route('payments.driver', $this->driver->id));
         $this->assertDatabaseCount('payments', 1);
@@ -963,6 +964,196 @@ class DailyFinancialSheetTest extends TestCase
         $this->assertStringStartsWith('%PDF', $response->getContent());
     }
 
+    public function test_filter_entries_by_cash_only_totals_exclude_bank(): void
+    {
+        $date = now()->toDateString();
+        $service = app(DailyFinancialSheetService::class);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 200,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $this->bankAccount->id,
+            'payment_date' => $date,
+            'amount' => 150,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $filtered = $service->filterEntries($entries, 'Cash', null);
+        $totals = $service->computeTotals($filtered, pendingOnly: false);
+
+        $this->assertCount(1, $filtered);
+        $this->assertEquals(200, $totals['cash_in']);
+        $this->assertEquals(0, $totals['cash_out']);
+        $this->assertSame([], $totals['bank_in']);
+        $this->assertSame([], $totals['bank_out']);
+    }
+
+    public function test_filter_entries_by_bank_account_only(): void
+    {
+        $date = now()->toDateString();
+        $service = app(DailyFinancialSheetService::class);
+
+        $secondBank = BankAccount::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'bank_name' => 'HSBC',
+            'account_number' => '87654321',
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $this->bankAccount->id,
+            'payment_date' => $date,
+            'amount' => 150,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Card Payment',
+            'bank_account_id' => $secondBank->id,
+            'payment_date' => $date,
+            'amount' => 80,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $filtered = $service->filterEntries($entries, null, $this->bankAccount->id);
+        $totals = $service->computeTotals($filtered, pendingOnly: false);
+
+        $this->assertCount(1, $filtered);
+        $this->assertEquals(0, $totals['cash_in']);
+        $this->assertCount(1, $totals['bank_in']);
+        $this->assertEquals(150, $totals['bank_in'][0]['total']);
+        $this->assertSame([], $totals['bank_out']);
+    }
+
+    public function test_filter_entries_combined_method_and_bank_uses_and_logic(): void
+    {
+        $date = now()->toDateString();
+        $service = app(DailyFinancialSheetService::class);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $this->bankAccount->id,
+            'payment_date' => $date,
+            'amount' => 150,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Card Payment',
+            'bank_account_id' => $this->bankAccount->id,
+            'payment_date' => $date,
+            'amount' => 80,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $filtered = $service->filterEntries($entries, 'Card Payment', $this->bankAccount->id);
+
+        $this->assertCount(1, $filtered);
+        $this->assertSame('Card Payment', $filtered->first()['payment_method']);
+        $this->assertEquals(80, (float) $filtered->first()['amount']);
+    }
+
+    public function test_sheet_show_filters_by_payment_method_query_param(): void
+    {
+        $date = now()->toDateString();
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 200,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $this->bankAccount->id,
+            'payment_date' => $date,
+            'amount' => 150,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->get(route('daily-financial-sheet.show', $date).'?payment_method=Cash');
+
+        $response->assertOk();
+        $response->assertSee('Filtered view');
+        $response->assertSee('£200.00');
+        $response->assertSee('data-payment-method="Cash"', false);
+        $response->assertSee('data-payment-method="Bank Transfer"', false);
+        $response->assertSee('dfs-entry-row d-none', false);
+    }
+
+    public function test_sheet_pdf_accepts_filter_query_params(): void
+    {
+        $date = now()->toDateString();
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 200,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Bank Transfer',
+            'bank_account_id' => $this->bankAccount->id,
+            'payment_date' => $date,
+            'amount' => 150,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'created_by' => $this->employee->id,
+            'auto_allocate' => true,
+        ]);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $response = $this->get(route('daily-financial-sheet.pdf', $date).'?payment_method=Cash');
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+    }
+
     private function createPendingPayment(string $date, float $amount): Payment
     {
         return Payment::query()->create([
@@ -1228,6 +1419,16 @@ class DailyFinancialSheetTest extends TestCase
             $table->foreignId('created_by')->nullable();
             $table->timestamps();
             $table->softDeletes();
+        });
+
+        Schema::create('car_reservation_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('car_reservation_id');
+            $table->string('payment_method')->nullable();
+            $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('posting_status', 20)->default('pending');
+            $table->timestamps();
         });
 
         Schema::create('statuses', function (Blueprint $table) {

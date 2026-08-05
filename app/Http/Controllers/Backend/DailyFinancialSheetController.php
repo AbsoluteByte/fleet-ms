@@ -50,7 +50,7 @@ class DailyFinancialSheetController extends Controller
         return view($this->dir.'index', compact('openDates', 'approvedSheets'));
     }
 
-    public function show(string $date, DailyFinancialSheetService $service)
+    public function show(Request $request, string $date, DailyFinancialSheetService $service)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -59,15 +59,68 @@ class DailyFinancialSheetController extends Controller
                 ->with('error', 'No active company found!');
         }
 
+        $viewData = $this->resolveSheetViewData($request, $date, $service, $tenant->id);
+        $canApprove = $this->canApprove() && $viewData['hasPending'];
+
+        return view($this->dir.'show', array_merge($viewData, [
+            'canApprove' => $canApprove,
+        ]));
+    }
+
+    public function pdf(Request $request, string $date, DailyFinancialSheetService $service)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        $viewData = $this->resolveSheetViewData($request, $date, $service, $tenant->id);
+        if ($viewData['sheet']) {
+            $viewData['sheet']->loadMissing('approvedByUser');
+        }
+
+        $pdf = \PDF::loadView($this->dir.'pdf', $viewData);
+        $pdf->setPaper('A4', 'landscape');
+
+        $filename = 'Daily_Financial_Sheet_'.$viewData['sheetDate'].'.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveSheetViewData(
+        Request $request,
+        string $date,
+        DailyFinancialSheetService $service,
+        int $tenantId
+    ): array {
         $sheetDate = Carbon::parse($date)->toDateString();
-        $sheet = $service->sheetForDate($tenant->id, $sheetDate);
-        $entries = $service->entriesForDate($tenant->id, $sheetDate);
+        $sheet = $service->sheetForDate($tenantId, $sheetDate);
+        $allEntries = $service->entriesForDate($tenantId, $sheetDate);
+        $filterOptions = $service->filterOptionsForEntries($allEntries);
+
+        $activeFilters = $this->resolveSheetFilters($request, $tenantId);
+        $isFiltered = $activeFilters['payment_method'] !== null || $activeFilters['bank_account_id'] !== null;
+
+        $entries = $isFiltered
+            ? $service->filterEntries(
+                $allEntries,
+                $activeFilters['payment_method'],
+                $activeFilters['bank_account_id']
+            )
+            : $allEntries;
+
         $isApproved = $sheet?->isApproved() ?? false;
-        $hasPending = $entries->where('posting_status', 'pending')->isNotEmpty();
+        $hasPending = $allEntries->where('posting_status', 'pending')->isNotEmpty();
         $pendingTotals = $hasPending
-            ? $service->computeTotals($entries, pendingOnly: true)
+            ? $service->computeTotals($allEntries, pendingOnly: true)
             : null;
-        $totals = $isApproved && $sheet
+
+        $fullTotals = $isApproved && $sheet
             ? [
                 'cash_in' => (float) $sheet->cash_in,
                 'cash_out' => (float) $sheet->cash_out,
@@ -75,65 +128,82 @@ class DailyFinancialSheetController extends Controller
                 'bank_in' => $sheet->bank_in_json ?? [],
                 'bank_out' => $sheet->bank_out_json ?? [],
             ]
-            : $service->computeTotals($entries, pendingOnly: true);
-        $canApprove = $this->canApprove() && $hasPending;
+            : $service->computeTotals($allEntries, pendingOnly: ! $isApproved);
 
-        return view($this->dir.'show', compact(
+        $totals = $isFiltered
+            ? $service->computeTotals($entries, pendingOnly: false)
+            : $fullTotals;
+
+        $filterLabels = $this->sheetFilterLabels($activeFilters, $filterOptions);
+
+        return compact(
             'sheetDate',
             'sheet',
             'entries',
+            'allEntries',
             'totals',
+            'fullTotals',
             'pendingTotals',
             'isApproved',
             'hasPending',
-            'canApprove'
-        ));
+            'filterOptions',
+            'activeFilters',
+            'isFiltered',
+            'filterLabels'
+        );
     }
 
-    public function pdf(string $date, DailyFinancialSheetService $service)
+    /**
+     * @return array{payment_method: ?string, bank_account_id: ?int}
+     */
+    private function resolveSheetFilters(Request $request, int $tenantId): array
     {
-        $tenant = Auth::user()->currentTenant();
+        $validated = $request->validate([
+            'payment_method' => 'nullable|string|max:255',
+            'bank_account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenantId)),
+            ],
+        ]);
 
-        if (! $tenant) {
-            return redirect()->route('dashboard')
-                ->with('error', 'No active company found!');
+        $paymentMethod = isset($validated['payment_method']) ? trim((string) $validated['payment_method']) : null;
+        if ($paymentMethod === '') {
+            $paymentMethod = null;
         }
 
-        $sheetDate = Carbon::parse($date)->toDateString();
-        $sheet = $service->sheetForDate($tenant->id, $sheetDate);
-        if ($sheet) {
-            $sheet->loadMissing('approvedByUser');
+        $bankAccountId = isset($validated['bank_account_id']) ? (int) $validated['bank_account_id'] : null;
+        if ($bankAccountId === 0) {
+            $bankAccountId = null;
         }
-        $entries = $service->entriesForDate($tenant->id, $sheetDate);
-        $isApproved = $sheet?->isApproved() ?? false;
-        $hasPending = $entries->where('posting_status', 'pending')->isNotEmpty();
-        $pendingTotals = $hasPending
-            ? $service->computeTotals($entries, pendingOnly: true)
-            : null;
-        $totals = $isApproved && $sheet
-            ? [
-                'cash_in' => (float) $sheet->cash_in,
-                'cash_out' => (float) $sheet->cash_out,
-                'net_cash' => round((float) $sheet->cash_in - (float) $sheet->cash_out, 2),
-                'bank_in' => $sheet->bank_in_json ?? [],
-                'bank_out' => $sheet->bank_out_json ?? [],
-            ]
-            : $service->computeTotals($entries, pendingOnly: true);
 
-        $pdf = \PDF::loadView($this->dir.'pdf', compact(
-            'sheetDate',
-            'sheet',
-            'entries',
-            'totals',
-            'pendingTotals',
-            'isApproved',
-            'hasPending'
-        ));
-        $pdf->setPaper('A4', 'landscape');
+        return [
+            'payment_method' => $paymentMethod,
+            'bank_account_id' => $bankAccountId,
+        ];
+    }
 
-        $filename = 'Daily_Financial_Sheet_'.$sheetDate.'.pdf';
+    /**
+     * @param  array{payment_method: ?string, bank_account_id: ?int}  $activeFilters
+     * @param  array{payment_methods: list<string>, bank_accounts: list<array{id: int, label: string}>}  $filterOptions
+     * @return array{payment_method: ?string, bank_account: ?string}
+     */
+    private function sheetFilterLabels(array $activeFilters, array $filterOptions): array
+    {
+        $bankLabel = null;
+        if ($activeFilters['bank_account_id'] !== null) {
+            foreach ($filterOptions['bank_accounts'] as $bankAccount) {
+                if ((int) $bankAccount['id'] === (int) $activeFilters['bank_account_id']) {
+                    $bankLabel = $bankAccount['label'];
+                    break;
+                }
+            }
+        }
 
-        return $pdf->download($filename);
+        return [
+            'payment_method' => $activeFilters['payment_method'],
+            'bank_account' => $bankLabel,
+        ];
     }
 
     public function approve(Request $request, string $date, DailyFinancialSheetService $service)

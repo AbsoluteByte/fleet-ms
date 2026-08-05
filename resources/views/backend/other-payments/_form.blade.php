@@ -4,17 +4,6 @@
         $model->other_payment_type ?? \App\Models\OtherPayment::TYPE_OFFICE
     );
     $selectedCarId = (string) old('car_id', $model->car_id ?? '');
-    $selectedPaymentMethod = old('payment_method', $model->payment_method ?? '');
-    $paymentMethods = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
-    $defaultCardBankAccountId = ($bankAccounts ?? collect())->firstWhere(
-        'account_number',
-        \App\Models\BankAccount::DEFAULT_CARD_ACCOUNT_NUMBER
-    )?->id;
-    $selectedBankAccountId = old(
-        'bank_account_id',
-        $model->bank_account_id
-            ?? ($selectedPaymentMethod === 'Card Payment' ? $defaultCardBankAccountId : null)
-    );
 @endphp
 
 <div class="row">
@@ -72,64 +61,17 @@
         </div>
     </div>
 
-    <div class="col-md-6 mb-2">
-        <div class="form-group">
-            <label for="amount">Amount <span class="text-danger">*</span></label>
-            <div class="input-group">
-                <div class="input-group-prepend">
-                    <span class="input-group-text">£</span>
-                </div>
-                <input type="number" name="amount" id="amount"
-                       class="form-control @error('amount') is-invalid @enderror"
-                       value="{{ old('amount', $model->amount ?? '') }}"
-                       min="0.01" step="0.01" placeholder="0.00" required>
-            </div>
-            @error('amount')
-            <div class="invalid-feedback d-block">{{ $message }}</div>
-            @enderror
-        </div>
-    </div>
-
-    <div class="col-md-6 mb-2">
-        <div class="form-group">
-            <label for="payment_method">Payment Method <span class="text-danger">*</span></label>
-            <select name="payment_method" id="payment_method"
-                    class="form-control @error('payment_method') is-invalid @enderror" required>
-                <option value="">Select Method</option>
-                @foreach($paymentMethods as $paymentMethod)
-                    <option value="{{ $paymentMethod }}" {{ $selectedPaymentMethod === $paymentMethod ? 'selected' : '' }}>
-                        {{ $paymentMethod }}
-                    </option>
-                @endforeach
-            </select>
-            @error('payment_method')
-            <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
-        </div>
-    </div>
-
-    <div class="col-md-6 mb-2 d-none" id="other-payment-bank-column">
-        @include('backend.payments.partials.bank-account-select', [
+    <div class="col-12 mb-2">
+        <label class="form-label d-block">Payments <span class="text-danger">*</span></label>
+        <p class="text-muted">Add separate rows when the buyer paid using more than one method.</p>
+        @include('backend.payments.partials.batch-payment-rows', [
+            'fieldName' => 'payments',
+            'containerId' => 'other-payments-batch',
             'bankAccounts' => $bankAccounts ?? collect(),
-            'selected' => $selectedBankAccountId,
-            'name' => 'bank_account_id',
-            'id' => 'bank_account_id',
-            'errorKey' => 'bank_account_id',
-            'wrapperClass' => 'bank-account-field d-none',
+            'defaultPaymentDate' => old('payment_date', optional($model->payment_date)->format('Y-m-d') ?? now()->toDateString()),
+            'showNotes' => false,
+            'helpText' => 'Each payment row appears separately on the daily financial sheet.',
         ])
-    </div>
-
-    <div class="col-md-6 mb-2">
-        <div class="form-group">
-            <label for="payment_date">Date <span class="text-danger">*</span></label>
-            <input type="date" name="payment_date" id="payment_date"
-                   class="form-control @error('payment_date') is-invalid @enderror"
-                   value="{{ old('payment_date', optional($model->payment_date)->format('Y-m-d') ?? now()->toDateString()) }}"
-                   required>
-            @error('payment_date')
-            <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
-        </div>
     </div>
 
     <div class="col-md-6 mb-2">
@@ -165,15 +107,9 @@
 @push('js')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const paymentMethodSelect = document.getElementById('payment_method');
-            const bankAccountColumn = document.getElementById('other-payment-bank-column');
-            const bankAccountField = document.querySelector('[data-bank-account-field]');
-            const bankAccountSelect = document.querySelector('[data-bank-account-select]');
             const paymentTypeSelect = document.getElementById('other_payment_type');
             const carField = document.getElementById('other-payment-car-field');
             const carSelect = document.getElementById('car_id');
-            const defaultCardBankId = @json($defaultCardBankAccountId ?? null);
-            const hasBankAccounts = @json(($bankAccounts ?? collect())->isNotEmpty());
 
             function toggleCarField() {
                 if (!paymentTypeSelect || !carField || !carSelect) {
@@ -193,33 +129,6 @@
                 }
             }
 
-            function toggleBankAccountField() {
-                if (!paymentMethodSelect || !bankAccountField) {
-                    return;
-                }
-
-                const needsBank = paymentMethodSelect.value === 'Bank Transfer'
-                    || paymentMethodSelect.value === 'Card Payment';
-                if (bankAccountColumn) {
-                    bankAccountColumn.classList.toggle('d-none', !needsBank);
-                }
-                bankAccountField.classList.toggle('d-none', !needsBank);
-
-                if (bankAccountSelect) {
-                    bankAccountSelect.required = needsBank && hasBankAccounts;
-
-                    if (!needsBank) {
-                        bankAccountSelect.value = '';
-                    } else if (paymentMethodSelect.value === 'Card Payment' && !bankAccountSelect.value && defaultCardBankId) {
-                        bankAccountSelect.value = String(defaultCardBankId);
-                    }
-                }
-            }
-
-            if (paymentMethodSelect) {
-                paymentMethodSelect.addEventListener('change', toggleBankAccountField);
-                toggleBankAccountField();
-            }
             if (paymentTypeSelect) {
                 paymentTypeSelect.addEventListener('change', toggleCarField);
                 toggleCarField();

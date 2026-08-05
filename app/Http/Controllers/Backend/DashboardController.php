@@ -16,6 +16,7 @@ use App\Models\Driver;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Services\PaymentAllocationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -194,6 +195,7 @@ class DashboardController extends Controller
                     'expiring_phd_licenses' => 0,
                     'expiring_agreement_end_dates' => 0,
                     'expiring_agreement_termination_notices' => 0,
+                    'expired_agreements' => 0,
                     'agreement_notifications' => 0,
                     'total_count' => 0,
                 ],
@@ -666,8 +668,13 @@ class DashboardController extends Controller
 
         // ==================== 9. AGREEMENT END / TERMINATION NOTICE (10-DAY WINDOW) ====================
         $agreementUpcomingNotifications = $this->buildAgreementFleetNotifications($tenant, $nonRoadTaxNotificationExcludedStatuses);
+        $agreementExpiredNotifications = $this->buildExpiredAgreementFleetNotifications($tenant, $nonRoadTaxNotificationExcludedStatuses);
 
         foreach ($agreementUpcomingNotifications as $agreementNotification) {
+            $notifications->push($agreementNotification);
+        }
+
+        foreach ($agreementExpiredNotifications as $agreementNotification) {
             $notifications->push($agreementNotification);
         }
 
@@ -795,7 +802,8 @@ class DashboardController extends Controller
             'car_service_due' => $serviceNotifications->count(),
             'expiring_agreement_end_dates' => $agreementUpcomingNotifications->where('type', 'agreement_end_date')->count(),
             'expiring_agreement_termination_notices' => $agreementUpcomingNotifications->where('type', 'agreement_termination_notice')->count(),
-            'agreement_notifications' => $agreementUpcomingNotifications->count(),
+            'expired_agreements' => $agreementExpiredNotifications->count(),
+            'agreement_notifications' => $agreementUpcomingNotifications->count() + $agreementExpiredNotifications->count(),
             'expiring_driver_licenses' => $expiringDriverLicenses->count(),
             'expiring_phd_licenses' => $expiringPhdLicenses->count(),
             'total_count' => $sortedNotifications->count(),
@@ -905,7 +913,11 @@ class DashboardController extends Controller
                 if ($request->type === 'road_tax_expiry') {
                     $fleetNotifications = $fleetNotifications->whereIn('type', ['road_tax_expiry', 'road_tax_missing']);
                 } elseif ($request->type === 'agreement_notifications') {
-                    $fleetNotifications = $fleetNotifications->whereIn('type', ['agreement_end_date', 'agreement_termination_notice']);
+                    $fleetNotifications = $fleetNotifications->whereIn('type', [
+                        'agreement_end_date',
+                        'agreement_termination_notice',
+                        'agreement_expired',
+                    ]);
                 } else {
                     $fleetNotifications = $fleetNotifications->where('type', $request->type);
                 }
@@ -927,7 +939,7 @@ class DashboardController extends Controller
         return view($this->dir.'notifications', compact('summary'));
     }
 
-    public function paymentsIndex(Request $request)
+    public function paymentsIndex(Request $request, PaymentAllocationService $paymentAllocationService)
     {
         // If DataTables AJAX request
         if ($request->ajax()) {
@@ -969,25 +981,34 @@ class DashboardController extends Controller
                     ->get()
                     ->keyBy('id');
 
-            $pendingDfsByDriver = $driverIds === []
-                ? collect()
-                : Payment::query()
-                    ->pending()
-                    ->whereIn('driver_id', $driverIds)
-                    ->selectRaw('driver_id, coalesce(sum(amount), 0) as pending_dfs_amount')
-                    ->groupBy('driver_id')
-                    ->pluck('pending_dfs_amount', 'driver_id');
+            $pendingDfsByInvoice = [];
+            $invoiceIds = $paymentNotifications
+                ->pluck('invoice_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($invoiceIds !== []) {
+                $notificationInvoices = Invoice::query()
+                    ->whereIn('id', $invoiceIds)
+                    ->get(['id', 'driver_id', 'source_id', 'invoice_type', 'balance_amount', 'invoice_date', 'due_date']);
+
+                $pendingDfsByInvoice = $paymentAllocationService->pendingDfsAmountsForInvoices($notificationInvoices);
+            }
 
             // ✅ Transform for DataTable
-            $transformed = $paymentNotifications->map(function ($notification) use ($driversById, $pendingDfsByDriver) {
+            $transformed = $paymentNotifications->map(function ($notification) use ($driversById, $pendingDfsByInvoice) {
                 $amountRaw = isset($notification['amount']) ? str_replace(['£', ','], '', $notification['amount']) : 0;
                 $driverId = $notification['driver_id'] ?? null;
                 $driver = $driverId ? $driversById->get($driverId) : null;
-                $pendingDfsAmount = $driverId ? (float) ($pendingDfsByDriver[$driverId] ?? 0) : 0.0;
+                $invoiceId = isset($notification['invoice_id']) ? (int) $notification['invoice_id'] : null;
+                $pendingDfsAmount = $invoiceId ? (float) ($pendingDfsByInvoice[$invoiceId] ?? 0) : 0.0;
                 $amountColor = 'danger';
                 $amountTooltip = null;
+                $hasPendingDfs = $pendingDfsAmount > 0;
 
-                if ($pendingDfsAmount > 0) {
+                if ($hasPendingDfs) {
                     $amountColor = 'warning';
                     $amountTooltip = '£'.number_format($pendingDfsAmount, 2).' pending daily financial sheet approval.';
                 }
@@ -1008,10 +1029,11 @@ class DashboardController extends Controller
                     'time_ago' => $notification['time_ago'],
                     'action_url' => $notification['action_url'] ?? '#',
                     'driver_id' => $driverId,
-                    'invoice_id' => $notification['invoice_id'] ?? null,
+                    'invoice_id' => $invoiceId,
                     'color' => $amountColor,
                     'amount_color' => $amountColor,
                     'amount_tooltip' => $amountTooltip,
+                    'has_pending_dfs' => $hasPendingDfs,
                     'follow_up_notes' => $driver?->payment_follow_up_notes,
                     'follow_up_remind_at' => $driver?->payment_remind_at?->toIso8601String(),
                     'follow_up_has_note' => $driver?->hasPaymentFollowUpNote() ?? false,
@@ -1245,6 +1267,74 @@ class DashboardController extends Controller
                 'border_color' => $borderColor,
                 'created_at' => $nearestDate,
                 'sort_key' => $nearestDate->timestamp,
+            ]);
+        }
+
+        return $notifications;
+    }
+
+    /**
+     * Agreements whose end_date passed within the last 10 days (excludes Terminated).
+     */
+    private function buildExpiredAgreementFleetNotifications($tenant, array $excludedCarStatuses): Collection
+    {
+        $windowStart = now()->startOfDay();
+        $expiredWindowStart = $windowStart->copy()->subDays(10);
+
+        $agreements = Agreement::with(['driver', 'car', 'status'])
+            ->where('tenant_id', $tenant->id)
+            ->whereNotNull('end_date')
+            ->whereDate('end_date', '>=', $expiredWindowStart)
+            ->whereDate('end_date', '<', $windowStart)
+            ->whereHas('status', function ($query) {
+                $query->whereNotIn('name', ['Terminated']);
+            })
+            ->whereHas('car', function ($query) use ($excludedCarStatuses) {
+                $query->whereNotIn('fleet_status', $excludedCarStatuses);
+            })
+            ->get();
+
+        $notifications = collect();
+
+        foreach ($agreements as $agreement) {
+            $endDate = $agreement->end_date->copy()->startOfDay();
+            $daysSinceExpiry = (int) $endDate->diffInDays($windowStart, false);
+
+            if ($daysSinceExpiry <= 0) {
+                continue;
+            }
+
+            $registration = $agreement->car->registration ?? 'Vehicle';
+            $driverLabel = $agreement->driver?->selectOptionLabel() ?? 'Driver';
+
+            $msg = $daysSinceExpiry === 1
+                ? 'Agreement expired yesterday'
+                : 'Agreement expired '.$daysSinceExpiry.' days ago';
+
+            $fullMessage = $registration.' - '.$driverLabel.' - '.$msg;
+            $payingCompany = trim((string) ($agreement->paying_company_name ?? ''));
+            if ($payingCompany !== '') {
+                $fullMessage .= ' - Pays via: '.$payingCompany;
+            }
+
+            $notifications->push([
+                'id' => 'agreement_expired_'.$agreement->id,
+                'type' => 'agreement_expired',
+                'priority' => 1,
+                'title' => 'Agreement Expired',
+                'message' => $fullMessage,
+                'simple_message' => $fullMessage,
+                'vehicle' => $registration,
+                'driver' => $driverLabel,
+                'paying_company' => $payingCompany !== '' ? $payingCompany : null,
+                'time_ago' => $endDate->diffForHumans(),
+                'action_url' => route('agreements.show', $agreement),
+                'icon' => 'icon-file-text',
+                'color' => 'danger',
+                'bg_color' => 'rgba(239, 68, 68, 0.1)',
+                'border_color' => '#ef4444',
+                'created_at' => $endDate,
+                'sort_key' => $endDate->timestamp,
             ]);
         }
 

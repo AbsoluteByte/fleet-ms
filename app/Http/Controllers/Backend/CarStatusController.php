@@ -363,28 +363,7 @@ class CarStatusController extends Controller
      */
     private function validateSoldPayload(Request $request, int $tenantId): array
     {
-        $validated = $request->validate([
-            'payload.sell_date' => 'required|date',
-            'payload.sell_price' => 'required|numeric|min:0',
-            'payload.payment_terms' => ['required', Rule::in(['cash', 'bank', 'auto_total'])],
-            'payload.bank_account_id' => [
-                'nullable',
-                Rule::requiredIf(fn () => ($request->input('payload.payment_terms') ?? '') === 'bank'),
-                Rule::exists('bank_accounts', 'id')->where(fn ($q) => $q->where('tenant_id', $tenantId)),
-            ],
-            'payload.buyer_name' => 'required|string|max:255',
-            'payload.buyer_contact' => 'required|string|max:255',
-            'payload.buyer_address' => 'required|string',
-            'payload.notes' => 'nullable|string',
-        ]);
-
-        $payload = $validated['payload'] ?? [];
-
-        if (($payload['payment_terms'] ?? '') !== 'bank') {
-            unset($payload['bank_account_id']);
-        }
-
-        return $payload;
+        return app(CarStatusChangeService::class)->validateSoldStatusPayload($request, $tenantId);
     }
 
     private function bankAccountsForTenant(int $tenantId)

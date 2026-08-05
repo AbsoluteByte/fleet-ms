@@ -7,8 +7,10 @@ use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\OtherPayment;
 use App\Models\Payment;
+use App\Support\BatchPaymentInput;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class OtherPaymentController extends Controller
@@ -80,7 +82,7 @@ class OtherPaymentController extends Controller
                 ->with('error', 'No active company found!');
         }
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'other_payment_type' => ['required', Rule::in([
                 OtherPayment::TYPE_OFFICE,
                 OtherPayment::TYPE_VEHICLE,
@@ -91,17 +93,11 @@ class OtherPaymentController extends Controller
                 Rule::exists('cars', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
             ],
             'title' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:0.01',
-            'payment_method' => 'required|string|in:Bank Transfer,Cash,Cheque,Card Payment,Direct Debit',
-            'bank_account_id' => [
-                'nullable',
-                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))),
-                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
-            ],
-            'payment_date' => 'required|date',
             'document' => 'nullable|file',
             'notes' => 'nullable|string',
-        ]);
+        ], BatchPaymentInput::validationRules($request, $tenant->id)));
+
+        $paymentRows = BatchPaymentInput::normalizeRows($validated);
 
         $documentName = null;
         if ($request->hasFile('document')) {
@@ -122,27 +118,32 @@ class OtherPaymentController extends Controller
             $file->move($path, $documentName);
         }
 
-        OtherPayment::query()->create([
-            'tenant_id' => $tenant->id,
-            'other_payment_type' => $validated['other_payment_type'],
-            'car_id' => $validated['other_payment_type'] === OtherPayment::TYPE_VEHICLE
-                ? $validated['car_id']
-                : null,
-            'title' => $validated['title'],
-            'amount' => $validated['amount'],
-            'payment_method' => $validated['payment_method'],
-            'bank_account_id' => Payment::bankAccountIdForMethod(
-                $validated['payment_method'],
-                $validated['bank_account_id'] ?? null
-            ),
-            'payment_date' => $validated['payment_date'],
-            'document' => $documentName,
-            'notes' => $validated['notes'] ?? null,
-            'posting_status' => OtherPayment::POSTING_STATUS_PENDING,
-            'created_by' => Auth::id(),
-        ]);
+        DB::transaction(function () use ($tenant, $validated, $paymentRows, $documentName) {
+            foreach ($paymentRows as $paymentRow) {
+                OtherPayment::query()->create([
+                    'tenant_id' => $tenant->id,
+                    'other_payment_type' => $validated['other_payment_type'],
+                    'car_id' => $validated['other_payment_type'] === OtherPayment::TYPE_VEHICLE
+                        ? $validated['car_id']
+                        : null,
+                    'title' => $validated['title'],
+                    'amount' => $paymentRow['amount'],
+                    'payment_method' => $paymentRow['payment_method'],
+                    'bank_account_id' => $paymentRow['bank_account_id'],
+                    'payment_date' => $paymentRow['payment_date'] ?? now()->toDateString(),
+                    'document' => $documentName,
+                    'notes' => $validated['notes'] ?? null,
+                    'posting_status' => OtherPayment::POSTING_STATUS_PENDING,
+                    'created_by' => Auth::id(),
+                ]);
+            }
+        });
+
+        $message = count($paymentRows) > 1
+            ? count($paymentRows).' other payments recorded. They will appear on the daily financial sheet until approval.'
+            : 'Other payment recorded. It will appear on the daily financial sheet until approval.';
 
         return redirect()->route('other-payments.index')
-            ->with('success', 'Other payment recorded. It will appear on the daily financial sheet until approval.');
+            ->with('success', $message);
     }
 }

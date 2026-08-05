@@ -10,10 +10,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Middleware\RoleMiddleware;
+use Tests\Concerns\BuildsBatchPaymentPayload;
 use Tests\TestCase;
 
 class ReservationMinimalDriverTest extends TestCase
 {
+    use BuildsBatchPaymentPayload;
     private Tenant $tenant;
 
     private User $user;
@@ -43,6 +45,7 @@ class ReservationMinimalDriverTest extends TestCase
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('car_reservation_payments');
         Schema::dropIfExists('car_reservations');
         Schema::dropIfExists('bank_accounts');
         Schema::dropIfExists('companies');
@@ -57,7 +60,7 @@ class ReservationMinimalDriverTest extends TestCase
 
     public function test_store_creates_reservation_with_minimal_new_driver(): void
     {
-        $response = $this->post(route('reservations.store'), [
+        $response = $this->post(route('reservations.store'), array_merge([
             'driver_mode' => 'new',
             'first_name' => 'Ali',
             'reservation_date' => '2026-06-25',
@@ -65,8 +68,9 @@ class ReservationMinimalDriverTest extends TestCase
             'agreed_rent' => 100,
             'agreed_advance' => 50,
             'amount_paid' => 25,
-            'payment_method' => 'Cash',
-        ]);
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 25],
+        ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.index'));
         $response->assertSessionHasNoErrors();
@@ -99,7 +103,7 @@ class ReservationMinimalDriverTest extends TestCase
         ]);
 
         $response = $this->from(route('reservations.edit', $reservation))
-            ->put(route('reservations.update', $reservation), [
+            ->put(route('reservations.update', $reservation), array_merge([
                 'driver_mode' => 'new',
                 'first_name' => 'Sara',
                 'reservation_date' => '2026-06-25',
@@ -107,8 +111,9 @@ class ReservationMinimalDriverTest extends TestCase
                 'agreed_rent' => 100,
                 'agreed_advance' => 50,
                 'amount_paid' => 25,
-                'payment_method' => 'Cash',
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 25],
+            ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.edit', $reservation));
         $response->assertSessionHasErrors(['last_name', 'email']);
@@ -137,7 +142,7 @@ class ReservationMinimalDriverTest extends TestCase
         ]);
 
         $response = $this->from(route('reservations.edit', $reservation))
-            ->put(route('reservations.update', $reservation), [
+            ->put(route('reservations.update', $reservation), array_merge([
                 'driver_mode' => 'existing',
                 'driver_id' => $driver->id,
                 'first_name' => 'Ali',
@@ -158,8 +163,9 @@ class ReservationMinimalDriverTest extends TestCase
                 'agreed_rent' => 100,
                 'agreed_advance' => 50,
                 'amount_paid' => 25,
-                'payment_method' => 'Cash',
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 25],
+            ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.index'));
         $response->assertSessionHasNoErrors();
@@ -181,10 +187,13 @@ class ReservationMinimalDriverTest extends TestCase
                 'agreed_rent' => 100,
                 'agreed_advance' => 50,
                 'amount_paid' => 25,
+                'reservation_payments' => [
+                    ['amount' => 25],
+                ],
             ]);
 
         $response->assertRedirect(route('reservations.create'));
-        $response->assertSessionHasErrors('payment_method');
+        $response->assertSessionHasErrors('reservation_payments.0.payment_method');
     }
 
     public function test_store_requires_bank_account_for_bank_transfer(): void
@@ -192,7 +201,7 @@ class ReservationMinimalDriverTest extends TestCase
         $companyId = $this->createCompanyAndBankAccount();
 
         $response = $this->from(route('reservations.create'))
-            ->post(route('reservations.store'), [
+            ->post(route('reservations.store'), array_merge([
                 'driver_mode' => 'new',
                 'first_name' => 'Ali',
                 'reservation_date' => '2026-06-25',
@@ -200,11 +209,12 @@ class ReservationMinimalDriverTest extends TestCase
                 'agreed_rent' => 100,
                 'agreed_advance' => 50,
                 'amount_paid' => 25,
-                'payment_method' => 'Bank Transfer',
-            ]);
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Bank Transfer', 'amount' => 25],
+            ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.create'));
-        $response->assertSessionHasErrors('bank_account_id');
+        $response->assertSessionHasErrors('reservation_payments.0.bank_account_id');
         $this->assertDatabaseCount('car_reservations', 0);
     }
 
@@ -233,7 +243,7 @@ class ReservationMinimalDriverTest extends TestCase
     {
         $bankAccountId = $this->createCompanyAndBankAccount();
 
-        $response = $this->post(route('reservations.store'), [
+        $response = $this->post(route('reservations.store'), array_merge([
             'driver_mode' => 'new',
             'first_name' => 'Ali',
             'reservation_date' => '2026-06-25',
@@ -241,9 +251,13 @@ class ReservationMinimalDriverTest extends TestCase
             'agreed_rent' => 100,
             'agreed_advance' => 50,
             'amount_paid' => 25,
-            'payment_method' => 'Bank Transfer',
-            'bank_account_id' => $bankAccountId,
-        ]);
+        ], $this->batchPaymentsField([
+            [
+                'payment_method' => 'Bank Transfer',
+                'bank_account_id' => $bankAccountId,
+                'amount' => 25,
+            ],
+        ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.index'));
         $response->assertSessionHasNoErrors();
@@ -290,7 +304,7 @@ class ReservationMinimalDriverTest extends TestCase
         ]);
 
         $response = $this->from(route('reservations.edit', $reservation))
-            ->put(route('reservations.update', $reservation), [
+            ->put(route('reservations.update', $reservation), array_merge([
                 'driver_mode' => 'existing',
                 'driver_id' => $driver->id,
                 'first_name' => 'Ali',
@@ -311,9 +325,13 @@ class ReservationMinimalDriverTest extends TestCase
                 'agreed_rent' => 100,
                 'agreed_advance' => 50,
                 'amount_paid' => 30,
-                'payment_method' => 'Bank Transfer',
-                'bank_account_id' => $bankAccountId,
-            ]);
+            ], $this->batchPaymentsField([
+                [
+                    'payment_method' => 'Bank Transfer',
+                    'bank_account_id' => $bankAccountId,
+                    'amount' => 30,
+                ],
+            ], 'reservation_payments')));
 
         $response->assertRedirect(route('reservations.index'));
         $response->assertSessionHasNoErrors();
@@ -448,11 +466,22 @@ class ReservationMinimalDriverTest extends TestCase
             $table->decimal('amount_paid', 12, 2)->nullable();
             $table->string('payment_method')->nullable();
             $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->string('posting_status', 20)->nullable();
             $table->decimal('balance_payable_on_pickup', 12, 2)->nullable();
             $table->foreignId('created_by')->nullable();
             $table->timestamps();
             $table->softDeletes();
             $table->unsignedBigInteger('deleted_by')->nullable();
+        });
+
+        Schema::create('car_reservation_payments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('car_reservation_id');
+            $table->string('payment_method')->nullable();
+            $table->unsignedBigInteger('bank_account_id')->nullable();
+            $table->decimal('amount', 12, 2);
+            $table->string('posting_status', 20)->default('pending');
+            $table->timestamps();
         });
     }
 }

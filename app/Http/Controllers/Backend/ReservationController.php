@@ -9,6 +9,7 @@ use App\Models\Car;
 use App\Models\CarReservation;
 use App\Models\Driver;
 use App\Models\Payment;
+use App\Support\BatchPaymentInput;
 use App\Services\DriverPersistenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -97,7 +98,7 @@ class ReservationController extends Controller
             ->orderBy('last_name')
             ->get();
 
-        $reservation->load('driver');
+        $reservation->load(['driver', 'reservationPayments']);
         $driver = $reservation->driver ?? $this->legacyDriverStub($reservation);
         if ($reservation->driver_id && ! $drivers->contains('id', $reservation->driver_id)) {
             $currentDriver = Driver::query()
@@ -156,8 +157,9 @@ class ReservationController extends Controller
             (float) $validated['agreed_advance'],
             (float) $validated['amount_paid']
         );
+        $paymentRows = $this->reservationPaymentRowsFromValidated($validated);
 
-        DB::transaction(function () use ($request, $validated, $balance, $carId, $tenant, $driverPersistence) {
+        DB::transaction(function () use ($request, $validated, $balance, $carId, $tenant, $driverPersistence, $paymentRows) {
             $driverId = $this->resolveDriverId($request, $validated, $tenant, $driverPersistence, true);
             $driverSnapshot = $this->driverSnapshot($driverId);
 
@@ -174,11 +176,14 @@ class ReservationController extends Controller
                 'agreed_rent' => $validated['agreed_rent'],
                 'agreed_advance' => $validated['agreed_advance'],
                 'amount_paid' => $validated['amount_paid'],
-                ...$this->paymentAttributesFromValidated($validated),
+                'payment_method' => null,
+                'bank_account_id' => null,
                 'balance_payable_on_pickup' => $balance,
                 'status' => 'active',
                 'created_by' => Auth::id(),
             ]);
+
+            $reservation->syncReservationPayments($paymentRows);
 
             if ($reservation->car_id) {
                 $this->markCarReserved(Car::query()->find($reservation->car_id), $validated['pick_up_date']);
@@ -227,10 +232,11 @@ class ReservationController extends Controller
             (float) $validated['agreed_advance'],
             (float) $validated['amount_paid']
         );
+        $paymentRows = $this->reservationPaymentRowsFromValidated($validated);
 
         $oldCarId = $reservation->car_id;
 
-        DB::transaction(function () use ($request, $reservation, $validated, $balance, $carId, $oldCarId, $tenant, $driverPersistence, $completeLinkedDriver, $linkedDriver) {
+        DB::transaction(function () use ($request, $reservation, $validated, $balance, $carId, $oldCarId, $tenant, $driverPersistence, $completeLinkedDriver, $linkedDriver, $paymentRows) {
             $previousAmountPaid = (float) $reservation->amount_paid;
 
             $driverId = $this->resolveDriverId(
@@ -255,9 +261,10 @@ class ReservationController extends Controller
                 'agreed_rent' => $validated['agreed_rent'],
                 'agreed_advance' => $validated['agreed_advance'],
                 'amount_paid' => $validated['amount_paid'],
-                ...$this->paymentAttributesFromValidated($validated),
                 'balance_payable_on_pickup' => $balance,
             ]);
+
+            $reservation->syncReservationPayments($paymentRows);
 
             if ($oldCarId !== $carId) {
                 CarReservation::releaseCarFleetStatusIfUnused(Car::query()->find($oldCarId));
@@ -307,7 +314,7 @@ class ReservationController extends Controller
 
         $driverMode = $request->input('driver_mode', 'new');
 
-        $rules = [
+        $rules = array_merge([
             'driver_mode' => 'required|in:existing,new',
             'car_id' => [
                 'nullable',
@@ -318,19 +325,7 @@ class ReservationController extends Controller
             'agreed_rent' => 'required|numeric|min:0',
             'agreed_advance' => 'required|numeric|min:0',
             'amount_paid' => 'required|numeric|min:0',
-            'payment_method' => [
-                Rule::requiredIf(fn () => (float) $request->input('amount_paid', 0) > 0),
-                'nullable',
-                'string',
-                'max:255',
-            ],
-            'bank_account_id' => [
-                'nullable',
-                Rule::requiredIf(fn () => Payment::requiresBankAccount($request->input('payment_method'))
-                    && (float) $request->input('amount_paid', 0) > 0),
-                Rule::exists('bank_accounts', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
-            ],
-        ];
+        ], BatchPaymentInput::optionalValidationRules($request, $tenant->id, 'reservation_payments'));
 
         if ($completeLinkedDriver && $existingDriver) {
             $rules['driver_mode'] = 'required|in:existing';
@@ -353,6 +348,29 @@ class ReservationController extends Controller
         }
 
         return $request->validate($rules);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return list<array{payment_method: string, bank_account_id: ?int, amount: float}>
+     */
+    private function reservationPaymentRowsFromValidated(array $validated): array
+    {
+        $rows = BatchPaymentInput::normalizeRows($validated, 'reservation_payments', allowEmpty: true);
+        $amountPaid = round(array_sum(array_column($rows, 'amount')), 2);
+        $validatedAmountPaid = round((float) ($validated['amount_paid'] ?? 0), 2);
+
+        if ($amountPaid !== $validatedAmountPaid) {
+            throw ValidationException::withMessages([
+                'amount_paid' => 'Amount paid must match the total of deposit payment rows.',
+            ]);
+        }
+
+        return array_map(fn (array $row) => [
+            'payment_method' => $row['payment_method'],
+            'bank_account_id' => $row['bank_account_id'],
+            'amount' => $row['amount'],
+        ], $rows);
     }
 
     private function resolveDriverId(
@@ -432,6 +450,8 @@ class ReservationController extends Controller
     /**
      * @param  array<string, mixed>  $validated
      * @return array{payment_method: ?string, bank_account_id: ?int}
+     *
+     * @deprecated Use reservation payment rows instead.
      */
     private function paymentAttributesFromValidated(array $validated): array
     {

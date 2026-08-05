@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Car;
 use App\Models\CarReservation;
+use App\Models\OtherPayment;
+use App\Support\BatchPaymentInput;
 use App\Models\CarStatusHistory;
 use App\Models\Tenant;
 use App\Models\VehicleSwap;
@@ -216,7 +218,7 @@ class CarStatusChangeService
      */
     private function applyReserved(Request $request, Tenant $tenant, Car $car): array
     {
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'customer_name' => 'required|string|max:255',
             'customer_phone' => 'nullable|string|max:50',
             'customer_email' => 'nullable|email|max:255',
@@ -225,7 +227,15 @@ class CarStatusChangeService
             'agreed_rent' => 'required|numeric|min:0',
             'agreed_advance' => 'required|numeric|min:0',
             'amount_paid' => 'required|numeric|min:0',
-        ]);
+        ], BatchPaymentInput::optionalValidationRules($request, $tenant->id, 'reservation_payments')));
+
+        $paymentRows = BatchPaymentInput::normalizeRows($validated, 'reservation_payments', allowEmpty: true);
+        $amountPaid = round(array_sum(array_column($paymentRows, 'amount')), 2);
+        if ($amountPaid !== round((float) $validated['amount_paid'], 2)) {
+            throw ValidationException::withMessages([
+                'amount_paid' => 'Amount paid must match the total of deposit payment rows.',
+            ]);
+        }
 
         $this->assertCarAssignableForReservation($car, null);
 
@@ -247,11 +257,18 @@ class CarStatusChangeService
             'agreed_rent' => $validated['agreed_rent'],
             'agreed_advance' => $validated['agreed_advance'],
             'amount_paid' => $validated['amount_paid'],
-            'payment_method' => (float) $validated['amount_paid'] > 0 ? 'Cash' : null,
+            'payment_method' => null,
+            'bank_account_id' => null,
             'balance_payable_on_pickup' => $balance,
             'status' => 'active',
             'created_by' => Auth::id(),
         ]);
+
+        $reservation->syncReservationPayments(array_map(fn (array $row) => [
+            'payment_method' => $row['payment_method'],
+            'bank_account_id' => $row['bank_account_id'],
+            'amount' => $row['amount'],
+        ], $paymentRows));
 
         $reservation->syncFinancialSheetStatus();
 
@@ -460,30 +477,19 @@ class CarStatusChangeService
     /**
      * @return array<string, mixed>
      */
+    public function validateSoldStatusPayload(Request $request, int $tenantId): array
+    {
+        return $this->buildSoldStatusData($request, $tenantId);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     private function applySoldCarUpdate(Request $request, Car $car): array
     {
-        $validated = $request->validate([
-            'payload.sell_date' => 'required|date',
-            'payload.sell_price' => 'required|numeric|min:0',
-            'payload.payment_terms' => ['required', Rule::in(['cash', 'bank', 'auto_total'])],
-            'payload.bank_account_id' => [
-                'nullable',
-                Rule::requiredIf(fn () => ($request->input('payload.payment_terms') ?? '') === 'bank'),
-                Rule::exists('bank_accounts', 'id')->where(fn ($q) => $q->where('tenant_id', $car->tenant_id)),
-            ],
-            'payload.buyer_name' => 'required|string|max:255',
-            'payload.buyer_contact' => 'required|string|max:255',
-            'payload.buyer_address' => 'required|string',
-            'payload.notes' => 'nullable|string',
-        ]);
-
         $this->cancelActiveReservationsAndSwapsForCar($car);
 
-        $payload = $validated['payload'];
-
-        if (($payload['payment_terms'] ?? '') !== 'bank') {
-            unset($payload['bank_account_id']);
-        }
+        $payload = $this->buildSoldStatusData($request, $car->tenant_id, $car);
 
         $car->update([
             'fleet_status' => 'sold',
@@ -491,6 +497,109 @@ class CarStatusChangeService
         ]);
 
         return array_merge($payload, ['documents' => []]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSoldStatusData(Request $request, int $tenantId, ?Car $car = null): array
+    {
+        $validated = $request->validate(array_merge([
+            'payload.sell_date' => 'required|date',
+            'payload.sell_price' => 'required|numeric|min:0.01',
+            'payload.buyer_name' => 'required|string|max:255',
+            'payload.buyer_contact' => 'required|string|max:255',
+            'payload.buyer_address' => 'required|string',
+            'payload.notes' => 'nullable|string',
+        ], BatchPaymentInput::validationRules($request, $tenantId, 'sold_payments')));
+
+        $paymentRows = BatchPaymentInput::normalizeRows($validated, 'sold_payments');
+        $sellPrice = round((float) $validated['payload']['sell_price'], 2);
+        $paymentTotal = round(array_sum(array_column($paymentRows, 'amount')), 2);
+
+        if ($sellPrice !== $paymentTotal) {
+            throw ValidationException::withMessages([
+                'payload.sell_price' => 'Sell price must match the total of payment rows.',
+            ]);
+        }
+
+        $payload = $validated['payload'];
+        $payload['sell_price'] = $sellPrice;
+        $payload['payments'] = $paymentRows;
+        $payload = $this->appendLegacySoldPaymentFields($payload, $paymentRows);
+
+        if ($car !== null) {
+            $this->createSoldOtherPayments($car, $payload, $paymentRows);
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  list<array{payment_method: string, bank_account_id: ?int, payment_date: ?string, amount: float, notes: ?string}>  $paymentRows
+     * @return array<string, mixed>
+     */
+    private function appendLegacySoldPaymentFields(array $payload, array $paymentRows): array
+    {
+        if (count($paymentRows) === 1) {
+            $payload['payment_terms'] = $this->legacyPaymentTermsFromMethod($paymentRows[0]['payment_method']);
+            if (! empty($paymentRows[0]['bank_account_id'])) {
+                $payload['bank_account_id'] = $paymentRows[0]['bank_account_id'];
+            } else {
+                unset($payload['bank_account_id']);
+            }
+        } else {
+            unset($payload['payment_terms'], $payload['bank_account_id']);
+        }
+
+        return $payload;
+    }
+
+    private function legacyPaymentTermsFromMethod(string $paymentMethod): string
+    {
+        return in_array($paymentMethod, ['Bank Transfer', 'Card Payment'], true) ? 'bank' : 'cash';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  list<array{payment_method: string, bank_account_id: ?int, payment_date: ?string, amount: float, notes: ?string}>  $paymentRows
+     */
+    private function createSoldOtherPayments(Car $car, array $payload, array $paymentRows): void
+    {
+        if ($paymentRows === []) {
+            return;
+        }
+
+        $registration = trim((string) ($car->registration ?? 'Vehicle'));
+        $title = 'Sale — '.$registration;
+        $buyerNotes = trim(implode("\n", array_filter([
+            'Buyer: '.($payload['buyer_name'] ?? ''),
+            'Contact: '.($payload['buyer_contact'] ?? ''),
+            'Address: '.($payload['buyer_address'] ?? ''),
+            $payload['notes'] ?? null,
+        ])));
+
+        foreach ($paymentRows as $paymentRow) {
+            $rowNotes = trim(implode("\n\n", array_filter([
+                $buyerNotes,
+                $paymentRow['notes'] ?? null,
+            ])));
+
+            OtherPayment::query()->create([
+                'tenant_id' => $car->tenant_id,
+                'other_payment_type' => OtherPayment::TYPE_VEHICLE,
+                'car_id' => $car->id,
+                'title' => $title,
+                'amount' => $paymentRow['amount'],
+                'payment_method' => $paymentRow['payment_method'],
+                'bank_account_id' => $paymentRow['bank_account_id'],
+                'payment_date' => $paymentRow['payment_date'] ?? ($payload['sell_date'] ?? now()->toDateString()),
+                'notes' => $rowNotes !== '' ? $rowNotes : null,
+                'posting_status' => OtherPayment::POSTING_STATUS_PENDING,
+                'created_by' => Auth::id(),
+            ]);
+        }
     }
 
     /**

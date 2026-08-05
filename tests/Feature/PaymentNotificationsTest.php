@@ -207,6 +207,40 @@ class PaymentNotificationsTest extends TestCase
 
     public function test_overdue_notification_uses_warning_amount_when_pending_dfs_payment_exists(): void
     {
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 50,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-19',
+            'amount' => 80,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'auto_allocate' => false,
+            'pending_manual_allocations' => [(string) $invoice->id => 80],
+            'created_by' => $this->user->id,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
+
+        $this->assertNotNull($row);
+        $this->assertTrue($row['has_pending_dfs']);
+        $this->assertSame('warning', $row['amount_color']);
+        $this->assertSame('£80.00 pending daily financial sheet approval.', $row['amount_tooltip']);
+        $this->assertSame('warning', $row['color']);
+    }
+
+    public function test_overdue_notification_keeps_danger_when_pending_payment_is_not_linked_to_invoice(): void
+    {
+        $this->createInvoice([
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 50,
+        ]);
+
         Payment::query()->create([
             'driver_id' => $this->driver->id,
             'payment_method' => 'Cash',
@@ -218,17 +252,17 @@ class PaymentNotificationsTest extends TestCase
         ]);
 
         $invoice = $this->createInvoice([
-            'invoice_date' => '2026-07-10',
-            'due_date' => '2026-07-15',
-            'balance_amount' => 50,
+            'invoice_date' => '2026-07-12',
+            'due_date' => '2026-07-18',
+            'balance_amount' => 40,
         ]);
 
         $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
 
         $this->assertNotNull($row);
-        $this->assertSame('warning', $row['amount_color']);
-        $this->assertSame('£80.00 pending daily financial sheet approval.', $row['amount_tooltip']);
-        $this->assertSame('warning', $row['color']);
+        $this->assertFalse($row['has_pending_dfs']);
+        $this->assertSame('danger', $row['amount_color']);
+        $this->assertNull($row['amount_tooltip']);
     }
 
     public function test_overdue_notification_keeps_danger_amount_without_pending_dfs_payment(): void
@@ -242,6 +276,7 @@ class PaymentNotificationsTest extends TestCase
         $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
 
         $this->assertNotNull($row);
+        $this->assertFalse($row['has_pending_dfs']);
         $this->assertSame('danger', $row['amount_color']);
         $this->assertNull($row['amount_tooltip']);
     }
@@ -257,13 +292,81 @@ class PaymentNotificationsTest extends TestCase
         $row = $this->paymentNotificationRowForInvoice($invoice->id, 'due_today');
 
         $this->assertNotNull($row);
+        $this->assertFalse($row['has_pending_dfs']);
         $this->assertSame('danger', $row['amount_color']);
         $this->assertNull($row['amount_tooltip']);
         $this->assertSame('danger', $row['color']);
     }
 
+    public function test_due_today_notification_uses_warning_when_auto_allocate_pending_dfs_targets_invoice(): void
+    {
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-20',
+            'due_date' => '2026-07-27',
+            'balance_amount' => 100,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-19',
+            'amount' => 60,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'auto_allocate' => true,
+            'created_by' => $this->user->id,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'due_today');
+
+        $this->assertNotNull($row);
+        $this->assertTrue($row['has_pending_dfs']);
+        $this->assertSame('warning', $row['amount_color']);
+        $this->assertSame('£60.00 pending daily financial sheet approval.', $row['amount_tooltip']);
+        $this->assertSame('warning', $row['color']);
+    }
+
+    public function test_auto_allocate_pending_dfs_only_highlights_invoices_that_receive_allocation(): void
+    {
+        $olderInvoice = $this->createInvoice([
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 30,
+        ]);
+        $newerInvoice = $this->createInvoice([
+            'invoice_date' => '2026-07-18',
+            'due_date' => '2026-07-24',
+            'balance_amount' => 50,
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-07-19',
+            'amount' => 60,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+            'auto_allocate' => true,
+            'created_by' => $this->user->id,
+        ]);
+
+        $olderRow = $this->paymentNotificationRowForInvoice($olderInvoice->id, 'overdue_payment');
+        $newerRow = $this->paymentNotificationRowForInvoice($newerInvoice->id, 'due_this_week');
+
+        $this->assertNotNull($olderRow);
+        $this->assertNotNull($newerRow);
+        $this->assertTrue($olderRow['has_pending_dfs']);
+        $this->assertTrue($newerRow['has_pending_dfs']);
+        $this->assertSame('£30.00 pending daily financial sheet approval.', $olderRow['amount_tooltip']);
+        $this->assertSame('£30.00 pending daily financial sheet approval.', $newerRow['amount_tooltip']);
+    }
+
     public function test_due_today_notification_uses_warning_when_pending_dfs_exists(): void
     {
+        $invoice = $this->createInvoice([
+            'invoice_date' => '2026-07-20',
+            'due_date' => '2026-07-27',
+            'balance_amount' => 100,
+        ]);
+
         Payment::query()->create([
             'driver_id' => $this->driver->id,
             'payment_method' => 'Cash',
@@ -271,18 +374,14 @@ class PaymentNotificationsTest extends TestCase
             'amount' => 60,
             'posting_status' => Payment::POSTING_STATUS_PENDING,
             'auto_allocate' => false,
+            'pending_manual_allocations' => [(string) $invoice->id => 60],
             'created_by' => $this->user->id,
-        ]);
-
-        $invoice = $this->createInvoice([
-            'invoice_date' => '2026-07-20',
-            'due_date' => '2026-07-27',
-            'balance_amount' => 100,
         ]);
 
         $row = $this->paymentNotificationRowForInvoice($invoice->id, 'due_today');
 
         $this->assertNotNull($row);
+        $this->assertTrue($row['has_pending_dfs']);
         $this->assertSame('warning', $row['amount_color']);
         $this->assertSame('£60.00 pending daily financial sheet approval.', $row['amount_tooltip']);
         $this->assertSame('warning', $row['color']);
@@ -299,6 +398,7 @@ class PaymentNotificationsTest extends TestCase
         $row = $this->paymentNotificationRowForInvoice($invoice->id, 'due_this_week');
 
         $this->assertNotNull($row);
+        $this->assertFalse($row['has_pending_dfs']);
         $this->assertSame('danger', $row['amount_color']);
         $this->assertNull($row['amount_tooltip']);
         $this->assertSame('danger', $row['color']);
