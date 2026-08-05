@@ -35,6 +35,8 @@ class AgreementFleetNotificationTest extends TestCase
 
     private Status $terminatedStatus;
 
+    private Status $expiredStatus;
+
     private User $user;
 
     protected function setUp(): void
@@ -81,6 +83,7 @@ class AgreementFleetNotificationTest extends TestCase
         $this->activeStatus = Status::query()->create(['name' => 'Active', 'type' => 'agreement']);
         $this->swapStatus = Status::query()->create(['name' => 'Swap', 'type' => 'agreement']);
         $this->terminatedStatus = Status::query()->create(['name' => 'Terminated', 'type' => 'agreement']);
+        $this->expiredStatus = Status::query()->create(['name' => 'Expired', 'type' => 'agreement']);
 
         $this->user = User::factory()->create();
         $this->user->tenants()->attach($this->tenant->id, [
@@ -232,6 +235,122 @@ class AgreementFleetNotificationTest extends TestCase
         $this->assertSame('agreement_upcoming_'.$laterAgreement->id, $rows->last()['id']);
     }
 
+    public function test_agreement_expired_three_days_ago_is_included(): void
+    {
+        $agreement = $this->createAgreement([
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-07-17',
+            'status_id' => $this->activeStatus->id,
+        ]);
+
+        $notification = $this->expiredAgreementNotificationFor($agreement->id);
+
+        $this->assertNotNull($notification);
+        $this->assertSame('agreement_expired', $notification['type']);
+        $this->assertSame('Agreement Expired', $notification['title']);
+        $this->assertStringContainsString('NTF001', $notification['simple_message']);
+        $this->assertStringContainsString('Agreement expired 3 days ago', $notification['simple_message']);
+        $this->assertSame(1, $notification['priority']);
+    }
+
+    public function test_agreement_expired_eleven_days_ago_is_excluded(): void
+    {
+        $agreement = $this->createAgreement([
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-07-09',
+            'status_id' => $this->activeStatus->id,
+        ]);
+
+        $this->assertNull($this->expiredAgreementNotificationFor($agreement->id));
+    }
+
+    public function test_terminated_agreement_with_recent_end_date_is_excluded_from_expired_notifications(): void
+    {
+        $agreement = $this->createAgreement([
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-07-17',
+            'status_id' => $this->terminatedStatus->id,
+            'car_id' => $this->createSecondCar('NTF004')->id,
+        ]);
+
+        $this->assertNull($this->expiredAgreementNotificationFor($agreement->id));
+    }
+
+    public function test_expired_status_agreement_within_ten_day_window_is_included(): void
+    {
+        $agreement = $this->createAgreement([
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-07-18',
+            'status_id' => $this->expiredStatus->id,
+            'car_id' => $this->createSecondCar('NTF005')->id,
+        ]);
+
+        $notification = $this->expiredAgreementNotificationFor($agreement->id);
+
+        $this->assertNotNull($notification);
+        $this->assertSame('agreement_expired', $notification['type']);
+    }
+
+    public function test_agreement_notifications_filter_includes_expired_agreements(): void
+    {
+        $expiredAgreement = $this->createAgreement([
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-07-17',
+            'status_id' => $this->activeStatus->id,
+            'car_id' => $this->createSecondCar('NTF006')->id,
+        ]);
+
+        $upcomingAgreement = $this->createAgreement([
+            'end_date' => '2026-07-25',
+            'status_id' => $this->activeStatus->id,
+            'car_id' => $this->createSecondCar('NTF007')->id,
+        ]);
+
+        $response = $this->getJson(route('notifications.index', ['type' => 'agreement_notifications']), [
+            'X-Requested-With' => 'XMLHttpRequest',
+        ]);
+
+        $response->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id')->all();
+
+        $this->assertContains('agreement_expired_'.$expiredAgreement->id, $ids);
+        $this->assertContains('agreement_upcoming_'.$upcomingAgreement->id, $ids);
+    }
+
+    public function test_expired_and_upcoming_agreement_notifications_sort_by_date_ascending(): void
+    {
+        $expiredAgreement = $this->createAgreement([
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-07-17',
+            'status_id' => $this->activeStatus->id,
+            'car_id' => $this->createSecondCar('NTF008')->id,
+        ]);
+
+        $upcomingAgreement = $this->createAgreement([
+            'end_date' => '2026-07-25',
+            'status_id' => $this->activeStatus->id,
+            'car_id' => $this->createSecondCar('NTF009')->id,
+        ]);
+
+        $response = $this->getJson(route('notifications.index', ['type' => 'agreement_notifications']), [
+            'X-Requested-With' => 'XMLHttpRequest',
+        ]);
+
+        $response->assertOk();
+
+        $rows = collect($response->json('data'));
+        $sortKeys = $rows->pluck('sort_key')->values()->all();
+
+        $this->assertSame([
+            Carbon::parse('2026-07-17')->startOfDay()->timestamp,
+            Carbon::parse('2026-07-25')->startOfDay()->timestamp,
+        ], $sortKeys);
+
+        $this->assertSame('agreement_expired_'.$expiredAgreement->id, $rows->first()['id']);
+        $this->assertSame('agreement_upcoming_'.$upcomingAgreement->id, $rows->last()['id']);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -266,6 +385,15 @@ class AgreementFleetNotificationTest extends TestCase
     /**
      * @return array<string, mixed>|null
      */
+    private function expiredAgreementNotificationFor(int $agreementId): ?array
+    {
+        return $this->agreementNotifications()
+            ->firstWhere('id', 'agreement_expired_'.$agreementId);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
     private function agreementNotificationFor(int $agreementId): ?array
     {
         return $this->agreementNotifications()
@@ -279,7 +407,11 @@ class AgreementFleetNotificationTest extends TestCase
         $response->assertOk();
 
         return collect($response->json('notifications'))
-            ->filter(fn (array $notification) => in_array($notification['type'], ['agreement_end_date', 'agreement_termination_notice'], true));
+            ->filter(fn (array $notification) => in_array($notification['type'], [
+                'agreement_end_date',
+                'agreement_termination_notice',
+                'agreement_expired',
+            ], true));
     }
 
     private function setUpHttpTestExtras(): void

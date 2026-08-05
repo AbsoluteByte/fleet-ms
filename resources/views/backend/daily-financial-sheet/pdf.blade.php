@@ -67,29 +67,47 @@
         @endif
     </div>
 
+    @if($isFiltered ?? false)
+        <div class="alert" style="border-color: #b8daff; background: #eef5ff;">
+            <strong>Filtered view</strong>
+            @if(!empty($filterLabels['payment_method']))
+                — Payment method: {{ $filterLabels['payment_method'] }}
+            @endif
+            @if(!empty($filterLabels['bank_account']))
+                @if(!empty($filterLabels['payment_method']))
+                    /
+                @else
+                    —
+                @endif
+                Bank: {{ $filterLabels['bank_account'] }}
+            @endif
+            ({{ $entries->count() }} {{ \Illuminate\Support\Str::plural('entry', $entries->count()) }})
+        </div>
+    @endif
+
     <table class="totals">
         <tr>
             <td>
-                <small>{{ $isApproved ? 'Approved Cash In' : 'Cash In' }}</small>
+                <small>{{ $isApproved && !($isFiltered ?? false) ? 'Approved Cash In' : 'Cash In' }}</small>
                 <strong>£{{ number_format($totals['cash_in'], 2) }}</strong>
             </td>
             <td>
-                <small>{{ $isApproved ? 'Approved Cash Out' : 'Cash Out' }}</small>
+                <small>{{ $isApproved && !($isFiltered ?? false) ? 'Approved Cash Out' : 'Cash Out' }}</small>
                 <strong>£{{ number_format($totals['cash_out'], 2) }}</strong>
             </td>
             <td>
-                <small>{{ $isApproved ? 'Approved Net Cash' : 'Net Cash' }}</small>
+                <small>{{ $isApproved && !($isFiltered ?? false) ? 'Approved Net Cash' : 'Net Cash' }}</small>
                 <strong>£{{ number_format($totals['net_cash'], 2) }}</strong>
             </td>
             <td>
-                <small>{{ $isApproved ? 'Approved Bank In' : 'Bank In (total)' }}</small>
+                <small>{{ $isApproved && !($isFiltered ?? false) ? 'Approved Bank In' : 'Bank In (total)' }}</small>
                 <strong>£{{ number_format(collect($totals['bank_in'])->sum('total'), 2) }}</strong>
             </td>
         </tr>
     </table>
 
     @if(!empty($totals['bank_in']))
-        <h2>{{ $isApproved ? 'Approved Bank In breakdown' : 'Bank In breakdown' }}</h2>
+        <h2>{{ $isApproved && !($isFiltered ?? false) ? 'Approved Bank In breakdown' : 'Bank In breakdown' }}</h2>
         <ul class="banks">
             @foreach($totals['bank_in'] as $bankRow)
                 <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>
@@ -98,7 +116,7 @@
     @endif
 
     @if(!empty($totals['bank_out'] ?? []))
-        <h2>{{ $isApproved ? 'Approved Bank Out breakdown' : 'Bank Out breakdown' }}</h2>
+        <h2>{{ $isApproved && !($isFiltered ?? false) ? 'Approved Bank Out breakdown' : 'Bank Out breakdown' }}</h2>
         <ul class="banks">
             @foreach($totals['bank_out'] as $bankRow)
                 <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>

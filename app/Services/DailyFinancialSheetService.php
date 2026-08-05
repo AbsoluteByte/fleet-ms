@@ -400,6 +400,75 @@ class DailyFinancialSheetService
     }
 
     /**
+     * @param  Collection<int, array<string, mixed>>  $entries
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function filterEntries(
+        Collection $entries,
+        ?string $paymentMethod = null,
+        ?int $bankAccountId = null
+    ): Collection {
+        $paymentMethod = is_string($paymentMethod) ? trim($paymentMethod) : null;
+        if ($paymentMethod === '') {
+            $paymentMethod = null;
+        }
+
+        return $entries->filter(function (array $entry) use ($paymentMethod, $bankAccountId) {
+            if ($paymentMethod !== null && ($entry['payment_method'] ?? null) !== $paymentMethod) {
+                return false;
+            }
+
+            if ($bankAccountId !== null && (int) ($entry['bank_account_id'] ?? 0) !== $bankAccountId) {
+                return false;
+            }
+
+            return true;
+        })->values();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $entries
+     * @return array{payment_methods: list<string>, bank_accounts: list<array{id: int, label: string}>}
+     */
+    public function filterOptionsForEntries(Collection $entries): array
+    {
+        $paymentMethods = $entries
+            ->pluck('payment_method')
+            ->filter(fn ($method) => is_string($method) && trim($method) !== '')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        $bankAccounts = [];
+        $seenBankIds = [];
+
+        foreach ($entries as $entry) {
+            $bankAccountId = (int) ($entry['bank_account_id'] ?? 0);
+            if ($bankAccountId <= 0 || isset($seenBankIds[$bankAccountId])) {
+                continue;
+            }
+
+            $seenBankIds[$bankAccountId] = true;
+            $bankName = trim((string) ($entry['bank_name'] ?? 'Bank'));
+            $accountNumber = trim((string) ($entry['account_number'] ?? ''));
+            $label = $accountNumber !== '' ? "{$bankName} ({$accountNumber})" : $bankName;
+
+            $bankAccounts[] = [
+                'id' => $bankAccountId,
+                'label' => $label,
+            ];
+        }
+
+        usort($bankAccounts, fn (array $a, array $b) => strcmp($a['label'], $b['label']));
+
+        return [
+            'payment_methods' => $paymentMethods,
+            'bank_accounts' => $bankAccounts,
+        ];
+    }
+
+    /**
      * Approve pending sheet entries for a date.
      *
      * When $entryIds is null or empty, all pending entries are approved.

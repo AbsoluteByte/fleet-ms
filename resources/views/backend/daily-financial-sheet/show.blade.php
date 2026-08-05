@@ -17,7 +17,14 @@
                         @endif
                     </div>
                     <div class="d-flex align-items-center" style="gap: 0.5rem;">
-                        <a href="{{ route('daily-financial-sheet.pdf', $sheetDate) }}" class="btn btn-outline-primary btn-sm">
+                        @php
+                            $pdfQuery = array_filter([
+                                'payment_method' => $activeFilters['payment_method'] ?? null,
+                                'bank_account_id' => $activeFilters['bank_account_id'] ?? null,
+                            ], fn ($value) => $value !== null && $value !== '');
+                            $pdfUrl = route('daily-financial-sheet.pdf', $sheetDate).($pdfQuery !== [] ? '?'.http_build_query($pdfQuery) : '');
+                        @endphp
+                        <a href="{{ $pdfUrl }}" id="dfsExportPdfLink" class="btn btn-outline-primary btn-sm" data-base-url="{{ route('daily-financial-sheet.pdf', $sheetDate) }}">
                             <i class="fa fa-file-pdf-o"></i> Export PDF
                         </a>
                         <a href="{{ route('daily-financial-sheet.index') }}" class="btn btn-secondary btn-sm">
@@ -28,54 +35,87 @@
                 <div class="card-body" style="margin-top: 0;">
                     @include('alerts')
 
+                    <div class="row mb-2 align-items-end">
+                        <div class="col-md-4 mb-1">
+                            <label for="dfsFilterPaymentMethod" class="form-label mb-25">Payment Method</label>
+                            <select id="dfsFilterPaymentMethod" class="form-control">
+                                <option value="">All methods</option>
+                                @foreach($filterOptions['payment_methods'] as $method)
+                                    <option value="{{ $method }}" @selected(($activeFilters['payment_method'] ?? null) === $method)>{{ $method }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <label for="dfsFilterBankAccount" class="form-label mb-25">Bank Account</label>
+                            <select id="dfsFilterBankAccount" class="form-control">
+                                <option value="">All bank accounts</option>
+                                @foreach($filterOptions['bank_accounts'] as $bankAccount)
+                                    <option value="{{ $bankAccount['id'] }}" @selected((int) ($activeFilters['bank_account_id'] ?? 0) === (int) $bankAccount['id'])>{{ $bankAccount['label'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-1">
+                            <button type="button" class="btn btn-outline-secondary" id="dfsClearFilters">Clear filters</button>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info py-1 mb-2 {{ $isFiltered ? '' : 'd-none' }}" id="dfsFilterBanner">
+                        <strong>Filtered view</strong>
+                        — <span id="dfsFilterCount">{{ $entries->count() }}</span> of {{ $allEntries->count() }} entries
+                        @if($isFiltered)
+                            @if($filterLabels['payment_method'])
+                                · Method: {{ $filterLabels['payment_method'] }}
+                            @endif
+                            @if($filterLabels['bank_account'])
+                                · Bank: {{ $filterLabels['bank_account'] }}
+                            @endif
+                        @endif
+                    </div>
+
                     <div class="row mb-2">
                         <div class="col-md-3 mb-1">
                             <div class="border rounded p-1">
-                                <small class="text-muted">{{ $isApproved ? 'Approved Cash In' : 'Cash In' }}</small>
-                                <div><strong>£{{ number_format($totals['cash_in'], 2) }}</strong></div>
+                                <small class="text-muted" id="dfsCashInLabel">{{ $isApproved && ! $isFiltered ? 'Approved Cash In' : 'Cash In' }}</small>
+                                <div><strong id="dfsCashIn">£{{ number_format($totals['cash_in'], 2) }}</strong></div>
                             </div>
                         </div>
                         <div class="col-md-3 mb-1">
                             <div class="border rounded p-1">
-                                <small class="text-muted">{{ $isApproved ? 'Approved Cash Out' : 'Cash Out' }}</small>
-                                <div><strong>£{{ number_format($totals['cash_out'], 2) }}</strong></div>
+                                <small class="text-muted" id="dfsCashOutLabel">{{ $isApproved && ! $isFiltered ? 'Approved Cash Out' : 'Cash Out' }}</small>
+                                <div><strong id="dfsCashOut">£{{ number_format($totals['cash_out'], 2) }}</strong></div>
                             </div>
                         </div>
                         <div class="col-md-3 mb-1">
                             <div class="border rounded p-1">
-                                <small class="text-muted">{{ $isApproved ? 'Approved Net Cash' : 'Net Cash' }}</small>
-                                <div><strong>£{{ number_format($totals['net_cash'], 2) }}</strong></div>
+                                <small class="text-muted" id="dfsNetCashLabel">{{ $isApproved && ! $isFiltered ? 'Approved Net Cash' : 'Net Cash' }}</small>
+                                <div><strong id="dfsNetCash">£{{ number_format($totals['net_cash'], 2) }}</strong></div>
                             </div>
                         </div>
                         <div class="col-md-3 mb-1">
                             <div class="border rounded p-1">
-                                <small class="text-muted">{{ $isApproved ? 'Approved Bank In' : 'Bank In (total)' }}</small>
-                                <div><strong>£{{ number_format(collect($totals['bank_in'])->sum('total'), 2) }}</strong></div>
+                                <small class="text-muted" id="dfsBankInLabel">{{ $isApproved && ! $isFiltered ? 'Approved Bank In' : 'Bank In (total)' }}</small>
+                                <div><strong id="dfsBankInTotal">£{{ number_format(collect($totals['bank_in'])->sum('total'), 2) }}</strong></div>
                             </div>
                         </div>
                     </div>
 
-                    @if(!empty($totals['bank_in']))
-                        <div class="mb-2">
-                            <h6>{{ $isApproved ? 'Approved Bank In breakdown' : 'Bank In breakdown' }}</h6>
-                            <ul class="mb-0">
-                                @foreach($totals['bank_in'] as $bankRow)
-                                    <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>
-                                @endforeach
-                            </ul>
-                        </div>
-                    @endif
+                    <div class="mb-2 {{ !empty($totals['bank_in']) ? '' : 'd-none' }}" id="dfsBankInSection">
+                        <h6 id="dfsBankInHeading">{{ $isApproved && ! $isFiltered ? 'Approved Bank In breakdown' : 'Bank In breakdown' }}</h6>
+                        <ul class="mb-0" id="dfsBankInList">
+                            @foreach($totals['bank_in'] as $bankRow)
+                                <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
 
-                    @if(!empty($totals['bank_out'] ?? []))
-                        <div class="mb-2">
-                            <h6>{{ $isApproved ? 'Approved Bank Out breakdown' : 'Bank Out breakdown' }}</h6>
-                            <ul class="mb-0">
-                                @foreach($totals['bank_out'] as $bankRow)
-                                    <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>
-                                @endforeach
-                            </ul>
-                        </div>
-                    @endif
+                    <div class="mb-2 {{ !empty($totals['bank_out'] ?? []) ? '' : 'd-none' }}" id="dfsBankOutSection">
+                        <h6 id="dfsBankOutHeading">{{ $isApproved && ! $isFiltered ? 'Approved Bank Out breakdown' : 'Bank Out breakdown' }}</h6>
+                        <ul class="mb-0" id="dfsBankOutList">
+                            @foreach($totals['bank_out'] ?? [] as $bankRow)
+                                <li>{{ $bankRow['bank_name'] }} ({{ $bankRow['account_number'] }}): £{{ number_format($bankRow['total'], 2) }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
 
                     @if($pendingTotals)
                         <div class="alert alert-warning mb-2">
@@ -128,8 +168,15 @@
                                 </tr>
                                 </thead>
                                 <tbody>
-                                @forelse($entries as $entry)
-                                    <tr>
+                                @forelse($allEntries as $entry)
+                                    @php
+                                        $rowVisible = ! $isFiltered || $entries->contains(fn ($visible) => ($visible['id'] ?? null) === ($entry['id'] ?? null));
+                                    @endphp
+                                    <tr class="dfs-entry-row {{ $rowVisible ? '' : 'd-none' }}"
+                                        data-payment-method="{{ $entry['payment_method'] ?? '' }}"
+                                        data-bank-account-id="{{ $entry['bank_account_id'] ?? '' }}"
+                                        data-direction="{{ $entry['direction'] ?? '' }}"
+                                        data-amount="{{ $entry['amount'] ?? 0 }}">
                                         @if($canApprove)
                                             <td>
                                                 @if($entry['posting_status'] === 'pending')
@@ -213,10 +260,13 @@
                                         @endif
                                     </tr>
                                 @empty
-                                    <tr>
+                                    <tr id="dfsNoEntriesRow">
                                         <td colspan="{{ $canApprove ? 11 : 9 }}" class="text-center text-muted">No entries for this date.</td>
                                     </tr>
                                 @endforelse
+                                <tr id="dfsNoFilterMatchesRow" class="d-none">
+                                    <td colspan="{{ $canApprove ? 11 : 9 }}" class="text-center text-muted">No entries match the selected filters.</td>
+                                </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -294,6 +344,229 @@
 @endsection
 
 @section('js')
+    <script>
+        (function () {
+            var bankMethods = @json(\App\Models\Payment::METHODS_REQUIRING_BANK_ACCOUNT);
+            var allEntries = @json($allEntries->values());
+            var fullTotals = @json($fullTotals);
+            var isApproved = @json($isApproved);
+
+            var paymentSelect = document.getElementById('dfsFilterPaymentMethod');
+            var bankSelect = document.getElementById('dfsFilterBankAccount');
+            var clearBtn = document.getElementById('dfsClearFilters');
+            var filterBanner = document.getElementById('dfsFilterBanner');
+            var filterCountEl = document.getElementById('dfsFilterCount');
+            var pdfLink = document.getElementById('dfsExportPdfLink');
+            var noFilterMatchesRow = document.getElementById('dfsNoFilterMatchesRow');
+
+            function formatMoney(value) {
+                return '£' + Number(value || 0).toLocaleString('en-GB', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+
+            function requiresBankAccount(method) {
+                return bankMethods.indexOf(method) !== -1;
+            }
+
+            function computeTotalsFromEntries(entries) {
+                var cashIn = 0;
+                var cashOut = 0;
+                var bankIn = {};
+                var bankOut = {};
+
+                entries.forEach(function (entry) {
+                    var amount = Number(entry.amount || 0);
+                    var method = entry.payment_method || '';
+                    var direction = entry.direction || '';
+                    var bankId = String(entry.bank_account_id || 'unknown');
+
+                    if (direction === 'in' && method === 'Cash') {
+                        cashIn += amount;
+                    }
+                    if (direction === 'out' && method === 'Cash') {
+                        cashOut += amount;
+                    }
+                    if (direction === 'in' && requiresBankAccount(method)) {
+                        if (!bankIn[bankId]) {
+                            bankIn[bankId] = {
+                                bank_account_id: entry.bank_account_id,
+                                bank_name: entry.bank_name || 'Bank',
+                                account_number: entry.account_number || '',
+                                total: 0
+                            };
+                        }
+                        bankIn[bankId].total += amount;
+                    }
+                    if (direction === 'out' && requiresBankAccount(method)) {
+                        if (!bankOut[bankId]) {
+                            bankOut[bankId] = {
+                                bank_account_id: entry.bank_account_id,
+                                bank_name: entry.bank_name || 'Bank',
+                                account_number: entry.account_number || '',
+                                total: 0
+                            };
+                        }
+                        bankOut[bankId].total += amount;
+                    }
+                });
+
+                var bankInRows = Object.keys(bankIn).map(function (key) {
+                    bankIn[key].total = Math.round(bankIn[key].total * 100) / 100;
+                    return bankIn[key];
+                });
+                var bankOutRows = Object.keys(bankOut).map(function (key) {
+                    bankOut[key].total = Math.round(bankOut[key].total * 100) / 100;
+                    return bankOut[key];
+                });
+
+                cashIn = Math.round(cashIn * 100) / 100;
+                cashOut = Math.round(cashOut * 100) / 100;
+
+                return {
+                    cash_in: cashIn,
+                    cash_out: cashOut,
+                    net_cash: Math.round((cashIn - cashOut) * 100) / 100,
+                    bank_in: bankInRows,
+                    bank_out: bankOutRows
+                };
+            }
+
+            function renderBankList(listEl, rows) {
+                if (!listEl) {
+                    return;
+                }
+                listEl.innerHTML = '';
+                rows.forEach(function (row) {
+                    var li = document.createElement('li');
+                    var accountSuffix = row.account_number ? ' (' + row.account_number + ')' : '';
+                    li.textContent = row.bank_name + accountSuffix + ': ' + formatMoney(row.total);
+                    listEl.appendChild(li);
+                });
+            }
+
+            function applyTotals(totals, filtered) {
+                var approvedPrefix = isApproved && !filtered ? 'Approved ' : '';
+                var cashInEl = document.getElementById('dfsCashIn');
+                var cashOutEl = document.getElementById('dfsCashOut');
+                var netCashEl = document.getElementById('dfsNetCash');
+                var bankInTotalEl = document.getElementById('dfsBankInTotal');
+                var bankInSection = document.getElementById('dfsBankInSection');
+                var bankOutSection = document.getElementById('dfsBankOutSection');
+
+                if (cashInEl) cashInEl.textContent = formatMoney(totals.cash_in);
+                if (cashOutEl) cashOutEl.textContent = formatMoney(totals.cash_out);
+                if (netCashEl) netCashEl.textContent = formatMoney(totals.net_cash);
+                if (bankInTotalEl) {
+                    bankInTotalEl.textContent = formatMoney((totals.bank_in || []).reduce(function (sum, row) {
+                        return sum + Number(row.total || 0);
+                    }, 0));
+                }
+
+                var cashInLabel = document.getElementById('dfsCashInLabel');
+                var cashOutLabel = document.getElementById('dfsCashOutLabel');
+                var netCashLabel = document.getElementById('dfsNetCashLabel');
+                var bankInLabel = document.getElementById('dfsBankInLabel');
+                var bankInHeading = document.getElementById('dfsBankInHeading');
+                var bankOutHeading = document.getElementById('dfsBankOutHeading');
+
+                if (cashInLabel) cashInLabel.textContent = approvedPrefix + 'Cash In';
+                if (cashOutLabel) cashOutLabel.textContent = approvedPrefix + 'Cash Out';
+                if (netCashLabel) netCashLabel.textContent = approvedPrefix + 'Net Cash';
+                if (bankInLabel) bankInLabel.textContent = approvedPrefix + 'Bank In (total)';
+                if (bankInHeading) bankInHeading.textContent = approvedPrefix + 'Bank In breakdown';
+                if (bankOutHeading) bankOutHeading.textContent = approvedPrefix + 'Bank Out breakdown';
+
+                renderBankList(document.getElementById('dfsBankInList'), totals.bank_in || []);
+                renderBankList(document.getElementById('dfsBankOutList'), totals.bank_out || []);
+
+                if (bankInSection) bankInSection.classList.toggle('d-none', !(totals.bank_in || []).length);
+                if (bankOutSection) bankOutSection.classList.toggle('d-none', !(totals.bank_out || []).length);
+            }
+
+            function updatePdfLink() {
+                if (!pdfLink) {
+                    return;
+                }
+                var baseUrl = pdfLink.getAttribute('data-base-url') || pdfLink.href.split('?')[0];
+                var params = new URLSearchParams();
+                if (paymentSelect && paymentSelect.value) {
+                    params.set('payment_method', paymentSelect.value);
+                }
+                if (bankSelect && bankSelect.value) {
+                    params.set('bank_account_id', bankSelect.value);
+                }
+                var query = params.toString();
+                pdfLink.href = query ? baseUrl + '?' + query : baseUrl;
+            }
+
+            function applyFilters() {
+                var paymentMethod = paymentSelect ? paymentSelect.value : '';
+                var bankAccountId = bankSelect ? bankSelect.value : '';
+                var filtered = paymentMethod !== '' || bankAccountId !== '';
+                var visibleCount = 0;
+
+                document.querySelectorAll('.dfs-entry-row').forEach(function (row) {
+                    var rowMethod = row.getAttribute('data-payment-method') || '';
+                    var rowBankId = row.getAttribute('data-bank-account-id') || '';
+                    var matches = true;
+
+                    if (paymentMethod !== '' && rowMethod !== paymentMethod) {
+                        matches = false;
+                    }
+                    if (bankAccountId !== '' && rowBankId !== bankAccountId) {
+                        matches = false;
+                    }
+
+                    row.classList.toggle('d-none', !matches);
+                    if (matches) {
+                        visibleCount += 1;
+                    }
+                });
+
+                var visibleEntries = allEntries.filter(function (entry) {
+                    if (paymentMethod !== '' && entry.payment_method !== paymentMethod) {
+                        return false;
+                    }
+                    if (bankAccountId !== '' && String(entry.bank_account_id || '') !== bankAccountId) {
+                        return false;
+                    }
+                    return true;
+                });
+
+                if (filterBanner) {
+                    filterBanner.classList.toggle('d-none', !filtered);
+                }
+                if (filterCountEl) {
+                    filterCountEl.textContent = String(visibleCount);
+                }
+                if (noFilterMatchesRow) {
+                    noFilterMatchesRow.classList.toggle('d-none', !filtered || visibleCount > 0);
+                }
+
+                var totals = filtered ? computeTotalsFromEntries(visibleEntries) : fullTotals;
+                applyTotals(totals, filtered);
+                updatePdfLink();
+            }
+
+            if (paymentSelect) {
+                paymentSelect.addEventListener('change', applyFilters);
+            }
+            if (bankSelect) {
+                bankSelect.addEventListener('change', applyFilters);
+            }
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function () {
+                    if (paymentSelect) paymentSelect.value = '';
+                    if (bankSelect) bankSelect.value = '';
+                    applyFilters();
+                });
+            }
+
+            applyFilters();
+        })();
+    </script>
     @if($canApprove)
     <script>
         (function () {

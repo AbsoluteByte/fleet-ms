@@ -538,21 +538,30 @@
             URL.revokeObjectURL(url);
         }
 
-        function collectPaymentsExportRows() {
+        function collectPaymentsExportData() {
             const rows = [];
             paymentsTable.rows({ search: 'applied', order: 'applied' }).every(function () {
                 const row = this.data();
-                rows.push([
-                    paymentPriorityLabels[row.priority] || 'Medium',
-                    formatDriverWithPayingCompanyExport(row.driver_name, row.paying_company),
-                    row.vehicle || '—',
-                    row.amount || '—',
-                    row.invoice_generated_date || '—',
-                    row.due_date || '—',
-                    row.time_ago || '—'
-                ]);
+                rows.push({
+                    hasPendingDfs: !!(row.has_pending_dfs || row.amount_color === 'warning'),
+                    cells: [
+                        paymentPriorityLabels[row.priority] || 'Medium',
+                        formatDriverWithPayingCompanyExport(row.driver_name, row.paying_company),
+                        row.vehicle || '—',
+                        row.amount || '—',
+                        row.invoice_generated_date || '—',
+                        row.due_date || '—',
+                        row.time_ago || '—'
+                    ]
+                });
             });
             return rows;
+        }
+
+        function collectPaymentsExportRows() {
+            return collectPaymentsExportData().map(function (entry) {
+                return entry.cells;
+            });
         }
 
         function exportPaymentsCsv() {
@@ -576,8 +585,8 @@
 
         function exportPaymentsPdf() {
             const exportMeta = buildPaymentsExportMeta();
-            const bodyRows = collectPaymentsExportRows();
-            if (bodyRows.length === 0) {
+            const exportData = collectPaymentsExportData();
+            if (exportData.length === 0) {
                 alert('No records to export. Adjust your search or filters and try again.');
                 return;
             }
@@ -585,39 +594,55 @@
                 alert('PDF export is not available. Please refresh the page and try again.');
                 return;
             }
+            const hasPendingDfsRows = exportData.some(function (entry) {
+                return entry.hasPendingDfs;
+            });
             const tableBody = [
                 paymentsExportHeaders.map(function (header) {
                     return { text: header, style: 'tableHeader' };
                 })
             ];
-            bodyRows.forEach(function (row) {
-                tableBody.push(row.map(function (cell) {
-                    return { text: cell, style: 'tableCell' };
+            exportData.forEach(function (entry) {
+                const fillColor = entry.hasPendingDfs ? '#fff4e5' : null;
+                tableBody.push(entry.cells.map(function (cell) {
+                    const cellDef = { text: cell, style: 'tableCell' };
+                    if (fillColor) {
+                        cellDef.fillColor = fillColor;
+                    }
+                    return cellDef;
                 }));
+            });
+            const content = [
+                {
+                    text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                    style: 'title',
+                    margin: [0, 0, 0, 4]
+                },
+                ...exportMeta.lines.map(function (line) {
+                    return { text: line, style: 'subtitle', margin: [0, 0, 0, 2] };
+                })
+            ];
+            if (hasPendingDfsRows) {
+                content.push({
+                    text: 'Highlighted rows: payment recorded, pending daily financial sheet approval.',
+                    style: 'subtitle',
+                    margin: [0, 0, 0, 6]
+                });
+            }
+            content.push({ text: '', margin: [0, 0, 0, 8] });
+            content.push({
+                table: {
+                    headerRows: 1,
+                    widths: paymentsExportHeaders.map(function () { return '*'; }),
+                    body: tableBody
+                },
+                layout: 'lightHorizontalLines'
             });
             const doc = {
                 pageSize: 'A4',
                 pageOrientation: 'portrait',
                 pageMargins: [24, 48, 24, 32],
-                content: [
-                    {
-                        text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
-                        style: 'title',
-                        margin: [0, 0, 0, 4]
-                    },
-                    ...exportMeta.lines.map(function (line) {
-                        return { text: line, style: 'subtitle', margin: [0, 0, 0, 2] };
-                    }),
-                    { text: '', margin: [0, 0, 0, 8] },
-                    {
-                        table: {
-                            headerRows: 1,
-                            widths: paymentsExportHeaders.map(function () { return '*'; }),
-                            body: tableBody
-                        },
-                        layout: 'lightHorizontalLines'
-                    }
-                ],
+                content: content,
                 styles: {
                     title: { fontSize: 14, bold: true },
                     subtitle: { fontSize: 9, color: '#5e5873' },

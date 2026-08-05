@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Driver;
 use App\Models\Invoice;
 use App\Models\Payment;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -12,6 +13,67 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentAllocationService
 {
+    /**
+     * @param  Collection<int, Invoice>  $invoices
+     * @return array<int, float>
+     */
+    public function pendingDfsAmountsForInvoices(Collection $invoices): array
+    {
+        if ($invoices->isEmpty()) {
+            return [];
+        }
+
+        $targetInvoiceIds = $invoices
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $targetInvoiceIdSet = array_flip($targetInvoiceIds);
+
+        $driverIds = $invoices
+            ->pluck('driver_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($driverIds === []) {
+            return [];
+        }
+
+        $openInvoicesByDriver = Invoice::query()
+            ->whereIn('driver_id', $driverIds)
+            ->where('balance_amount', '>', 0)
+            ->orderBy('invoice_date')
+            ->orderBy('due_date')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('driver_id');
+
+        $pendingPayments = Payment::query()
+            ->pending()
+            ->whereIn('driver_id', $driverIds)
+            ->orderBy('payment_date')
+            ->orderBy('id')
+            ->get();
+
+        $amounts = [];
+
+        foreach ($pendingPayments as $payment) {
+            $driverInvoices = $openInvoicesByDriver->get($payment->driver_id, collect());
+            $projected = $this->projectPendingPaymentAllocations($payment, $driverInvoices);
+
+            foreach ($projected as $invoiceId => $amount) {
+                if (! isset($targetInvoiceIdSet[$invoiceId])) {
+                    continue;
+                }
+
+                $amounts[$invoiceId] = round(($amounts[$invoiceId] ?? 0) + $amount, 2);
+            }
+        }
+
+        return $amounts;
+    }
+
     public function createPayment(
         Driver $driver,
         array $paymentData,
@@ -174,6 +236,101 @@ class PaymentAllocationService
         foreach ($invoices as $invoice) {
             $invoice->refreshPaymentTotals();
         }
+    }
+
+    /**
+     * @param  Collection<int, Invoice>  $driverOpenInvoices
+     * @return array<int, float>
+     */
+    private function projectPendingPaymentAllocations(Payment $payment, Collection $driverOpenInvoices): array
+    {
+        if ($payment->allocation_source_id && is_array($payment->allocation_invoice_types)) {
+            return $this->projectAutoAllocateForSource(
+                (float) $payment->amount,
+                $driverOpenInvoices,
+                (int) $payment->allocation_source_id,
+                $payment->allocation_invoice_types
+            );
+        }
+
+        if ($payment->auto_allocate) {
+            return $this->projectAutoAllocate((float) $payment->amount, $driverOpenInvoices);
+        }
+
+        if (is_array($payment->pending_manual_allocations)) {
+            return $this->projectManualAllocate($payment->pending_manual_allocations);
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  Collection<int, Invoice>  $invoices
+     * @return array<int, float>
+     */
+    private function projectAutoAllocate(float $paymentAmount, Collection $invoices): array
+    {
+        $remainingAmount = $paymentAmount;
+        $result = [];
+
+        foreach ($invoices as $invoice) {
+            if ($remainingAmount <= 0) {
+                break;
+            }
+
+            $invoiceBalance = max((float) $invoice->balance_amount - $invoice->reserved_credit_amount, 0);
+            $allocatedAmount = min($remainingAmount, $invoiceBalance);
+
+            if ($allocatedAmount <= 0) {
+                continue;
+            }
+
+            $invoiceId = (int) $invoice->id;
+            $result[$invoiceId] = round(($result[$invoiceId] ?? 0) + $allocatedAmount, 2);
+            $remainingAmount = round($remainingAmount - $allocatedAmount, 2);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  Collection<int, Invoice>  $invoices
+     * @param  list<string>  $invoiceTypes
+     * @return array<int, float>
+     */
+    private function projectAutoAllocateForSource(
+        float $paymentAmount,
+        Collection $invoices,
+        int $sourceId,
+        array $invoiceTypes
+    ): array {
+        $scopedInvoices = $invoices
+            ->filter(fn (Invoice $invoice) => (int) $invoice->source_id === $sourceId
+                && in_array($invoice->invoice_type, $invoiceTypes, true));
+
+        return $this->projectAutoAllocate($paymentAmount, $scopedInvoices->values());
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $manualAllocations
+     * @return array<int, float>
+     */
+    private function projectManualAllocate(array $manualAllocations): array
+    {
+        $result = [];
+
+        foreach ($manualAllocations as $invoiceId => $amount) {
+            $amount = round((float) $amount, 2);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $id = (int) $invoiceId;
+            $result[$id] = round(($result[$id] ?? 0) + $amount, 2);
+        }
+
+        return $result;
     }
 
     private function allocatePostedPayment(Payment $payment): void

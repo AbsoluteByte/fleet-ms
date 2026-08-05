@@ -354,7 +354,10 @@
                                 'road_tax_expiry': 'icon-credit-card text-success',
                                 'road_tax_missing': 'icon-credit-card text-warning',
                                 'driver_license_expiry': 'icon-user text-info',
-                                'phd_license_expiry': 'icon-user-check text-secondary'
+                                'phd_license_expiry': 'icon-user-check text-secondary',
+                                'agreement_end_date': 'icon-file-text text-info',
+                                'agreement_termination_notice': 'icon-file-text text-info',
+                                'agreement_expired': 'icon-file-text text-danger'
                             };
 
                             const icon = iconMap[data] || 'icon-bell text-secondary';
@@ -517,6 +520,7 @@
             phd_license_expiry: 'PHD License',
             agreement_end_date: 'Agreement End Date',
             agreement_termination_notice: 'Termination Notice',
+            agreement_expired: 'Agreement Expired',
             agreement_notifications: 'Agreements'
         };
         const fleetFilterLabels = {
@@ -530,6 +534,7 @@
             phd_license_expiry: 'PHD License',
             agreement_end_date: 'Agreement End Date',
             agreement_termination_notice: 'Termination Notice',
+            agreement_expired: 'Agreement Expired',
             agreement_notifications: 'Agreements'
         };
 
