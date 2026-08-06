@@ -136,4 +136,13 @@ class BatchPaymentInput
 
         return array_values($rows);
     }
+
+    public static function assertDepositWithinAgreedAdvance(float $amountPaid, float $agreedAdvance): void
+    {
+        if (round($amountPaid, 2) > round($agreedAdvance, 2)) {
+            throw ValidationException::withMessages([
+                'amount_paid' => 'Deposit payments cannot exceed the agreed advance. Rent is collected when creating the agreement.',
+            ]);
+        }
+    }
 }

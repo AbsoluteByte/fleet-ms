@@ -165,6 +165,11 @@
                 <small class="text-muted">Total of deposit payment rows below.</small>
             </div>
             <div class="col-12 form-group">
+                <label class="d-block">Deposit payments</label>
+                <p class="text-muted mb-2">Advance/deposit only — total cannot exceed agreed advance. Rent is collected when creating the agreement. Leave empty for no deposit.</p>
+                <div id="fleet-reservation-deposit-limit-message" class="alert alert-warning py-1 px-2 mb-2 d-none" role="alert">
+                    Deposit payments cannot exceed the agreed advance. Rent is collected when creating the agreement.
+                </div>
                 @include('backend.payments.partials.batch-payment-rows', [
                     'fieldName' => 'reservation_payments',
                     'containerId' => 'fleet-reservation-payments',

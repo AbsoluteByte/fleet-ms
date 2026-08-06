@@ -59,6 +59,7 @@
             const rent = parseMoney('#' + prefix + '_agreed_rent');
             const advance = parseMoney('#' + prefix + '_agreed_advance');
             const paid = parseMoney('#' + prefix + '_amount_paid');
+            const paidForBalance = advance > 0 ? Math.min(paid, advance) : paid;
             const ids = ['#' + prefix + '_agreed_rent', '#' + prefix + '_agreed_advance'];
             const hasAny = ids.some(function (id) {
                 return String($(id).val()).trim() !== '';
@@ -72,7 +73,7 @@
                 $(out).val('');
                 return;
             }
-            const bal = Math.max(0, Math.round((rent + advance - paid) * 100) / 100);
+            const bal = Math.max(0, Math.round((rent + advance - paidForBalance) * 100) / 100);
             $(out).val(bal.toFixed(2));
         }
 
@@ -85,6 +86,11 @@
                 });
             }
             $('#fleet_rsv_amount_paid').val(total > 0 ? total.toFixed(2) : '0');
+
+            var advance = parseMoney('#fleet_rsv_agreed_advance');
+            var overLimit = !isNaN(advance) && total > advance;
+            $('#fleet-reservation-deposit-limit-message').toggleClass('d-none', !overLimit);
+
             refreshBalance('fleet_rsv');
         };
 
@@ -116,6 +122,9 @@
 
         $('#fleet_rsv_agreed_rent, #fleet_rsv_agreed_advance').on('input change', function () {
             refreshBalance('fleet_rsv');
+            if (typeof window.refreshFleetReservationAmountPaidTotal === 'function') {
+                window.refreshFleetReservationAmountPaidTotal();
+            }
         });
 
         function toggleDamagedPhvlDate() {
