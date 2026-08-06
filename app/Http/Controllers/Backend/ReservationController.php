@@ -366,6 +366,11 @@ class ReservationController extends Controller
             ]);
         }
 
+        BatchPaymentInput::assertDepositWithinAgreedAdvance(
+            $amountPaid,
+            (float) ($validated['agreed_advance'] ?? 0)
+        );
+
         return array_map(fn (array $row) => [
             'payment_method' => $row['payment_method'],
             'bank_account_id' => $row['bank_account_id'],

@@ -146,7 +146,7 @@
 @endsection
 @section('js')
     <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-driver.js') }}?v=20260625"></script>
-    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260703"></script>
+    <script src="{{ asset('app-assets/js/scripts/fleetiq-validate-reservation.js') }}?v=20260724"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('formEditReservation');
@@ -201,14 +201,20 @@
                 const rent = parseMoney('#agreed_rent');
                 const advance = parseMoney('#agreed_advance');
                 const paid = parseMoney('#amount_paid');
+                const paidForBalance = advance > 0 ? Math.min(paid, advance) : paid;
                 $('#amount_paid_display').val(paid > 0 ? paid.toFixed(2) : '');
-                const bal = Math.max(0, Math.round((rent + advance - paid) * 100) / 100);
+                const bal = Math.max(0, Math.round((rent + advance - paidForBalance) * 100) / 100);
                 $('#balance_payable_on_pickup_display').val(bal.toFixed(2));
             }
 
             window.refreshReservationBalanceDisplay = refreshBalanceDisplay;
 
-            $('#agreed_rent, #agreed_advance').on('input change', refreshBalanceDisplay);
+            $('#agreed_rent, #agreed_advance').on('input change', function () {
+                refreshBalanceDisplay();
+                if (typeof window.refreshReservationAmountPaidTotal === 'function') {
+                    window.refreshReservationAmountPaidTotal();
+                }
+            });
             refreshBalanceDisplay();
         });
     </script>

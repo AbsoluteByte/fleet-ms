@@ -239,6 +239,115 @@ class ReservationMinimalDriverTest extends TestCase
         $this->assertNull($reservation->bank_account_id);
     }
 
+    public function test_store_rejects_deposit_exceeding_agreed_advance(): void
+    {
+        $response = $this->from(route('reservations.create'))
+            ->post(route('reservations.store'), array_merge([
+                'driver_mode' => 'new',
+                'first_name' => 'Ali',
+                'reservation_date' => '2026-06-25',
+                'pick_up_date' => '2026-06-30',
+                'agreed_rent' => 100,
+                'agreed_advance' => 50,
+                'amount_paid' => 75,
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 75],
+            ], 'reservation_payments')));
+
+        $response->assertRedirect(route('reservations.create'));
+        $response->assertSessionHasErrors('amount_paid');
+        $this->assertDatabaseCount('car_reservations', 0);
+    }
+
+    public function test_store_accepts_deposit_equal_to_agreed_advance(): void
+    {
+        $response = $this->post(route('reservations.store'), array_merge([
+            'driver_mode' => 'new',
+            'first_name' => 'Ali',
+            'reservation_date' => '2026-06-25',
+            'pick_up_date' => '2026-06-30',
+            'agreed_rent' => 100,
+            'agreed_advance' => 50,
+            'amount_paid' => 50,
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Cash', 'amount' => 50],
+        ], 'reservation_payments')));
+
+        $response->assertRedirect(route('reservations.index'));
+        $response->assertSessionHasNoErrors();
+
+        $reservation = CarReservation::query()->first();
+        $this->assertNotNull($reservation);
+        $this->assertSame('50.00', $reservation->amount_paid);
+        $this->assertSame('100.00', $reservation->balance_payable_on_pickup);
+    }
+
+    public function test_update_rejects_deposit_exceeding_agreed_advance(): void
+    {
+        $driver = Driver::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'first_name' => 'Ali',
+            'last_name' => 'Khan',
+            'dob' => '1990-05-15',
+            'email' => 'ali.khan@example.com',
+            'phone_number' => '07000000007',
+            'address1' => '10 Test Road',
+            'post_code' => 'E1 1AA',
+            'town' => 'London',
+            'country_id' => 1,
+            'driver_license_number' => 'LIC000777',
+            'driver_license_expiry_date' => '2027-12-31',
+            'next_of_kin' => 'Sara Khan',
+            'next_of_kin_phone' => '07000000008',
+        ]);
+
+        $reservation = CarReservation::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'driver_id' => $driver->id,
+            'customer_name' => 'Ali Khan',
+            'reservation_date' => '2026-06-25',
+            'pick_up_date' => '2026-06-30',
+            'agreed_rent' => 100,
+            'agreed_advance' => 50,
+            'amount_paid' => 25,
+            'balance_payable_on_pickup' => 125,
+            'status' => 'active',
+            'created_by' => $this->user->id,
+        ]);
+
+        $response = $this->from(route('reservations.edit', $reservation))
+            ->put(route('reservations.update', $reservation), array_merge([
+                'driver_mode' => 'existing',
+                'driver_id' => $driver->id,
+                'first_name' => 'Ali',
+                'last_name' => 'Khan',
+                'dob' => '1990-05-15',
+                'email' => 'ali.khan@example.com',
+                'phone_number' => '07000000007',
+                'address1' => '10 Test Road',
+                'post_code' => 'E1 1AA',
+                'town' => 'London',
+                'country_id' => 1,
+                'driver_license_number' => 'LIC000777',
+                'driver_license_expiry_date' => '2027-12-31',
+                'next_of_kin' => 'Sara Khan',
+                'next_of_kin_phone' => '07000000008',
+                'reservation_date' => '2026-06-25',
+                'pick_up_date' => '2026-06-30',
+                'agreed_rent' => 100,
+                'agreed_advance' => 50,
+                'amount_paid' => 75,
+            ], $this->batchPaymentsField([
+                ['payment_method' => 'Cash', 'amount' => 75],
+            ], 'reservation_payments')));
+
+        $response->assertRedirect(route('reservations.edit', $reservation));
+        $response->assertSessionHasErrors('amount_paid');
+
+        $reservation->refresh();
+        $this->assertSame('25.00', $reservation->amount_paid);
+    }
+
     public function test_store_persists_payment_method_and_bank_account(): void
     {
         $bankAccountId = $this->createCompanyAndBankAccount();

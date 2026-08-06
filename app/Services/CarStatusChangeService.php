@@ -237,6 +237,11 @@ class CarStatusChangeService
             ]);
         }
 
+        BatchPaymentInput::assertDepositWithinAgreedAdvance(
+            $amountPaid,
+            (float) ($validated['agreed_advance'] ?? 0)
+        );
+
         $this->assertCarAssignableForReservation($car, null);
 
         $balance = $this->computeBalance(
