@@ -126,6 +126,7 @@
                                             data-tag-status="{{ $car->tag_installed ? ($car->tag_status ?? '') : '' }}"
                                             data-termination-notice-date="{{ $terminationNoticeIso }}"
                                             data-termination-available-from="{{ $terminationAvailableFromIso }}"
+                                            data-manufacture-year="{{ $car->manufacture_year }}"
                                         >
                                             <td>
                                                 <strong>{{ $car->registration ?: '—' }}</strong>
@@ -296,6 +297,22 @@
                     </div>
                 </div>
                 <small class="text-muted d-block mt-50">Shows cars whose Active/Swap agreement has a termination notice in this range.</small>
+            </div>
+
+            <div class="form-group">
+                <label class="d-block mb-50">Manufacture Year</label>
+                <label class="small text-muted mb-25 d-block">Year between</label>
+                <div class="form-row">
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsManufactureYearFrom">From</label>
+                        <input type="text" id="carsManufactureYearFrom" class="form-control cars-manufacture-year-filter cars-manufacture-year-from" inputmode="numeric" maxlength="4" placeholder="e.g. 2018" autocomplete="off">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted mb-25 d-block" for="carsManufactureYearTo">To</label>
+                        <input type="text" id="carsManufactureYearTo" class="form-control cars-manufacture-year-filter cars-manufacture-year-to" inputmode="numeric" maxlength="4" placeholder="e.g. 2022" autocomplete="off">
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-50">Shows cars whose manufacture year falls within this range (inclusive).</small>
             </div>
 
             <div class="form-group">
@@ -752,6 +769,8 @@
                 phv: { from: '', to: '', includeMissing: false },
             };
             const terminationNoticeFilter = { from: '', to: '' };
+            const manufactureYearFilter = { from: '', to: '' };
+            let manufactureYearToManuallyEdited = false;
             const availableFromColumnIndex = 7;
             const quickFilterLabels = {
                 available_by_phv: 'Available by PHV',
@@ -896,6 +915,46 @@
                 return expiryInRange(noticeDate, terminationNoticeFilter.from, terminationNoticeFilter.to);
             }
 
+            function syncManufactureYearFilterFromForm() {
+                manufactureYearFilter.from = document.getElementById('carsManufactureYearFrom').value;
+                manufactureYearFilter.to = document.getElementById('carsManufactureYearTo').value;
+            }
+
+            function passesManufactureYearFilter(row) {
+                if (!manufactureYearFilter.from && !manufactureYearFilter.to) {
+                    return true;
+                }
+
+                const year = parseInt(row.dataset.manufactureYear, 10);
+                if (Number.isNaN(year)) {
+                    return false;
+                }
+
+                if (manufactureYearFilter.from !== '') {
+                    const fromYear = parseInt(manufactureYearFilter.from, 10);
+                    if (!Number.isNaN(fromYear) && year < fromYear) {
+                        return false;
+                    }
+                }
+
+                if (manufactureYearFilter.to !== '') {
+                    const toYear = parseInt(manufactureYearFilter.to, 10);
+                    if (!Number.isNaN(toYear) && year > toYear) {
+                        return false;
+                    }
+                }
+
+                if (manufactureYearFilter.from !== '' && manufactureYearFilter.to !== '') {
+                    const fromYear = parseInt(manufactureYearFilter.from, 10);
+                    const toYear = parseInt(manufactureYearFilter.to, 10);
+                    if (!Number.isNaN(fromYear) && !Number.isNaN(toYear) && fromYear > toYear) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
             function toggleAvailableFromColumn(show) {
                 dataTable.column(availableFromColumnIndex).visible(show);
             }
@@ -927,7 +986,8 @@
                     && passesExpiryFilter(row, expiryFilters.mot, 'motExpiry', 'motMissing')
                     && passesExpiryFilter(row, expiryFilters.roadTax, 'roadTaxExpiry', 'roadTaxMissing')
                     && passesExpiryFilter(row, expiryFilters.phv, 'phvExpiry', 'phvMissing')
-                    && passesTerminationNoticeFilter(row);
+                    && passesTerminationNoticeFilter(row)
+                    && passesManufactureYearFilter(row);
             });
 
             function passesAccessoryFilters(row) {
@@ -1021,6 +1081,21 @@
                 drawCarsTable();
             });
 
+            $('.cars-manufacture-year-from').on('input', function () {
+                const toInput = document.getElementById('carsManufactureYearTo');
+                if (!manufactureYearToManuallyEdited && toInput) {
+                    toInput.value = this.value;
+                }
+                syncManufactureYearFilterFromForm();
+                dataTable.draw();
+            });
+
+            $('.cars-manufacture-year-to').on('input', function () {
+                manufactureYearToManuallyEdited = true;
+                syncManufactureYearFilterFromForm();
+                dataTable.draw();
+            });
+
             $('.cars-quick-filter').on('click', function () {
                 const selectedFilter = $(this).data('quick-filter');
                 quickFilter = quickFilter === selectedFilter ? '' : selectedFilter;
@@ -1040,6 +1115,10 @@
                 $('#carsTerminationNoticeFrom, #carsTerminationNoticeTo').val('');
                 terminationNoticeFilter.from = '';
                 terminationNoticeFilter.to = '';
+                $('#carsManufactureYearFrom, #carsManufactureYearTo').val('');
+                manufactureYearFilter.from = '';
+                manufactureYearFilter.to = '';
+                manufactureYearToManuallyEdited = false;
                 quickFilter = '';
                 updateQuickFilterButtons();
                 drawCarsTable();
