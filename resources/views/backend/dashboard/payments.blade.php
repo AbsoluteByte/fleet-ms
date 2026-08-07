@@ -386,8 +386,9 @@
                     },
                     {
                         data: 'vehicle',
-                        render: function(data) {
-                            return `<span class="badge badge-light-secondary">${data}</span>`;
+                        render: function(data, type, row) {
+                            var bank = row.pay_to_bank ? `<small class="text-muted d-block">Pay to: ${escapeHtmlAttr(row.pay_to_bank)}</small>` : '';
+                            return `<span class="badge badge-light-secondary">${data}</span>${bank}`;
                         }
                     },
                     {

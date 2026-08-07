@@ -7,6 +7,7 @@ use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class SettingsController extends Controller
 {
@@ -37,8 +38,9 @@ class SettingsController extends Controller
 
         // Get or create settings for tenant
         $setting = Setting::getForTenant($tenant->id);
+        $tenantUsers = $tenant->users()->orderBy('name')->orderBy('email')->get();
 
-        return view($this->dir . 'index', compact('setting'));
+        return view($this->dir . 'index', compact('setting', 'tenantUsers'));
     }
 
     /**
@@ -54,8 +56,9 @@ class SettingsController extends Controller
         }
 
         $model = $setting;
+        $tenantUsers = $tenant->users()->orderBy('name')->orderBy('email')->get();
 
-        return view($this->dir . 'edit', compact('model'));
+        return view($this->dir . 'edit', compact('model', 'tenantUsers'));
     }
 
     /**
@@ -77,10 +80,18 @@ class SettingsController extends Controller
 
         $validated = $request->validate([
             'esign_provider' => 'required|in:custom,hellosign',
+            'payment_reminder_user_ids' => 'nullable|array',
+            'payment_reminder_user_ids.*' => [
+                'integer',
+                Rule::exists('tenant_user', 'user_id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
         ]);
 
         try {
-            $setting->update($validated);
+            $setting->update([
+                'esign_provider' => $validated['esign_provider'],
+                'payment_reminder_user_ids' => array_values(array_unique(array_map('intval', $validated['payment_reminder_user_ids'] ?? []))),
+            ]);
 
             return redirect()->route('settings.index')
                 ->with('success', 'Settings updated successfully!');

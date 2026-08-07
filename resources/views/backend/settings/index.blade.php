@@ -14,7 +14,7 @@
                     </a>
                 </div>
 
-                <div class="card-body">
+                <div class="card-body" style="margin-top: 75px;">
                     @include('alerts')
 
                     {{-- E-Signature Provider Section --}}
@@ -132,24 +132,34 @@
                         </div>
                     </div>
 
-                    {{-- Future Settings Sections (Commented for now) --}}
-                    {{--
                     <div class="settings-section mb-5">
                         <h5 class="border-bottom pb-2 mb-4">
                             <i class="fa fa-bell me-2 text-warning"></i>
-                            Notification Settings
+                            Payment call reminder alerts
                         </h5>
-                        <p class="text-muted">Coming soon...</p>
-                    </div>
 
-                    <div class="settings-section">
-                        <h5 class="border-bottom pb-2 mb-4">
-                            <i class="fa fa-clock me-2 text-danger"></i>
-                            Reminder Settings
-                        </h5>
-                        <p class="text-muted">Coming soon...</p>
+                        <div class="row">
+                            <div class="col-xl-10">
+                                <form action="{{ route('settings.update', $setting) }}" method="POST">
+                                    @csrf
+                                    @method('PUT')
+                                    <input type="hidden" name="esign_provider" value="{{ $setting->esign_provider }}">
+
+                                    @include('backend.settings.partials.payment-reminder-users', [
+                                        'tenantUsers' => $tenantUsers,
+                                        'selectedReminderUserIds' => $setting->payment_reminder_user_ids ?? [],
+                                    ])
+
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fa fa-save me-1"></i>
+                                            Save reminder users
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
                     </div>
-                    --}}
                 </div>
             </div>
         </div>

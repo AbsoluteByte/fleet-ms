@@ -9,7 +9,7 @@ use Illuminate\Validation\ValidationException;
 
 class BatchPaymentInput
 {
-    public const PAYMENT_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit'];
+    public const PAYMENT_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Card Payment', 'Direct Debit', 'Discount'];
 
     /**
      * @return array<int, string, mixed>

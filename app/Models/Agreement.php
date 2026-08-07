@@ -16,6 +16,7 @@ class Agreement extends Model
 
     protected $fillable = [
         'tenant_id', 'company_id', 'start_date', 'end_date', 'billing_anchor_date', 'driver_id', 'paying_company_name',
+        'payment_bank_account_id',
         'car_id', 'agreed_rent', 'rent_interval', 'insurance_type',
         'deposit_amount', 'discount_type', 'discount_value', 'discount_notes',
         'discount_is_one_time', 'discount_started_at', 'discount_consumed_at', 'discount_consumed_invoice_id',
@@ -41,6 +42,7 @@ class Agreement extends Model
         'termination_recorded_by',
         'closing_date',
         'refund_person_name',
+        'refund_sort_code',
         'refund_account_number',
     ];
 
@@ -76,6 +78,11 @@ class Agreement extends Model
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function paymentBankAccount()
+    {
+        return $this->belongsTo(BankAccount::class, 'payment_bank_account_id');
     }
 
     public function driver()

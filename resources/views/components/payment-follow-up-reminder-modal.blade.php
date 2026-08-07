@@ -1,4 +1,12 @@
 @auth
+@php
+    $paymentReminderEnabled = true;
+    $currentTenant = auth()->user()?->currentTenant();
+    if ($currentTenant) {
+        $paymentReminderEnabled = \App\Models\Setting::userReceivesPaymentReminders($currentTenant->id, auth()->id());
+    }
+@endphp
+@if($paymentReminderEnabled)
 <div class="modal fade" id="paymentFollowUpDueModal" tabindex="-1" role="dialog"
      aria-labelledby="paymentFollowUpDueModalLabel" aria-hidden="true" data-backdrop="static">
     <div class="modal-dialog modal-dialog-scrollable" role="document">
@@ -387,4 +395,5 @@
         });
     })();
 </script>
+@endif
 @endauth

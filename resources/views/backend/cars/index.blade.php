@@ -70,7 +70,7 @@
                                     @forelse($cars as $car)
                                         @php
                                             $carStatusLabel = $car->fleetStatusLabel();
-                                            $isAvailableByPhv = $car->isAvailableForRent();
+                                            $isAvailableByPhv = $car->isSelectableForAgreement($rentedCarIds ?? []);
                                             $isAwaitingPhv = $car->phvs->isEmpty();
                                             $isAwaitingLogBook = $car->log_book_applied && $car->v5DocumentFileNames() === [];
                                             $latestInsurance = $car->insurances

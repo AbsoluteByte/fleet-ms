@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agreement;
 use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\CarModel;
@@ -71,7 +72,9 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir.'index', compact('cars'));
+        $rentedCarIds = Agreement::rentedCarIdsForTenant($tenant->id);
+
+        return view($this->dir.'index', compact('cars', 'rentedCarIds'));
     }
 
     // ✅ Updated Create
@@ -1137,8 +1140,12 @@ class CarController extends Controller
 
         $cars = Car::where('tenant_id', $tenant->id)
             ->with(['company', 'carModel', 'phvs.counsel', 'insurances.status', 'services', 'reservations', 'agreements'])
-            ->get()
-            ->filter(fn (Car $car) => $car->isAvailableForRent())
+            ->get();
+
+        $rentedCarIds = Agreement::rentedCarIdsForTenant($tenant->id);
+
+        $cars = $cars
+            ->filter(fn (Car $car) => $car->isSelectableForAgreement($rentedCarIds))
             ->groupBy(fn (Car $car) => $car->latestPhvCounselName() ?: 'No PHV Council');
 
         return view($this->dir.'available-by-phv', compact('cars'));

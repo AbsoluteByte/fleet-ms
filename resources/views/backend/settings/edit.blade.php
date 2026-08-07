@@ -14,7 +14,7 @@
                     @csrf
                     @method('PUT')
 
-                    <div class="card-body">
+                    <div class="card-body" style="margin-top: 75px;">
                         @include('alerts')
 
                         {{-- E-Signature Provider Selection --}}
@@ -121,20 +121,19 @@
                             </div>
                         </div>
 
-                        {{-- Future Settings (Commented) --}}
-                        {{--
                         <hr class="my-4">
 
                         <div class="mb-4">
-                            <h6 class="mb-3">Notification Settings</h6>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="email_notifications" checked>
-                                <label class="form-check-label" for="email_notifications">
-                                    Enable email notifications
-                                </label>
-                            </div>
+                            <h6 class="mb-3">
+                                <i class="fa fa-bell me-1"></i>
+                                Payment call reminder alerts
+                            </h6>
+
+                            @include('backend.settings.partials.payment-reminder-users', [
+                                'tenantUsers' => $tenantUsers,
+                                'selectedReminderUserIds' => $model->payment_reminder_user_ids ?? [],
+                            ])
                         </div>
-                        --}}
                     </div>
 
                     <div class="card-footer">

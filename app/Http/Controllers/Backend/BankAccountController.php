@@ -164,6 +164,7 @@ class BankAccountController extends Controller
                 Rule::exists('companies', 'id')->where(fn ($query) => $query->where('tenant_id', $tenantId)),
             ],
             'bank_name' => 'required|string|max:255',
+            'short_name' => 'nullable|string|max:255',
             'account_number' => ['required', 'string', 'max:50', $uniqueAccount],
         ];
     }

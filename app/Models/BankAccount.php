@@ -15,10 +15,18 @@ class BankAccount extends Model
         'tenant_id',
         'company_id',
         'bank_name',
+        'short_name',
         'account_number',
         'createdBy',
         'updatedBy',
     ];
+
+    public function paymentDisplayName(): string
+    {
+        $shortName = trim((string) ($this->short_name ?? ''));
+
+        return $shortName !== '' ? $shortName : trim((string) ($this->bank_name ?? ''));
+    }
 
     public static function defaultForCardPayment(int $tenantId): ?self
     {

@@ -260,6 +260,41 @@ class AgreementClosingDateTest extends TestCase
         $this->assertEquals(150, $this->driver->fresh()->credit_amount);
     }
 
+    public function test_full_week_prepaid_closure_credits_remaining_rent(): void
+    {
+        $agreement = $this->createActiveAgreement();
+        $agreement->update(['agreed_rent' => 700]);
+        $invoice = $this->createRentInvoice($agreement, '2026-06-15', 700);
+        $payment = Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => '2026-06-15',
+            'amount' => 700,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'auto_allocate' => false,
+            'created_by' => $this->user->id,
+        ]);
+        PaymentAllocation::query()->create([
+            'payment_id' => $payment->id,
+            'invoice_id' => $invoice->id,
+            'allocated_amount' => 700,
+        ]);
+        $invoice->refreshPaymentTotals();
+
+        $response = $this->put(route('agreements.update', $agreement), $this->basePayload([
+            'agreed_rent' => 700,
+            'status_id' => $this->terminatedStatus->id,
+            'closing_date' => '2026-06-17T09:00',
+        ]));
+
+        $response->assertSessionHasNoErrors();
+        $invoice->refresh();
+        $this->assertEquals(200, (float) $invoice->total_amount);
+        $this->assertEquals(200, (float) $invoice->paid_amount);
+        $this->assertEquals(0, (float) $invoice->balance_amount);
+        $this->assertEquals(500, $this->driver->fresh()->credit_amount);
+    }
+
     public function test_closure_reverses_posted_credit_excess_and_cancels_pending_reservation(): void
     {
         $agreement = $this->createActiveAgreement();

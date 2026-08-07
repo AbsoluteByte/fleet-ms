@@ -237,9 +237,19 @@
             <td>{{ $agreement->refund_person_name ?: '—' }}</td>
         </tr>
         <tr>
+            <td class="label">Sort Code</td>
+            <td>{{ $agreement->refund_sort_code ?: '—' }}</td>
+        </tr>
+        <tr>
             <td class="label">Account Number</td>
             <td>{{ $agreement->refund_account_number ?: '—' }}</td>
         </tr>
+        @if($agreement->depositRefund?->payment_method)
+            <tr>
+                <td class="label">Refund Method</td>
+                <td>{{ $agreement->depositRefund->payment_method }}</td>
+            </tr>
+        @endif
     </table>
 
     <h2>Invoices</h2>

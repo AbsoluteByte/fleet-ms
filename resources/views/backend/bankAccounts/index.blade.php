@@ -19,6 +19,7 @@
                                     <tr>
                                         <th>Company</th>
                                         <th>Bank Name</th>
+                                        <th>Short Name</th>
                                         <th>Account Number</th>
                                         <th>Actions</th>
                                     </tr>
@@ -28,6 +29,7 @@
                                         <tr>
                                             <td>{{ $bankAccount->company?->name ?? '—' }}</td>
                                             <td>{{ $bankAccount->bank_name }}</td>
+                                            <td>{{ $bankAccount->short_name ?: '—' }}</td>
                                             <td>{{ $bankAccount->account_number }}</td>
                                             <td>
                                                 <div class="btn-group" role="group">
@@ -47,7 +49,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="4" class="text-center text-muted py-4">
+                                            <td colspan="5" class="text-center text-muted py-4">
                                                 <i class="fa fa-university fa-3x mb-3"></i>
                                                 <br>
                                                 No bank accounts found. <a href="{{ route('bank-accounts.create') }}">Add your first bank account</a>

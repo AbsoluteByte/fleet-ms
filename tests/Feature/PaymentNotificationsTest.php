@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Agreement;
+use App\Models\BankAccount;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
@@ -73,6 +74,7 @@ class PaymentNotificationsTest extends TestCase
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
         Schema::dropIfExists('car_services');
+        Schema::dropIfExists('bank_accounts');
         $this->tearDownAgreementChangeCarDatabase();
 
         parent::tearDown();
@@ -512,6 +514,66 @@ class PaymentNotificationsTest extends TestCase
         $this->assertSame('Metro Cars PLC', $row['paying_company']);
     }
 
+    public function test_payment_notification_includes_pay_to_bank_short_name_in_row_data(): void
+    {
+        $company = Company::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Notify Co',
+        ]);
+        $activeStatus = Status::query()->create([
+            'name' => 'Active',
+            'type' => 'agreement',
+        ]);
+        $carModelId = (int) DB::table('car_models')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $car = Car::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'car_model_id' => $carModelId,
+            'registration' => 'PAYBANK',
+            'color' => 'Black',
+            'fleet_status' => Car::FLEET_STATUS_AVAILABLE_FOR_RENT,
+        ]);
+        $bankAccount = BankAccount::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'bank_name' => 'Barclays Business Account',
+            'short_name' => 'BCL',
+            'account_number' => '99887766',
+        ]);
+        $agreement = Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $car->id,
+            'start_date' => now()->subDay(),
+            'end_date' => now()->addMonth()->toDateString(),
+            'agreed_rent' => 200,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 300,
+            'collection_type' => 'weekly',
+            'status_id' => $activeStatus->id,
+            'payment_bank_account_id' => $bankAccount->id,
+        ]);
+
+        $invoice = $this->createInvoice([
+            'invoice_type' => 'agreement',
+            'source_id' => $agreement->id,
+            'invoice_date' => '2026-07-10',
+            'due_date' => '2026-07-15',
+            'balance_amount' => 100,
+        ]);
+
+        $row = $this->paymentNotificationRowForInvoice($invoice->id, 'overdue_payment');
+
+        $this->assertNotNull($row);
+        $this->assertSame('BCL', $row['pay_to_bank']);
+    }
+
     /**
      * @return list<int>
      */
@@ -678,6 +740,19 @@ class PaymentNotificationsTest extends TestCase
         Schema::table('agreements', function (Blueprint $table) {
             $table->unsignedBigInteger('parent_agreement_id')->nullable();
             $table->string('paying_company_name')->nullable();
+            $table->unsignedBigInteger('payment_bank_account_id')->nullable();
+        });
+
+        Schema::create('bank_accounts', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id');
+            $table->foreignId('company_id');
+            $table->string('bank_name');
+            $table->string('short_name')->nullable();
+            $table->string('account_number', 50);
+            $table->unsignedBigInteger('createdBy')->nullable();
+            $table->unsignedBigInteger('updatedBy')->nullable();
+            $table->timestamps();
         });
 
         Schema::create('tenant_user', function (Blueprint $table) {

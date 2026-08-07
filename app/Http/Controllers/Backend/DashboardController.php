@@ -1039,6 +1039,7 @@ class DashboardController extends Controller
                     'follow_up_has_note' => $driver?->hasPaymentFollowUpNote() ?? false,
                     'follow_up_has_reminder' => $driver?->hasPaymentReminder() ?? false,
                     'follow_up_update_url' => $driver ? route('payments.follow-up.update', $driver) : null,
+                    'pay_to_bank' => $notification['pay_to_bank'] ?? null,
                 ];
             });
 
@@ -1136,6 +1137,7 @@ class DashboardController extends Controller
 
         return Agreement::with([
             'car',
+            'paymentBankAccount',
             'replacementVehicleAgreements' => fn ($query) => $query->currentlyActiveReplacement()->with('car'),
         ])->whereIn('id', $sourceIds)->get()->keyBy('id');
     }
@@ -1368,6 +1370,7 @@ class DashboardController extends Controller
             'amount' => '£'.number_format((float) $invoice->balance_amount, 2),
             'vehicle' => $this->invoiceVehicleRegistration($invoice, $agreementsById),
             'paying_company' => $this->invoicePayingCompanyName($invoice, $agreementsById),
+            'pay_to_bank' => $this->invoicePayToBankName($invoice, $agreementsById),
             'driver_id' => $invoice->driver_id,
             'invoice_id' => $invoice->id,
             'time_ago' => $timeAgo,
@@ -1442,5 +1445,17 @@ class DashboardController extends Controller
         $name = trim((string) ($agreementsById->get($invoice->source_id)?->paying_company_name ?? ''));
 
         return $name !== '' ? $name : null;
+    }
+
+    private function invoicePayToBankName(Invoice $invoice, Collection $agreementsById): ?string
+    {
+        if (! in_array($invoice->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) || ! $invoice->source_id) {
+            return null;
+        }
+
+        $bankAccount = $agreementsById->get($invoice->source_id)?->paymentBankAccount;
+        $displayName = trim((string) ($bankAccount?->paymentDisplayName() ?? ''));
+
+        return $displayName !== '' ? $displayName : null;
     }
 }
