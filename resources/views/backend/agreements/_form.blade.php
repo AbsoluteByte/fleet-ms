@@ -119,6 +119,18 @@
                     <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
+                <div class="mb-3">
+                    <label for="payment_bank_account_id" class="form-label">Driver payment bank account</label>
+                    @include('backend.payments.partials.bank-account-select', [
+                        'name' => 'payment_bank_account_id',
+                        'id' => 'payment_bank_account_id',
+                        'bankAccounts' => $bankAccounts ?? collect(),
+                        'selected' => old('payment_bank_account_id', $model->payment_bank_account_id ?? null),
+                        'wrapperClass' => '',
+                        'errorKey' => 'payment_bank_account_id',
+                    ])
+                    <small class="form-text text-muted">Bank account the driver should pay rent into.</small>
+                </div>
             </div>
 
             <div class="col-md-6">
@@ -159,6 +171,18 @@
                            class="form-control @error('refund_person_name') is-invalid @enderror"
                            value="{{ old('refund_person_name', isset($model) ? ($model->refund_person_name ?? $model->driver?->full_name ?? '') : '') }}">
                     @error('refund_person_name')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="col-md-6" id="agreement-refund-sort-code-section" style="display: none;">
+                <div class="mb-3">
+                    <label for="refund_sort_code" class="form-label">Sort Code</label>
+                    <input type="text" name="refund_sort_code" id="refund_sort_code"
+                           class="form-control @error('refund_sort_code') is-invalid @enderror"
+                           value="{{ old('refund_sort_code', isset($model) ? ($model->refund_sort_code ?? '') : '') }}">
+                    @error('refund_sort_code')
                     <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
@@ -1671,6 +1695,7 @@
         function toggleClosingDateSection() {
             const section = document.getElementById('agreement-closing-section');
             const refundNameSection = document.getElementById('agreement-refund-details-section');
+            const refundSortCodeSection = document.getElementById('agreement-refund-sort-code-section');
             const refundAccountSection = document.getElementById('agreement-refund-account-section');
             const show = isClosingStatusSelected();
 
@@ -1680,6 +1705,10 @@
 
             if (refundNameSection) {
                 refundNameSection.style.display = show ? '' : 'none';
+            }
+
+            if (refundSortCodeSection) {
+                refundSortCodeSection.style.display = show ? '' : 'none';
             }
 
             if (refundAccountSection) {

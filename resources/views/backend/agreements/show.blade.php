@@ -208,11 +208,17 @@
                                         <td>{{ $agreement->termination_available_from_date ? $agreement->termination_available_from_date->format('M d, Y') : '—' }}</td>
                                     </tr>
                                 @endif
-                                @if($agreement->refund_person_name || $agreement->refund_account_number)
+                                @if($agreement->refund_person_name || $agreement->refund_sort_code || $agreement->refund_account_number)
                                     @if($agreement->refund_person_name)
                                         <tr>
                                             <td><strong>Refund Person Name:</strong></td>
                                             <td>{{ $agreement->refund_person_name }}</td>
+                                        </tr>
+                                    @endif
+                                    @if($agreement->refund_sort_code)
+                                        <tr>
+                                            <td><strong>Sort Code:</strong></td>
+                                            <td>{{ $agreement->refund_sort_code }}</td>
                                         </tr>
                                     @endif
                                     @if($agreement->refund_account_number)
@@ -221,6 +227,12 @@
                                             <td>{{ $agreement->refund_account_number }}</td>
                                         </tr>
                                     @endif
+                                @endif
+                                @if($agreement->paymentBankAccount)
+                                    <tr>
+                                        <td><strong>Driver pays into:</strong></td>
+                                        <td>{{ $agreement->paymentBankAccount->bank_name }}</td>
+                                    </tr>
                                 @endif
                             </table>
                         </div>
@@ -534,6 +546,30 @@
                             </div>
                         @endif
 
+                        @if($agreement->refund_person_name || $agreement->refund_sort_code || $agreement->refund_account_number)
+                            <div class="mt-3 pt-2 border-top">
+                                <h6 class="mb-2">Refund banking details</h6>
+                                @if($agreement->refund_person_name)
+                                    <div class="d-flex justify-content-between small mb-1">
+                                        <span>Refund person</span>
+                                        <strong>{{ $agreement->refund_person_name }}</strong>
+                                    </div>
+                                @endif
+                                @if($agreement->refund_sort_code)
+                                    <div class="d-flex justify-content-between small mb-1">
+                                        <span>Sort code</span>
+                                        <strong>{{ $agreement->refund_sort_code }}</strong>
+                                    </div>
+                                @endif
+                                @if($agreement->refund_account_number)
+                                    <div class="d-flex justify-content-between small mb-1">
+                                        <span>Account number</span>
+                                        <strong>{{ $agreement->refund_account_number }}</strong>
+                                    </div>
+                                @endif
+                            </div>
+                        @endif
+
                         @if($agreement->hasBeenUpgraded())
                             <div class="alert alert-info py-2 mt-3 mb-0">
                                 Deposit transferred to
@@ -557,6 +593,12 @@
                                     <div class="d-flex justify-content-between small mt-1">
                                         <span>Refund date</span>
                                         <strong>{{ $refund->refund_date->format('M d, Y') }}</strong>
+                                    </div>
+                                @endif
+                                @if($refund->payment_method)
+                                    <div class="d-flex justify-content-between small mt-1">
+                                        <span>Refund method</span>
+                                        <strong>{{ $refund->payment_method }}</strong>
                                     </div>
                                 @endif
                                 @if((float) $refund->debt_offset_amount > 0)
@@ -600,7 +642,7 @@
                 </div>
             </div>
         </div>
-        @include('backend.agreements.partials.invoices', ['agreement' => $agreement])
+        @include('backend.agreements.partials.invoices', ['agreement' => $agreement, 'canManageInvoices' => $canManageInvoices ?? false])
         <!-- E-Signature Status Card -->
         <div class="col-xl-4 mt-4">
             <div class="card">

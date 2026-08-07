@@ -77,6 +77,7 @@ class BankAccountTest extends TestCase
         $response = $this->post(route('bank-accounts.store'), [
             'company_id' => $this->company->id,
             'bank_name' => 'Barclays',
+            'short_name' => 'BCL',
             'account_number' => '12345678',
         ]);
 
@@ -87,8 +88,34 @@ class BankAccountTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'company_id' => $this->company->id,
             'bank_name' => 'Barclays',
+            'short_name' => 'BCL',
             'account_number' => '12345678',
         ]);
+    }
+
+    public function test_payment_display_name_uses_short_name_when_set(): void
+    {
+        $bankAccount = BankAccount::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'bank_name' => 'Barclays Business Account',
+            'short_name' => 'BCL',
+            'account_number' => '12345678',
+        ]);
+
+        $this->assertSame('BCL', $bankAccount->paymentDisplayName());
+    }
+
+    public function test_payment_display_name_falls_back_to_bank_name(): void
+    {
+        $bankAccount = BankAccount::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'bank_name' => 'Barclays',
+            'account_number' => '12345678',
+        ]);
+
+        $this->assertSame('Barclays', $bankAccount->paymentDisplayName());
     }
 
     public function test_store_rejects_company_from_another_tenant(): void
@@ -177,6 +204,7 @@ class BankAccountTest extends TestCase
             $table->foreignId('tenant_id');
             $table->foreignId('company_id');
             $table->string('bank_name');
+            $table->string('short_name')->nullable();
             $table->string('account_number', 50);
             $table->unsignedBigInteger('createdBy')->nullable();
             $table->unsignedBigInteger('updatedBy')->nullable();

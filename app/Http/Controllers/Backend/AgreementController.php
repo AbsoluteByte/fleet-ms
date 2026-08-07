@@ -310,10 +310,10 @@ class AgreementController extends Controller
             'company', 'driver', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
             'status', 'insuranceProvider', 'terminationRecordedBy', 'parentAgreement.car', 'parentAgreement.driver',
             'upgradedFromAgreement.car', 'upgradedToAgreement.car', 'deductions', 'additionalCharges.invoice',
-            'discountConsumedInvoice',
+            'discountConsumedInvoice', 'paymentBankAccount',
             'depositRefund.debtPayment', 'depositRefund.refundCreditPayment',
             'invoices' => function ($query) {
-                $query->with('sourceAgreement')->orderByDesc('invoice_date')->orderByDesc('id');
+                $query->with(['sourceAgreement', 'paymentAllocations'])->orderByDesc('invoice_date')->orderByDesc('id');
             },
             'collections' => function ($query) {
                 $query->orderBy('due_date');
@@ -325,8 +325,9 @@ class AgreementController extends Controller
 
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
         [$settlementPreview, $settlementRemainingDebt] = $this->settlementContextForAgreement($agreement);
+        $canManageInvoices = strtolower(trim((string) Auth::user()?->email)) === 'jawad@samoretraders.com';
 
-        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt'));
+        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt', 'canManageInvoices'));
     }
 
     /**
@@ -648,6 +649,7 @@ class AgreementController extends Controller
         if (! $this->isClosingStatusId((int) ($validated['status_id'] ?? 0))) {
             $validated['closing_date'] = null;
             $validated['refund_person_name'] = null;
+            $validated['refund_sort_code'] = null;
             $validated['refund_account_number'] = null;
         }
 
@@ -738,6 +740,10 @@ class AgreementController extends Controller
             'end_date' => 'required|date',
             'driver_id' => 'required|exists:drivers,id',
             'paying_company_name' => 'nullable|string|max:255',
+            'payment_bank_account_id' => [
+                'nullable',
+                Rule::exists('bank_accounts', 'id')->where(fn ($query) => $query->where('tenant_id', $tenant->id)),
+            ],
             'car_id' => 'required|exists:cars,id',
             'mileage_out' => 'nullable|integer|min:0',
             'mileage_in' => 'nullable|integer|min:0',
@@ -772,6 +778,7 @@ class AgreementController extends Controller
                 'date',
             ],
             'refund_person_name' => 'nullable|string|max:255',
+            'refund_sort_code' => 'nullable|string|max:20',
             'refund_account_number' => 'nullable|string|max:50',
         ];
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\Driver;
 use App\Models\Payment;
+use App\Models\Setting;
 use App\Support\BatchPaymentInput;
 use App\Services\DriverCreditService;
 use App\Services\DailyFinancialSheetService;
@@ -50,6 +51,7 @@ class PaymentController extends Controller
             ->withPaymentIndexAggregates()
             ->with(['agreements' => fn ($query) => $query->currentlyActive()->with([
                 'car',
+                'paymentBankAccount',
                 'replacementVehicleAgreements' => fn ($replacementQuery) => $replacementQuery
                     ->currentlyActiveReplacement()
                     ->with('car'),
@@ -72,19 +74,19 @@ class PaymentController extends Controller
         $this->authorizeDriver($driver, $tenant);
 
         $invoices = $driver->invoices()
-            ->with(['paymentAllocations.payment', 'sourceAgreement'])
+            ->with(['paymentAllocations.payment', 'sourceAgreement.paymentBankAccount'])
             ->orderByDesc('invoice_date')
             ->orderByDesc('id')
             ->get();
 
         $activeInvoices = $driver->activeInvoices()
-            ->with('sourceAgreement')
+            ->with(['sourceAgreement.paymentBankAccount', 'paymentAllocations'])
             ->orderBy('invoice_date')
             ->orderBy('due_date')
             ->get();
 
         $dueInvoices = $driver->overdueInvoices()
-            ->with('sourceAgreement')
+            ->with(['sourceAgreement.paymentBankAccount', 'paymentAllocations'])
             ->orderBy('due_date')
             ->get();
 
@@ -98,6 +100,7 @@ class PaymentController extends Controller
         $creditPreview = app(DriverCreditService::class)->preview($driver);
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
         $canManagePayments = $this->canManagePayments();
+        $canManageInvoices = $canManagePayments;
 
         return view($this->dir.'show', compact(
             'driver',
@@ -108,7 +111,8 @@ class PaymentController extends Controller
             'summary',
             'creditPreview',
             'bankAccounts',
-            'canManagePayments'
+            'canManagePayments',
+            'canManageInvoices',
         ));
     }
 
@@ -418,6 +422,10 @@ class PaymentController extends Controller
         $tenant = Auth::user()->currentTenant();
 
         if (! $tenant) {
+            return response()->json(['reminders' => []]);
+        }
+
+        if (! Setting::userReceivesPaymentReminders($tenant->id, (int) Auth::id())) {
             return response()->json(['reminders' => []]);
         }
 

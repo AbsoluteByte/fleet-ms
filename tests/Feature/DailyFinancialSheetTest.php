@@ -143,6 +143,40 @@ class DailyFinancialSheetTest extends TestCase
         $this->assertEquals(200, (float) $invoice->balance_amount);
     }
 
+    public function test_discount_payment_appears_on_daily_financial_sheet_and_approves(): void
+    {
+        $invoice = $this->createInvoice(200);
+        $date = now()->toDateString();
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+
+        $this->post(route('payments.store'), array_merge([
+            'driver_id' => $this->driver->id,
+            'auto_manage_invoices' => 1,
+        ], $this->batchPaymentsField([
+            ['payment_method' => 'Discount', 'amount' => 50, 'payment_date' => $date],
+        ])))->assertRedirect(route('payments.driver', $this->driver->id));
+
+        $payment = Payment::query()->first();
+        $this->assertSame('Discount', $payment->payment_method);
+        $this->assertSame(Payment::POSTING_STATUS_PENDING, $payment->posting_status);
+
+        $response = $this->get(route('daily-financial-sheet.show', $date));
+        $response->assertOk();
+        $response->assertSee('Discount');
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $this->post(route('daily-financial-sheet.approve', $date), [
+            'approve_mode' => 'all',
+        ])->assertRedirect(route('daily-financial-sheet.show', $date));
+
+        $payment->refresh();
+        $this->assertSame(Payment::POSTING_STATUS_POSTED, $payment->posting_status);
+    }
+
     public function test_sheet_detail_shows_cash_and_bank_totals(): void
     {
         $date = now()->toDateString();

@@ -116,17 +116,17 @@
                     <div class="tab-content pt-2">
                         <div class="tab-pane active" id="all-invoices" role="tabpanel">
                             <h5>Total Invoices: £{{ number_format($invoices->sum('total_amount'), 2) }}</h5>
-                            @include('backend.payments.partials.invoices-table', ['invoices' => $invoices])
+                            @include('backend.payments.partials.invoices-table', ['invoices' => $invoices, 'canManageInvoices' => $canManageInvoices ?? false])
                         </div>
 
                         <div class="tab-pane" id="active-invoices" role="tabpanel">
                             <h5>Active Balance: £{{ number_format($activeInvoices->sum('balance_amount'), 2) }}</h5>
-                            @include('backend.payments.partials.invoices-table', ['invoices' => $activeInvoices])
+                            @include('backend.payments.partials.invoices-table', ['invoices' => $activeInvoices, 'canManageInvoices' => $canManageInvoices ?? false])
                         </div>
 
                         <div class="tab-pane" id="due-invoices" role="tabpanel">
                             <h5>Overdue Balance: £{{ number_format($dueInvoices->sum('balance_amount'), 2) }}</h5>
-                            @include('backend.payments.partials.invoices-table', ['invoices' => $dueInvoices])
+                            @include('backend.payments.partials.invoices-table', ['invoices' => $dueInvoices, 'canManageInvoices' => $canManageInvoices ?? false])
                         </div>
 
                         <div class="tab-pane" id="payments" role="tabpanel">

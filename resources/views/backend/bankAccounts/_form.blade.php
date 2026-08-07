@@ -28,6 +28,17 @@
     </div>
 
     <div class="col-md-6 form-group">
+        <label for="short_name">Short Name</label>
+        <input type="text" name="short_name" id="short_name"
+               class="form-control @error('short_name') is-invalid @enderror"
+               value="{{ old('short_name', $model->short_name ?? '') }}"
+               placeholder="Short label shown on payments (optional)">
+        @error('short_name')
+        <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+
+    <div class="col-md-6 form-group">
         <label for="account_number">Account Number <span class="text-danger">*</span></label>
         <input type="text" name="account_number" id="account_number"
                class="form-control @error('account_number') is-invalid @enderror"

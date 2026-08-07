@@ -20,6 +20,7 @@
                                     <tr>
                                         <th>Driver</th>
                                         <th>Vehicle</th>
+                                        <th>Pay to</th>
                                         <th>Phone</th>
                                         <th>Invoices</th>
                                         <th>Payments</th>
@@ -62,6 +63,16 @@
                                                         ->values();
                                                 @endphp
                                                 {{ $registrations->isNotEmpty() ? $registrations->implode(', ') : '—' }}
+                                            </td>
+                                            <td>
+                                                @php
+                                                    $payToBank = $driver->agreements
+                                                        ->map(fn ($agreement) => $agreement->paymentBankAccount?->paymentDisplayName())
+                                                        ->filter()
+                                                        ->unique()
+                                                        ->values();
+                                                @endphp
+                                                {{ $payToBank->isNotEmpty() ? $payToBank->implode(', ') : '—' }}
                                             </td>
                                             <td>{{ $driver->phone_number ?? 'N/A' }}</td>
                                             <td>{{ $driver->invoices_count }}</td>
