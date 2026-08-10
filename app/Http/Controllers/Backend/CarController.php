@@ -389,8 +389,31 @@ class CarController extends Controller
 
         $statusHistoryBankAccountIds = $car->statusHistories
             ->pluck('status_data')
-            ->filter(fn ($data) => is_array($data) && ! empty($data['bank_account_id']))
-            ->map(fn (array $data) => (int) $data['bank_account_id'])
+            ->flatMap(function ($data) {
+                if (! is_array($data)) {
+                    return [];
+                }
+
+                $ids = [];
+
+                if (! empty($data['bank_account_id'])) {
+                    $ids[] = (int) $data['bank_account_id'];
+                }
+
+                foreach (['payments', 'reservation_payments'] as $paymentsKey) {
+                    if (empty($data[$paymentsKey]) || ! is_array($data[$paymentsKey])) {
+                        continue;
+                    }
+
+                    foreach ($data[$paymentsKey] as $paymentRow) {
+                        if (is_array($paymentRow) && ! empty($paymentRow['bank_account_id'])) {
+                            $ids[] = (int) $paymentRow['bank_account_id'];
+                        }
+                    }
+                }
+
+                return $ids;
+            })
             ->unique()
             ->values();
 

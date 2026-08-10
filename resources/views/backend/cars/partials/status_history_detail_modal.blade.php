@@ -82,10 +82,21 @@
                         <dl class="row small mb-0">
                             @foreach($detailEntries as $key => $value)
                                 <dt class="col-sm-4 text-break">
-                                    {{ $key === 'driver_id' ? 'Driver' : ucwords(str_replace('_', ' ', (string) $key)) }}
+                                    @if($key === 'driver_id')
+                                        Driver
+                                    @elseif($key === 'reservation_payments')
+                                        Deposit payments
+                                    @else
+                                        {{ ucwords(str_replace('_', ' ', (string) $key)) }}
+                                    @endif
                                 </dt>
                                 <dd class="col-sm-8">
-                                    @if(is_array($value))
+                                    @if(in_array($key, ['payments', 'reservation_payments'], true) && is_array($value))
+                                        @include('backend.cars.partials.status_history_payments', [
+                                            'paymentRows' => $value,
+                                            'statusHistoryBankAccounts' => $statusHistoryBankAccounts ?? collect(),
+                                        ])
+                                    @elseif(is_array($value))
                                         <pre class="mb-0 p-2 bg-light rounded border small"
                                              style="max-height:200px;overflow:auto;font-size:0.8rem;">{{ json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                     @elseif(is_bool($value))
