@@ -13,7 +13,17 @@
                     <div class="card-content">
                         <div class="card-body card-dashboard">
                             @include('alerts')
-                            <div class="payments-table-toolbar" id="paymentsTableToolbar"></div>
+                            <div class="payments-table-toolbar" id="paymentsTableToolbar">
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" id="paymentsExportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        <i class="fa fa-download mr-50"></i> Export
+                                    </button>
+                                    <div class="dropdown-menu dropdown-menu-right" aria-labelledby="paymentsExportDropdown">
+                                        <button type="button" class="dropdown-item" id="paymentsExportCsv">Export CSV</button>
+                                        <button type="button" class="dropdown-item" id="paymentsExportPdf">Export PDF</button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="table-responsive">
                                 <table id="dataTable" class="table datatable table-bordered table-striped">
                                     <thead>
@@ -41,8 +51,14 @@
                                                 ? \Carbon\Carbon::parse($driver->latest_invoice_date)->format('Y-m-d')
                                                 : '';
                                             $remindAtIso = $driver->payment_remind_at?->toIso8601String() ?? '';
+                                            $pendingDfsAmount = (float) ($driver->pending_dfs_amount ?? 0);
+                                            $totalPaidPosted = (float) ($driver->total_paid ?? 0);
+                                            $dfsExportStatus = $pendingDfsAmount > 0
+                                                ? 'pending'
+                                                : ($totalPaidPosted > 0 ? 'posted' : '');
                                         @endphp
                                         <tr
+                                            data-dfs-export-status="{{ $dfsExportStatus }}"
                                             data-driver-status="{{ $driver->is_active ? 'active' : 'inactive' }}"
                                             data-remind-at="{{ $remindAtIso }}"
                                             data-last-payment-date="{{ $lastPaymentIso }}"
@@ -85,7 +101,6 @@
                                             </td>
                                             <td>
                                                 @php
-                                                    $pendingDfsAmount = (float) ($driver->pending_dfs_amount ?? 0);
                                                     $hasPendingDfs = $driver->total_due > 0 && $pendingDfsAmount > 0;
                                                     $totalDueClass = $driver->total_due > 0
                                                         ? ($hasPendingDfs ? 'text-warning' : 'text-danger')
@@ -362,6 +377,8 @@
 @section('js')
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.min.js') }}"></script>
     <script src="{{ asset('app-assets/vendors/js/tables/datatable/datatables.bootstrap4.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/pdfmake.min.js') }}"></script>
+    <script src="{{ asset('app-assets/vendors/js/tables/datatable/vfs_fonts.js') }}"></script>
     <script>
         $(document).ready(function () {
             function initializeActionTooltips() {
@@ -562,6 +579,370 @@
                 syncFiltersFromForm();
                 dataTable.draw();
             });
+
+            function formatDisplayDate(iso) {
+                if (!iso) {
+                    return '';
+                }
+                const date = parseDateYmd(iso);
+                if (!date) {
+                    return iso;
+                }
+                return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+
+            function formatDateRangeLine(label, fromValue, toValue) {
+                if (!fromValue && !toValue) {
+                    return '';
+                }
+
+                const fromLabel = fromValue ? formatDisplayDate(fromValue) || fromValue : 'any';
+                const toLabel = toValue ? formatDisplayDate(toValue) || toValue : 'any';
+
+                return label + ': ' + fromLabel + ' to ' + toLabel;
+            }
+
+            function formatDatetimeRangeLine(label, fromValue, toValue) {
+                if (!fromValue && !toValue) {
+                    return '';
+                }
+
+                const fromLabel = fromValue || 'any';
+                const toLabel = toValue || 'any';
+
+                return label + ': ' + fromLabel + ' to ' + toLabel;
+            }
+
+            function selectedOptionText(selectId) {
+                const select = document.getElementById(selectId);
+                if (!select || !select.value) {
+                    return '';
+                }
+
+                return select.options[select.selectedIndex]?.text || select.value;
+            }
+
+            const paymentsExportHeaders = [
+                'Driver',
+                'Vehicle',
+                'Pay to',
+                'Phone',
+                'Invoices',
+                'Payments',
+                'Payment Due',
+                'Last Payment',
+                'Total Due',
+                'Credit',
+            ];
+            const paymentsExportFilenamePrefix = 'driver-payments';
+            const paymentsExportTitle = 'Driver Payments';
+
+            function paymentsExportFilename(extension) {
+                return paymentsExportFilenamePrefix + '-' + new Date().toISOString().slice(0, 10) + extension;
+            }
+
+            function getPaymentsExportHeaders() {
+                return paymentsExportHeaders.slice();
+            }
+
+            function buildPaymentsExportMeta() {
+                syncFiltersFromForm();
+
+                const lines = [];
+                const searchTerm = (dataTable.search() || '').trim();
+
+                if (searchTerm) {
+                    lines.push('Search: ' + searchTerm);
+                }
+
+                if (advancedFilters.driverStatus) {
+                    lines.push('Driver status: ' + selectedOptionText('paymentsFilterStatus'));
+                }
+
+                const reminderLine = formatDatetimeRangeLine(
+                    'Reminder between',
+                    advancedFilters.reminderFrom,
+                    advancedFilters.reminderTo
+                );
+                if (reminderLine) {
+                    lines.push(reminderLine);
+                }
+
+                const lastPaymentLine = formatDateRangeLine(
+                    'Last payment between',
+                    advancedFilters.lastPaymentFrom,
+                    advancedFilters.lastPaymentTo
+                );
+                if (lastPaymentLine) {
+                    lines.push(lastPaymentLine);
+                }
+
+                const latestInvoiceLine = formatDateRangeLine(
+                    'Latest invoice date between',
+                    advancedFilters.latestInvoiceFrom,
+                    advancedFilters.latestInvoiceTo
+                );
+                if (latestInvoiceLine) {
+                    lines.push(latestInvoiceLine);
+                }
+
+                if (lines.length === 0) {
+                    lines.push('Filters: None');
+                }
+
+                return {
+                    title: paymentsExportTitle,
+                    lines: lines,
+                };
+            }
+
+            function csvEscape(value) {
+                const str = String(value ?? '').replace(/"/g, '""').trim();
+                return /[",\n\r]/.test(str) ? '"' + str + '"' : str;
+            }
+
+            function downloadCsv(filename, lines) {
+                const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            function collectPaymentsExportRows() {
+                const rows = [];
+                dataTable.rows({ search: 'applied', order: 'applied' }).every(function () {
+                    const node = this.node();
+                    if (!node) {
+                        return;
+                    }
+
+                    const cells = node.querySelectorAll('td');
+                    if (cells.length < 10) {
+                        return;
+                    }
+
+                    const row = [];
+                    for (let i = 0; i < 10; i++) {
+                        row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
+                    }
+
+                    rows.push({
+                        dfsStatus: node.getAttribute('data-dfs-export-status') || '',
+                        cells: row,
+                    });
+                });
+
+                return rows;
+            }
+
+            function paymentsPdfRowFillColor(dfsStatus) {
+                if (dfsStatus === 'pending') {
+                    return '#fff8eb';
+                }
+                if (dfsStatus === 'posted') {
+                    return '#ecfdf3';
+                }
+
+                return null;
+            }
+
+            function getPaymentsPdfAvailableWidth() {
+                return 841.89 - 16 - 16;
+            }
+
+            function getPaymentsPdfColumnWidths() {
+                return [178, 60, 28, 68, 32, 43, 64, 64, 55, 55];
+            }
+
+            function getPaymentsPdfTableWidth() {
+                return getPaymentsPdfAvailableWidth();
+            }
+
+            function getPaymentsPdfCellPadding() {
+                return {
+                    left: 8,
+                    right: 8,
+                    top: 9,
+                    bottom: 9,
+                };
+            }
+
+            function formatPaymentsPdfCellText(cell, columnIndex) {
+                let value = String(cell ?? '').replace(/\s+/g, ' ').trim();
+
+                if (columnIndex === 0) {
+                    value = value.replace(/\s+Pays via:.*$/i, '').trim();
+                }
+
+                return value;
+            }
+
+            function buildPaymentsPdfTableCell(cell, columnIndex, fillColor) {
+                const cellDef = {
+                    text: formatPaymentsPdfCellText(cell, columnIndex),
+                    style: columnIndex >= 4 ? 'tableCellNumeric' : 'tableCell',
+                    noWrap: false,
+                };
+
+                if (fillColor) {
+                    cellDef.fillColor = fillColor;
+                }
+
+                return cellDef;
+            }
+
+            function exportPaymentsCsv() {
+                const exportMeta = buildPaymentsExportMeta();
+                const bodyRows = collectPaymentsExportRows();
+                const exportHeaders = getPaymentsExportHeaders();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                const lines = [csvEscape(exportMeta.title)];
+                exportMeta.lines.forEach(function (line) {
+                    lines.push(csvEscape(line));
+                });
+                lines.push('');
+                lines.push(exportHeaders.map(csvEscape).join(','));
+                bodyRows.forEach(function (entry) {
+                    lines.push(entry.cells.map(csvEscape).join(','));
+                });
+
+                downloadCsv(paymentsExportFilename('.csv'), lines);
+            }
+
+            function exportPaymentsPdf() {
+                const exportMeta = buildPaymentsExportMeta();
+                const bodyRows = collectPaymentsExportRows();
+                const exportHeaders = getPaymentsExportHeaders();
+
+                if (bodyRows.length === 0) {
+                    alert('No records to export. Adjust your search or filters and try again.');
+                    return;
+                }
+
+                if (typeof pdfMake === 'undefined') {
+                    alert('PDF export is not available. Please refresh the page and try again.');
+                    return;
+                }
+
+                const tableBody = [
+                    getPaymentsExportHeaders().map(function (header, columnIndex) {
+                        return {
+                            text: header,
+                            style: columnIndex >= 4 ? 'tableHeaderNumeric' : 'tableHeader',
+                            noWrap: false,
+                        };
+                    }),
+                ];
+
+                const hasPendingRows = bodyRows.some(function (entry) {
+                    return entry.dfsStatus === 'pending';
+                });
+                const hasPostedRows = bodyRows.some(function (entry) {
+                    return entry.dfsStatus === 'posted';
+                });
+
+                bodyRows.forEach(function (entry) {
+                    const fillColor = paymentsPdfRowFillColor(entry.dfsStatus);
+                    tableBody.push(entry.cells.map(function (cell, columnIndex) {
+                        return buildPaymentsPdfTableCell(cell, columnIndex, fillColor);
+                    }));
+                });
+
+                const content = [
+                    {
+                        text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                        style: 'title',
+                        margin: [0, 0, 0, 4],
+                    },
+                    ...exportMeta.lines.map(function (line) {
+                        return {
+                            text: line,
+                            style: 'subtitle',
+                            margin: [0, 0, 0, 2],
+                        };
+                    }),
+                ];
+
+                if (hasPendingRows || hasPostedRows) {
+                    if (hasPendingRows) {
+                        content.push({
+                            text: 'Light yellow rows: payment recorded, pending daily financial sheet approval.',
+                            style: 'subtitle',
+                            margin: [0, 0, 0, 2],
+                        });
+                    }
+                    if (hasPostedRows) {
+                        content.push({
+                            text: 'Light green rows: payments approved in daily financial sheet.',
+                            style: 'subtitle',
+                            margin: [0, 0, 0, 2],
+                        });
+                    }
+                }
+
+                content.push({
+                    text: '',
+                    margin: [0, 0, 0, 8],
+                });
+                content.push({
+                    table: {
+                        headerRows: 1,
+                        widths: getPaymentsPdfColumnWidths(),
+                        body: tableBody,
+                    },
+                    layout: {
+                        hLineWidth: function () { return 0.5; },
+                        vLineWidth: function () { return 0; },
+                        hLineColor: function () { return '#dfe3e8'; },
+                        paddingLeft: function () { return getPaymentsPdfCellPadding().left; },
+                        paddingRight: function () { return getPaymentsPdfCellPadding().right; },
+                        paddingTop: function () { return getPaymentsPdfCellPadding().top; },
+                        paddingBottom: function () { return getPaymentsPdfCellPadding().bottom; },
+                    },
+                    width: getPaymentsPdfTableWidth(),
+                });
+
+                const doc = {
+                    pageSize: 'A4',
+                    pageOrientation: 'landscape',
+                    pageMargins: [16, 40, 16, 28],
+                    content: content,
+                    styles: {
+                        title: { fontSize: 14, bold: true },
+                        subtitle: { fontSize: 9, color: '#5e5873' },
+                        tableHeader: { fontSize: 9, bold: true, fillColor: '#f3f2f7' },
+                        tableHeaderNumeric: { fontSize: 9, bold: true, fillColor: '#f3f2f7', alignment: 'right' },
+                        tableCell: { fontSize: 8, lineHeight: 1.25 },
+                        tableCellNumeric: { fontSize: 8, lineHeight: 1.25, alignment: 'right' },
+                    },
+                    defaultStyle: { fontSize: 8 },
+                    footer: function (currentPage, pageCount) {
+                        return {
+                            text: 'Page ' + currentPage + ' of ' + pageCount,
+                            alignment: 'center',
+                            fontSize: 8,
+                            color: '#5e5873',
+                            margin: [0, 8, 0, 0],
+                        };
+                    },
+                };
+
+                pdfMake.createPdf(doc).download(paymentsExportFilename('.pdf'));
+            }
+
+            $('#paymentsExportCsv').on('click', exportPaymentsCsv);
+            $('#paymentsExportPdf').on('click', exportPaymentsPdf);
 
             const $modal = $('#driverFollowUpModal');
             const $form = $('#driverFollowUpForm');
