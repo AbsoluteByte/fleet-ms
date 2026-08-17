@@ -23,7 +23,10 @@ class AgreementInvoiceService
             ->billable()
             ->whereNotNull('driver_id')
             ->whereDate('start_date', '<=', $throughDate)
-            ->whereDate('end_date', '>=', now()->startOfDay())
+            ->where(function ($query) {
+                $query->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Expired'))
+                    ->orWhereDate('end_date', '>=', now()->startOfDay());
+            })
             ->chunkById(100, function (Collection $agreements) use (&$count, $throughDate) {
                 foreach ($agreements as $agreement) {
                     $count += $this->generateForAgreement($agreement, $throughDate);
@@ -63,7 +66,7 @@ class AgreementInvoiceService
         }
 
         $throughDate = $throughDate?->copy()->startOfDay() ?? now()->startOfDay();
-        $endDate = $agreement->end_date->copy()->startOfDay()->min($throughDate);
+        $endDate = $agreement->billingThroughDate($throughDate);
         $generated = $this->syncDepositInvoice($agreement) ? 1 : 0;
 
         if ($agreement->hasDeferredBillingAnchor()) {
@@ -215,8 +218,9 @@ class AgreementInvoiceService
             return [];
         }
 
-        $throughDate = $throughDate?->copy()->startOfDay() ?? $agreement->end_date->copy()->startOfDay();
-        $endDate = $agreement->end_date->copy()->startOfDay()->min($throughDate);
+        $throughDate = $throughDate?->copy()->startOfDay()
+            ?? ($agreement->isOpenHoldover() ? now()->startOfDay() : $agreement->end_date->copy()->startOfDay());
+        $endDate = $agreement->billingThroughDate($throughDate);
 
         if ($agreement->upgraded_from_agreement_id) {
             return $this->expectedInvoiceDatesForUpgradedAgreement($agreement, $endDate);
@@ -460,7 +464,7 @@ class AgreementInvoiceService
         }
 
         $throughDate = $throughDate?->copy()->startOfDay() ?? now()->startOfDay();
-        $endDate = $agreement->end_date->copy()->startOfDay()->min($throughDate);
+        $endDate = $agreement->billingThroughDate($throughDate);
         $generated = 0;
         $upgradeDate = $agreement->start_date->copy()->startOfDay();
         $originalStart = $old->start_date->copy()->startOfDay();

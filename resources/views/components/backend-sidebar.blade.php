@@ -246,6 +246,11 @@
                                 <span class="menu-title">Add Payment</span>
                             </a>
                         </li>
+                        <li class="{{ Request::is('admin/payments/invoices') ? 'active' : '' }}">
+                            <a href="{{ route('payments.invoices') }}">
+                                <span class="menu-title">Invoices</span>
+                            </a>
+                        </li>
                         <li class="{{ Request::is('admin/other-payments*') ? 'active' : '' }}">
                             <a href="{{ route('other-payments.index') }}">
                                 <span class="menu-title">Other Payments</span>

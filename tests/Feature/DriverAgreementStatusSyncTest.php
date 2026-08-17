@@ -212,6 +212,19 @@ class DriverAgreementStatusSyncTest extends TestCase
         $this->assertFalse($this->driver->fresh()->is_active);
     }
 
+    public function test_expired_holdover_keeps_driver_active(): void
+    {
+        $expiredStatus = Status::create(['name' => 'Expired', 'type' => 'agreement']);
+        $this->createAgreement($this->car, $expiredStatus, [
+            'end_date' => Carbon::parse('2026-06-17'),
+        ]);
+        $this->driver->update(['is_active' => false]);
+
+        Artisan::call('drivers:sync-agreement-status');
+
+        $this->assertTrue($this->driver->fresh()->is_active);
+    }
+
     public function test_agreement_create_form_shows_inactive_drivers(): void
     {
         Driver::create([
@@ -374,8 +387,12 @@ class DriverAgreementStatusSyncTest extends TestCase
             $table->date('driver_license_expiry_date')->nullable();
             $table->string('next_of_kin')->nullable();
             $table->string('next_of_kin_phone')->nullable();
-            $table->boolean('is_active')->default(true);
         });
+        if (! Schema::hasColumn('drivers', 'is_active')) {
+            Schema::table('drivers', function (Blueprint $table) {
+                $table->boolean('is_active')->default(true);
+            });
+        }
 
         Schema::create('car_status_histories', function (Blueprint $table) {
             $table->id();

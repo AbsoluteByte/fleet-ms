@@ -50,12 +50,12 @@
                                             $startIso = optional($agreement->start_date)->format('Y-m-d') ?? '';
                                             $endIso = optional($agreement->end_date)->format('Y-m-d') ?? '';
                                             $closingIso = optional($agreement->closing_date)->format('Y-m-d') ?? '';
-                                            $noticeIso = ($agreement->isBillableStatus() && $agreement->termination_notice_date)
+                                            $statusName = (string) optional($agreement->status)->name;
+                                            $noticeIso = (in_array(strtolower($statusName), ['active', 'swap'], true) && $agreement->termination_notice_date)
                                                 ? $agreement->termination_notice_date->format('Y-m-d')
                                                 : '';
                                             $closedOnIso = optional($agreement->effectiveCloseDate())->format('Y-m-d') ?? '';
-                                            $statusName = (string) optional($agreement->status)->name;
-                                            $isBillableForNotice = $agreement->isBillableStatus() ? '1' : '0';
+                                            $isBillableForNotice = in_array(strtolower($statusName), ['active', 'swap'], true) ? '1' : '0';
                                             // Filter labels match the action button:
                                             // refunded = refund already recorded (grey button)
                                             // pending  = eligible to refund, not recorded yet (green button)
@@ -147,6 +147,14 @@
                                                        title="Edit Agreement" aria-label="Edit Agreement">
                                                         <i class="fa fa-edit"></i>
                                                     </a>
+                                                    @if(app(\App\Services\AgreementUpgradeService::class)->canRenew($agreement))
+                                                        <a href="{{ route('agreements.renew', $agreement) }}"
+                                                           class="btn btn-sm btn-outline-primary js-action-tooltip"
+                                                           data-toggle="tooltip" data-placement="top"
+                                                           title="Renew Agreement" aria-label="Renew Agreement">
+                                                            <i class="fa fa-refresh"></i>
+                                                        </a>
+                                                    @endif
                                                     @php
                                                         $refundStatus = $agreement->depositRefundStatus();
                                                         $showRefundBtn = $refundStatus !== null || $agreement->canRequestDepositRefund();
@@ -282,7 +290,20 @@
                         <input type="date" id="agreementsClosedTo" class="form-control agreements-date-filter" data-range="closed" data-bound="to">
                     </div>
                 </div>
-                <small class="text-muted">Expired/Terminated only; uses closing date, else end date. If only From is set, To defaults to today.</small>
+                <small class="text-muted">Terminated only; uses closing date, else end date. If only From is set, To defaults to today.</small>
+            </div>
+
+            <div class="form-group">
+                <label>Expired between</label>
+                <div class="row">
+                    <div class="col-6">
+                        <input type="date" id="agreementsExpiredFrom" class="form-control agreements-date-filter" data-range="expired" data-bound="from">
+                    </div>
+                    <div class="col-6">
+                        <input type="date" id="agreementsExpiredTo" class="form-control agreements-date-filter" data-range="expired" data-bound="to">
+                    </div>
+                </div>
+                <small class="text-muted">Expired agreements only; matches the original agreement end date.</small>
             </div>
 
             <div class="form-group">
@@ -460,6 +481,7 @@
                 hasNotice: false,
                 rented: { from: '', to: '' },
                 closed: { from: '', to: '' },
+                expired: { from: '', to: '' },
                 notice: { from: '', to: '' },
                 due: { from: '', to: '' },
                 refundStatus: '',
@@ -569,6 +591,11 @@
                         ? formatDisplayDate(filters.closed.to)
                         : (filters.closed.from ? formatDisplayDate(closedRangeTo(filters.closed)) : 'any');
                     lines.push('Closed between: ' + fromLabel + ' to ' + toLabel);
+                }
+
+                const expiredLine = formatDateRangeLine('Expired between', filters.expired);
+                if (expiredLine) {
+                    lines.push(expiredLine);
                 }
 
                 if (filters.refundStatus) {
@@ -780,7 +807,11 @@
 
             function isClosedStatus(status) {
                 const name = (status || '').toLowerCase();
-                return name === 'expired' || name === 'terminated';
+                return name === 'terminated';
+            }
+
+            function isExpiredStatus(status) {
+                return (status || '').toLowerCase() === 'expired';
             }
 
             function isBillableRow(row) {
@@ -794,6 +825,8 @@
                 filters.rented.to = document.getElementById('agreementsRentedTo').value;
                 filters.closed.from = document.getElementById('agreementsClosedFrom').value;
                 filters.closed.to = document.getElementById('agreementsClosedTo').value;
+                filters.expired.from = document.getElementById('agreementsExpiredFrom').value;
+                filters.expired.to = document.getElementById('agreementsExpiredTo').value;
                 filters.notice.from = document.getElementById('agreementsNoticeFrom').value;
                 filters.notice.to = document.getElementById('agreementsNoticeTo').value;
                 filters.due.from = document.getElementById('agreementsDueFrom').value;
@@ -846,6 +879,15 @@
                         return false;
                     }
                     if (!dateInRange(closedOn, filters.closed.from, closedRangeTo(filters.closed))) {
+                        return false;
+                    }
+                }
+
+                if (isRangeActive(filters.expired)) {
+                    if (!isExpiredStatus(status)) {
+                        return false;
+                    }
+                    if (!dateInRange(endDate, filters.expired.from, filters.expired.to)) {
                         return false;
                     }
                 }
@@ -906,7 +948,7 @@
                 $('#agreementsFilterStatus').val('');
                 $('#agreementsFilterRefundStatus').val('');
                 $('#agreementsHasNotice').prop('checked', false);
-                $('#agreementsRentedFrom, #agreementsRentedTo, #agreementsClosedFrom, #agreementsClosedTo, #agreementsNoticeFrom, #agreementsNoticeTo, #agreementsDueFrom, #agreementsDueTo').val('');
+                $('#agreementsRentedFrom, #agreementsRentedTo, #agreementsClosedFrom, #agreementsClosedTo, #agreementsExpiredFrom, #agreementsExpiredTo, #agreementsNoticeFrom, #agreementsNoticeTo, #agreementsDueFrom, #agreementsDueTo').val('');
                 syncFiltersFromForm();
                 dataTable.draw();
             });

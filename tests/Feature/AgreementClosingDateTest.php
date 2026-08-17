@@ -118,14 +118,13 @@ class AgreementClosingDateTest extends TestCase
         $response->assertSessionHasErrors('closing_date');
     }
 
-    public function test_expired_status_saves_closing_date(): void
+    public function test_expired_status_does_not_require_closing_date(): void
     {
         $agreement = $this->createActiveAgreement();
 
         $response = $this->from(route('agreements.edit', $agreement))
             ->put(route('agreements.update', $agreement), $this->basePayload([
                 'status_id' => $this->expiredStatus->id,
-                'closing_date' => '2026-06-20T16:45',
             ]));
 
         $this->assertNull($response->getSession()->get('error'));
@@ -134,14 +133,14 @@ class AgreementClosingDateTest extends TestCase
 
         $agreement->refresh();
         $this->assertSame($this->expiredStatus->id, $agreement->status_id);
-        $this->assertSame('2026-06-20 16:45:00', $agreement->closing_date->format('Y-m-d H:i:s'));
+        $this->assertNull($agreement->closing_date);
     }
 
     public function test_reactivating_agreement_clears_closing_date(): void
     {
         $agreement = $this->createActiveAgreement();
         $agreement->update([
-            'status_id' => $this->expiredStatus->id,
+            'status_id' => $this->terminatedStatus->id,
             'closing_date' => '2026-06-18 09:00:00',
         ]);
 
@@ -211,7 +210,7 @@ class AgreementClosingDateTest extends TestCase
 
         $response = $this->put(route('agreements.update', $agreement), $this->basePayload([
             'agreed_rent' => 700,
-            'status_id' => $this->expiredStatus->id,
+            'status_id' => $this->terminatedStatus->id,
             'closing_date' => '2026-06-17T09:00',
         ]));
 
@@ -362,7 +361,7 @@ class AgreementClosingDateTest extends TestCase
 
         $response = $this->put(route('agreements.update', $agreement), $this->basePayload([
             'agreed_rent' => 700,
-            'status_id' => $this->expiredStatus->id,
+            'status_id' => $this->terminatedStatus->id,
             'closing_date' => '2026-06-17T09:00',
         ]));
 

@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -64,7 +65,7 @@ class AgreementController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status', 'parentAgreement', 'depositRefund', 'deductions', 'upgradedToAgreement'])
+        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status', 'parentAgreement', 'depositRefund', 'deductions', 'upgradedToAgreement', 'renewedToAgreement'])
             ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
             ->get();
         $settlementService = app(AgreementDepositSettlementService::class);
@@ -309,7 +310,9 @@ class AgreementController extends Controller
         $agreement->load([
             'company', 'driver', 'car.carModel', 'car.insurances.status', 'car.insurances.insuranceProvider',
             'status', 'insuranceProvider', 'terminationRecordedBy', 'parentAgreement.car', 'parentAgreement.driver',
-            'upgradedFromAgreement.car', 'upgradedToAgreement.car', 'deductions', 'additionalCharges.invoice',
+            'upgradedFromAgreement.car', 'upgradedToAgreement.car',
+            'renewedFromAgreement.car', 'renewedToAgreement.car',
+            'deductions', 'additionalCharges.invoice',
             'discountConsumedInvoice', 'paymentBankAccount',
             'depositRefund.debtPayment', 'depositRefund.refundCreditPayment',
             'invoices' => function ($query) {
@@ -328,6 +331,64 @@ class AgreementController extends Controller
         $canManageInvoices = strtolower(trim((string) Auth::user()?->email)) === 'jawad@samoretraders.com';
 
         return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt', 'canManageInvoices'));
+    }
+
+    public function renew(Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this agreement');
+        }
+
+        $agreement->load(['driver', 'car.carModel', 'status', 'company']);
+
+        if (! app(AgreementUpgradeService::class)->canRenew($agreement)) {
+            return redirect()->route('agreements.show', $agreement)
+                ->with('error', 'This agreement is not eligible for renewal.');
+        }
+
+        $suggestedStart = $agreement->end_date
+            ? $agreement->end_date->copy()->addDay()->startOfDay()
+            : now()->startOfDay();
+        if ($suggestedStart->lt(now()->startOfDay())) {
+            $suggestedStart = now()->startOfDay();
+        }
+
+        $suggestedEnd = $suggestedStart->copy()->addYear();
+
+        return view($this->dir.'renew', [
+            'agreement' => $agreement,
+            'suggestedStart' => $suggestedStart,
+            'suggestedEnd' => $suggestedEnd,
+        ]);
+    }
+
+    public function storeRenew(Request $request, Agreement $agreement)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this agreement');
+        }
+
+        $validated = $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+        ]);
+
+        try {
+            $newAgreement = app(AgreementUpgradeService::class)->createRenewFromAgreement($agreement, $validated);
+
+            return redirect()->route('agreements.show', $newAgreement)
+                ->with('success', 'Agreement renewed successfully.');
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Error renewing agreement: '.$e->getMessage());
+        }
     }
 
     /**
@@ -405,7 +466,7 @@ class AgreementController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
-        $model = $agreement->load(['collections', 'deductions', 'additionalCharges', 'depositRefund']);
+        $model = $agreement->load(['collections', 'deductions', 'additionalCharges.invoice', 'depositRefund']);
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $drivers = $this->driversForAgreementForm($tenant->id);
         $cars = $this->carsForAgreementForm($tenant, $agreement->car_id, $agreement->id);
@@ -499,7 +560,7 @@ class AgreementController extends Controller
                 $validated['tenant_id'] = $tenant->id;
                 $validated['updatedBy'] = Auth::id();
                 $validated = $this->mergeTerminationData($validated, $agreement);
-                $validated = $this->mergeClosingData($validated);
+                $validated = $this->mergeClosingData($validated, $agreement);
                 $validated = $this->applyDiscountData($validated, $request, $agreement);
                 $validated = $this->mergeReplacementVehicleData($validated);
                 if ($agreement->upgraded_from_agreement_id) {
@@ -644,13 +705,30 @@ class AgreementController extends Controller
         return $validated;
     }
 
-    private function mergeClosingData(array $validated): array
+    private function mergeClosingData(array $validated, ?Agreement $existing = null): array
     {
-        if (! $this->isClosingStatusId((int) ($validated['status_id'] ?? 0))) {
-            $validated['closing_date'] = null;
-            $validated['refund_person_name'] = null;
-            $validated['refund_sort_code'] = null;
-            $validated['refund_account_number'] = null;
+        if ($this->isClosingStatusId((int) ($validated['status_id'] ?? 0))) {
+            return $validated;
+        }
+
+        if (
+            $existing
+            && $existing->closing_date
+            && $this->isExpiredStatusId((int) ($validated['status_id'] ?? 0))
+            && ($existing->hasBeenRenewed() || $existing->hasBeenUpgraded())
+        ) {
+            $validated['closing_date'] = $existing->closing_date;
+
+            return $validated;
+        }
+
+        $validated['closing_date'] = null;
+        foreach (['refund_person_name', 'refund_sort_code', 'refund_account_number'] as $column) {
+            if (Schema::hasColumn('agreements', $column)) {
+                $validated[$column] = null;
+            } else {
+                unset($validated[$column]);
+            }
         }
 
         return $validated;
@@ -898,8 +976,8 @@ class AgreementController extends Controller
 
     private function assertAdditionalChargesCanBeChanged(Agreement $agreement, array $charges): void
     {
-        $saved = $agreement->additionalCharges()
-            ->get()
+        $savedCharges = $agreement->additionalCharges()->with('invoice')->get();
+        $saved = $savedCharges
             ->mapWithKeys(fn (AgreementAdditionalCharge $charge): array => [
                 $charge->id => [
                     'type' => (string) $charge->type,
@@ -907,6 +985,10 @@ class AgreementController extends Controller
                     'notes' => trim((string) $charge->notes),
                 ],
             ])
+            ->all();
+        $lockedIds = $savedCharges
+            ->filter(fn (AgreementAdditionalCharge $charge): bool => $this->additionalChargeIsLocked($charge))
+            ->map(fn (AgreementAdditionalCharge $charge): int => (int) $charge->id)
             ->all();
 
         $submittedIds = [];
@@ -931,7 +1013,7 @@ class AgreementController extends Controller
                     'notes' => trim((string) ($charge['notes'] ?? '')),
                 ];
 
-                if ($saved[$chargeId] !== $submitted) {
+                if (in_array($chargeId, $lockedIds, true) && $saved[$chargeId] !== $submitted) {
                     throw ValidationException::withMessages([
                         'additional_charges' => 'Damages cannot be changed after an invoice has been created.',
                     ]);
@@ -939,8 +1021,11 @@ class AgreementController extends Controller
             }
         }
 
-        $missingIds = array_diff(array_keys($saved), $submittedIds);
-        if ($missingIds !== []) {
+        $missingLockedIds = array_intersect(
+            array_diff(array_keys($saved), $submittedIds),
+            $lockedIds
+        );
+        if ($missingLockedIds !== []) {
             throw ValidationException::withMessages([
                 'additional_charges' => 'Damages cannot be removed after an invoice has been created.',
             ]);
@@ -972,9 +1057,14 @@ class AgreementController extends Controller
         $today = now()->startOfDay();
         if (
             ! $agreement->start_date
-            || ! $agreement->end_date
             || $agreement->start_date->copy()->startOfDay()->gt($today)
-            || $agreement->end_date->copy()->startOfDay()->lt($today)
+            || (
+                ! $agreement->isOpenHoldover()
+                && (
+                    ! $agreement->end_date
+                    || $agreement->end_date->copy()->startOfDay()->lt($today)
+                )
+            )
         ) {
             throw ValidationException::withMessages([
                 'additional_charges' => 'Damages can only be added during the hire period.',
@@ -985,6 +1075,8 @@ class AgreementController extends Controller
     private function syncAdditionalCharges(Agreement $agreement, array $charges): void
     {
         $invoiceService = app(AgreementInvoiceService::class);
+        $existing = $agreement->additionalCharges()->with('invoice')->get()->keyBy('id');
+        $submittedIds = [];
 
         foreach (array_values($charges) as $sortOrder => $chargeData) {
             if ((float) ($chargeData['amount'] ?? 0) <= 0) {
@@ -994,10 +1086,23 @@ class AgreementController extends Controller
             $chargeId = isset($chargeData['id']) ? (int) $chargeData['id'] : null;
 
             if ($chargeId) {
-                AgreementAdditionalCharge::query()
-                    ->where('agreement_id', $agreement->id)
-                    ->whereKey($chargeId)
-                    ->update(['sort_order' => $sortOrder]);
+                $existingCharge = $existing->get($chargeId);
+                if (! $existingCharge) {
+                    continue;
+                }
+
+                $submittedIds[] = $chargeId;
+                $updates = ['sort_order' => $sortOrder];
+
+                if (! $this->additionalChargeIsLocked($existingCharge)) {
+                    $updates['type'] = (string) ($chargeData['type'] ?? $existingCharge->type);
+                    $updates['amount'] = round((float) $chargeData['amount'], 2);
+                    $updates['notes'] = filled($chargeData['notes'] ?? null)
+                        ? trim((string) $chargeData['notes'])
+                        : null;
+                }
+
+                $existingCharge->update($updates);
 
                 continue;
             }
@@ -1014,6 +1119,24 @@ class AgreementController extends Controller
             $invoice = $invoiceService->createAdditionalChargeInvoice($agreement->fresh(), $charge);
             $charge->update(['invoice_id' => $invoice->id]);
         }
+
+        $existing
+            ->reject(fn (AgreementAdditionalCharge $charge): bool => in_array((int) $charge->id, $submittedIds, true))
+            ->reject(fn (AgreementAdditionalCharge $charge): bool => $this->additionalChargeIsLocked($charge))
+            ->each(fn (AgreementAdditionalCharge $charge) => $charge->delete());
+    }
+
+    private function additionalChargeIsLocked(AgreementAdditionalCharge $charge): bool
+    {
+        if ($charge->invoice_id === null) {
+            return false;
+        }
+
+        if ($charge->relationLoaded('invoice')) {
+            return $charge->invoice !== null;
+        }
+
+        return $charge->invoice()->exists();
     }
 
     private function isReplacementVehicleStatusId(?int $statusId): bool
@@ -1304,7 +1427,7 @@ class AgreementController extends Controller
 
         $name = Status::query()->whereKey($statusId)->value('name');
 
-        return in_array(strtolower((string) $name), ['expired', 'terminated'], true);
+        return strtolower((string) $name) === 'terminated';
     }
 
     private function isExpiredStatusId(int $statusId): bool
@@ -1778,8 +1901,7 @@ class AgreementController extends Controller
 
         $statusId = (int) $agreement->status_id;
         $isTerminated = filled($agreement->termination_notice_date)
-            || $this->isTerminatedStatusId($statusId)
-            || ($this->isExpiredStatusId($statusId) && filled($agreement->closing_date));
+            || $this->isTerminatedStatusId($statusId);
 
         if (! $isTerminated) {
             return;

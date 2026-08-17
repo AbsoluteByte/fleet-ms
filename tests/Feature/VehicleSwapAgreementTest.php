@@ -149,11 +149,35 @@ class VehicleSwapAgreementTest extends TestCase
 
         $oldAgreement = $this->agreement->fresh(['status']);
         $this->assertSame('Terminated', $oldAgreement->status->name);
+        $this->assertNotNull($oldAgreement->closing_date);
+        $this->assertSame(
+            $newAgreement->start_date->format('Y-m-d H:i:s'),
+            $oldAgreement->closing_date->format('Y-m-d H:i:s')
+        );
+        $this->assertSame('2026-06-18 10:00:00', $oldAgreement->closing_date->format('Y-m-d H:i:s'));
         $this->assertSame($this->newCar->id, $newAgreement->car_id);
         $this->assertSame('250.00', $newAgreement->agreed_rent);
         $this->assertSame('Swap', $newAgreement->fresh('status')->status->name);
         $this->assertSame($this->agreement->id, $newAgreement->upgraded_from_agreement_id);
         $this->assertSame('500.00', $newAgreement->deposit_amount);
+    }
+
+    public function test_swap_sets_original_closing_date_from_swap_start_datetime(): void
+    {
+        $newAgreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($this->agreement, [
+            'car_id' => $this->newCar->id,
+            'driver_id' => $this->driver->id,
+            'agreed_rent' => 250,
+            'start_date' => '2026-06-20 14:30:00',
+        ]);
+
+        $oldAgreement = $this->agreement->fresh();
+
+        $this->assertSame('2026-06-20 14:30:00', $oldAgreement->closing_date->format('Y-m-d H:i:s'));
+        $this->assertSame(
+            $newAgreement->start_date->format('Y-m-d H:i:s'),
+            $oldAgreement->closing_date->format('Y-m-d H:i:s')
+        );
     }
 
     public function test_permission_letter_route_returns_success_for_swapped_agreement(): void
@@ -240,6 +264,39 @@ class VehicleSwapAgreementTest extends TestCase
         $this->assertSame($newCompany->id, $swappedAgreement->documentCompany()?->id);
     }
 
+    public function test_swap_agreement_end_date_can_be_updated(): void
+    {
+        $swapAgreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($this->agreement, [
+            'car_id' => $this->newCar->id,
+            'driver_id' => $this->driver->id,
+            'agreed_rent' => 250,
+        ]);
+
+        $this->assertSame('2027-06-01', $swapAgreement->end_date->format('Y-m-d'));
+
+        $response = $this->put(route('agreements.update', $swapAgreement), [
+            'company_id' => $this->company->id,
+            'driver_id' => $this->driver->id,
+            'car_id' => $this->newCar->id,
+            'start_date' => $swapAgreement->start_date->format('Y-m-d H:i:s'),
+            'end_date' => '2027-12-15',
+            'agreed_rent' => 250,
+            'rent_interval' => 'weekly',
+            'collection_type' => 'weekly',
+            'deposit_amount' => 999,
+            'status_id' => $this->swapStatus->id,
+            'upgraded_from_agreement_id' => $this->agreement->id,
+        ]);
+
+        $response->assertRedirect(route('agreements.index'));
+        $response->assertSessionHasNoErrors();
+
+        $swapAgreement->refresh();
+        $this->assertSame('2027-12-15', $swapAgreement->end_date->format('Y-m-d'));
+        $this->assertSame('500.00', $swapAgreement->deposit_amount);
+        $this->assertSame($this->agreement->id, $swapAgreement->upgraded_from_agreement_id);
+    }
+
     private function setUpHttpTestExtras(): void
     {
         Schema::table('tenants', function (Blueprint $table) {
@@ -248,6 +305,7 @@ class VehicleSwapAgreementTest extends TestCase
 
         Schema::table('agreements', function (Blueprint $table) {
             $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            $table->text('mutual_detail_slip_document')->nullable();
         });
 
         Schema::table('car_reservations', function (Blueprint $table) {

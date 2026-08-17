@@ -116,6 +116,7 @@ trait SetupAgreementChangeCarDatabase
             $table->string('last_name')->nullable();
             $table->string('email')->nullable();
             $table->string('phone_number')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
 
@@ -134,6 +135,7 @@ trait SetupAgreementChangeCarDatabase
             $table->foreignId('car_id')->nullable();
             $table->foreignId('status_id')->nullable();
             $table->unsignedBigInteger('upgraded_from_agreement_id')->nullable();
+            $table->unsignedBigInteger('renewed_from_agreement_id')->nullable();
             $table->string('swap_reason')->nullable();
             $table->string('swap_phvl_issue_type')->nullable();
             $table->text('swap_phvl_issue_notes')->nullable();

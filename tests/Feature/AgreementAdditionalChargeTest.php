@@ -212,6 +212,37 @@ class AgreementAdditionalChargeTest extends TestCase
             ]));
 
         $response->assertSessionHasErrors('additional_charges');
+        $this->assertSame(1, AgreementAdditionalCharge::query()->where('agreement_id', $agreement->id)->count());
+    }
+
+    public function test_charge_can_be_removed_after_its_invoice_is_deleted(): void
+    {
+        $agreement = $this->createActiveAgreement();
+
+        $this->put(route('agreements.update', $agreement), $this->basePayload([
+            'additional_charges_present' => 1,
+            'additional_charges' => [
+                $this->damageRow([
+                    'type' => AgreementAdditionalCharge::TYPE_INSURANCE_EXCESS,
+                    'amount' => 30,
+                    'notes' => 'Insurance excess',
+                ]),
+            ],
+        ]))->assertSessionHasNoErrors();
+
+        $charge = AgreementAdditionalCharge::query()->where('agreement_id', $agreement->id)->firstOrFail();
+        $this->assertNotNull($charge->invoice_id);
+
+        Invoice::query()->whereKey($charge->invoice_id)->delete();
+
+        $response = $this->put(route('agreements.update', $agreement), $this->basePayload([
+            'additional_charges_present' => 1,
+            'additional_charges' => [],
+        ]));
+
+        $response->assertRedirect(route('agreements.index'));
+        $response->assertSessionHasNoErrors();
+        $this->assertSame(0, AgreementAdditionalCharge::query()->where('agreement_id', $agreement->id)->count());
     }
 
     public function test_add_charge_outside_hire_period_is_rejected(): void
@@ -313,9 +344,11 @@ class AgreementAdditionalChargeTest extends TestCase
             $table->unsignedTinyInteger('status')->default(1);
         });
 
-        Schema::table('drivers', function (Blueprint $table) {
-            $table->boolean('is_active')->default(true);
-        });
+        if (! Schema::hasColumn('drivers', 'is_active')) {
+            Schema::table('drivers', function (Blueprint $table) {
+                $table->boolean('is_active')->default(true);
+            });
+        }
 
         Schema::table('agreements', function (Blueprint $table) {
             $table->unsignedBigInteger('parent_agreement_id')->nullable();
