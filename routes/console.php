@@ -8,6 +8,7 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Schedule::command('agreements:mark-expired')->daily();
 Schedule::command('invoices:generate-agreements')->daily();
 // Disabled: do not auto-cancel car insurance when the provider/policy expires.
 // Schedule::command('insurance:auto-cancel-expired')->daily();

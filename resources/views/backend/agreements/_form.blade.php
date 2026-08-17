@@ -407,14 +407,14 @@
                             'type' => $charge->type,
                             'amount' => $charge->amount,
                             'notes' => $charge->notes,
-                            'locked' => $charge->invoice_id !== null,
+                            'locked' => $charge->invoice !== null,
                         ])->values()->all();
                     } else {
                         $existingChargeIds = $model->additionalCharges->keyBy('id');
                         $additionalChargeRows = collect($additionalChargeRows)->map(function ($charge) use ($existingChargeIds) {
                             $chargeId = $charge['id'] ?? null;
                             $charge['locked'] = $chargeId && $existingChargeIds->has($chargeId)
-                                && $existingChargeIds->get($chargeId)->invoice_id !== null;
+                                && $existingChargeIds->get($chargeId)->invoice !== null;
 
                             return $charge;
                         })->values()->all();
@@ -1689,7 +1689,7 @@
 
             const statusName = String(statusSelect.selectedOptions[0].dataset.statusName || '').toLowerCase();
 
-            return statusName === 'expired' || statusName === 'terminated';
+            return statusName === 'terminated';
         }
 
         function toggleClosingDateSection() {
@@ -1901,6 +1901,10 @@
 
             if (depositInput && option.dataset.depositAmount != null) {
                 depositInput.value = option.dataset.depositAmount;
+            }
+
+            if (isExistingSwapAgreement) {
+                return;
             }
 
             if (endDateInput && option.dataset.endDate) {

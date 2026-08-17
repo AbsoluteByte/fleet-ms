@@ -138,6 +138,8 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::post('drivers/{driver}/invite', [App\Http\Controllers\Backend\DriverController::class, 'invite'])->name('drivers.invite');
     Route::post('drivers/{driver}/resend-invitation', [App\Http\Controllers\Backend\DriverController::class, 'resendInvitation'])->name('drivers.resend-invitation');
 
+    Route::get('agreements/{agreement}/renew', [App\Http\Controllers\Backend\AgreementController::class, 'renew'])->name('agreements.renew');
+    Route::post('agreements/{agreement}/renew', [App\Http\Controllers\Backend\AgreementController::class, 'storeRenew'])->name('agreements.renew.store');
     Route::resource('agreements', App\Http\Controllers\Backend\AgreementController::class);
     Route::post('agreements/{agreement}/refund-deposit', [App\Http\Controllers\Backend\AgreementController::class, 'refundDeposit'])
         ->name('agreements.refund-deposit');
@@ -173,6 +175,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('payments/follow-up-reminders/due', [App\Http\Controllers\Backend\PaymentController::class, 'dueFollowUpReminders'])
         ->name('payments.follow-up.due');
     Route::patch('payments/{payment}/notes', [App\Http\Controllers\Backend\PaymentController::class, 'updateNotes'])->name('payments.notes.update');
+    Route::get('payments/invoices', [App\Http\Controllers\Backend\InvoiceReportController::class, 'index'])->name('payments.invoices');
     Route::patch('invoices/{invoice}', [App\Http\Controllers\Backend\InvoiceController::class, 'update'])->name('invoices.update');
     Route::delete('invoices/{invoice}', [App\Http\Controllers\Backend\InvoiceController::class, 'destroy'])->name('invoices.destroy');
     Route::resource('payments', App\Http\Controllers\Backend\PaymentController::class);

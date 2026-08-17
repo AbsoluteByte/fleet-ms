@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class Agreement extends Model
 {
@@ -23,6 +24,7 @@ class Agreement extends Model
         'security_deposit', 'mileage_out', 'mileage_in',
         'collection_type', 'auto_schedule_collections', 'next_collection_date',
         'condition_report', 'notes', 'status_id', 'parent_agreement_id', 'upgraded_from_agreement_id',
+        'renewed_from_agreement_id',
         'swap_reason', 'swap_phvl_issue_type', 'swap_phvl_issue_notes', 'swap_reason_notes',
         // New insurance fields
         'using_own_insurance', 'insurance_provider_id',
@@ -173,7 +175,7 @@ class Agreement extends Model
     {
         $name = strtolower((string) optional($this->status)->name);
 
-        return in_array($name, ['expired', 'terminated'], true);
+        return $name === 'terminated';
     }
 
     public function canRequestDepositRefund(): bool
@@ -181,6 +183,7 @@ class Agreement extends Model
         return $this->isClosedForDepositRefund()
             && (float) $this->deposit_amount > 0
             && ! $this->hasBeenUpgraded()
+            && ! $this->hasBeenRenewed()
             && ! $this->depositRefund()->exists();
     }
 
@@ -222,14 +225,55 @@ class Agreement extends Model
         return $this->hasOne(self::class, 'upgraded_from_agreement_id');
     }
 
+    public function renewedFromAgreement()
+    {
+        return $this->belongsTo(self::class, 'renewed_from_agreement_id');
+    }
+
+    public function renewedToAgreement()
+    {
+        return $this->hasOne(self::class, 'renewed_from_agreement_id');
+    }
+
     public function isUpgradedAgreement(): bool
     {
         return $this->upgraded_from_agreement_id !== null;
     }
 
+    public function isRenewedAgreement(): bool
+    {
+        return $this->renewed_from_agreement_id !== null;
+    }
+
     public function hasBeenUpgraded(): bool
     {
         return $this->upgradedToAgreement()->exists();
+    }
+
+    public function hasBeenRenewed(): bool
+    {
+        if (! Schema::hasColumn($this->getTable(), 'renewed_from_agreement_id')) {
+            return false;
+        }
+
+        if ($this->relationLoaded('renewedToAgreement')) {
+            return $this->renewedToAgreement !== null;
+        }
+
+        return $this->renewedToAgreement()->exists();
+    }
+
+    public function isExpiredStatus(): bool
+    {
+        return strcasecmp((string) optional($this->status)->name, 'Expired') === 0;
+    }
+
+    public function isOpenHoldover(): bool
+    {
+        return $this->isExpiredStatus()
+            && ! $this->closing_date
+            && ! $this->hasBeenUpgraded()
+            && ! $this->hasBeenRenewed();
     }
 
     public function isReplacementVehicle(): bool
@@ -246,7 +290,7 @@ class Agreement extends Model
     {
         $name = strtolower(trim((string) optional($this->status)->name));
 
-        return in_array($name, ['active', 'swap'], true);
+        return in_array($name, ['active', 'swap'], true) || $this->isOpenHoldover();
     }
 
     public function startedOnDate(string $date): bool
@@ -328,15 +372,54 @@ class Agreement extends Model
             $candidates[] = $upgradedTo->start_date->copy();
         }
 
+        $renewedTo = $this->relationLoaded('renewedToAgreement')
+            ? $this->renewedToAgreement
+            : (Schema::hasColumn($this->getTable(), 'renewed_from_agreement_id')
+                ? $this->renewedToAgreement()->first()
+                : null);
+
+        if ($renewedTo?->start_date) {
+            $candidates[] = $renewedTo->start_date->copy();
+        }
+
         if ($this->closing_date) {
             $candidates[] = $this->closing_date->copy();
         }
 
-        if ($this->end_date) {
+        if (! $this->isOpenHoldover() && $this->end_date) {
             $candidates[] = $this->end_date->copy()->setTimeFromTimeString(self::PDF_END_TIME);
         }
 
-        return collect($candidates)->sort()->first() ?? now();
+        $end = collect($candidates)->sort()->first();
+
+        if ($end) {
+            return $end;
+        }
+
+        return $this->isOpenHoldover()
+            ? now()->addYears(50)
+            : now();
+    }
+
+    public function billingThroughDate(Carbon $throughDate): Carbon
+    {
+        $throughDate = $throughDate->copy()->startOfDay();
+
+        if ($this->closing_date) {
+            $closeDay = $this->closing_date->copy()->startOfDay();
+
+            return $closeDay->copy()->subDay()->min($throughDate);
+        }
+
+        if ($this->isOpenHoldover()) {
+            return $throughDate;
+        }
+
+        if (! $this->end_date) {
+            return $throughDate;
+        }
+
+        return $this->end_date->copy()->startOfDay()->min($throughDate);
     }
 
     public function isAssignedAt(Carbon $at): bool
@@ -365,9 +448,30 @@ class Agreement extends Model
 
     public function scopeBillable($query)
     {
-        return $query->whereHas('status', function ($statusQuery) {
-            $statusQuery->whereIn('name', ['Active', 'Swap']);
+        return $query->where(function ($inner) {
+            $inner->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
+                ->orWhere(function ($holdover) {
+                    $this->constrainOpenHoldover($holdover);
+                });
         });
+    }
+
+    public function scopeOpenHoldover($query)
+    {
+        return $this->constrainOpenHoldover($query);
+    }
+
+    private function constrainOpenHoldover($query)
+    {
+        $query->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Expired'))
+            ->whereNull('closing_date')
+            ->whereDoesntHave('upgradedToAgreement');
+
+        if (Schema::hasColumn($this->getTable(), 'renewed_from_agreement_id')) {
+            $query->whereDoesntHave('renewedToAgreement');
+        }
+
+        return $query;
     }
 
     public function scopeEligibleAsOriginal($query)
@@ -388,9 +492,15 @@ class Agreement extends Model
         $today = now()->startOfDay();
 
         return $query
-            ->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
             ->whereDate('start_date', '<=', $today)
-            ->whereDate('end_date', '>=', $today);
+            ->where(function ($inner) use ($today) {
+                $inner->where(function ($active) use ($today) {
+                    $active->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
+                        ->whereDate('end_date', '>=', $today);
+                })->orWhere(function ($holdover) {
+                    $this->constrainOpenHoldover($holdover);
+                });
+            });
     }
 
     public function scopeCurrentlyActiveReplacement($query)
@@ -410,23 +520,33 @@ class Agreement extends Model
     {
         $today = now()->startOfDay();
 
-        return $query
-            ->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
-            ->whereNull('termination_notice_date')
-            ->whereDate('end_date', '>=', $today);
+        return $query->where(function ($inner) use ($today) {
+            $inner->where(function ($active) use ($today) {
+                $active->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap']))
+                    ->whereNull('termination_notice_date')
+                    ->whereDate('end_date', '>=', $today);
+            })->orWhere(function ($holdover) {
+                $this->constrainOpenHoldover($holdover);
+            });
+        });
     }
 
     /**
-     * Active, Swap, or Replacement Vehicle agreements assigned to a vehicle, including future start dates.
+     * Active, Swap, Replacement Vehicle, or Expired holdover assignments, including future start dates.
      */
     public function scopeWithRentAssignment($query)
     {
         $today = now()->startOfDay();
 
-        return $query
-            ->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap', 'Replacement Vehicle']))
-            ->whereNull('termination_notice_date')
-            ->whereDate('end_date', '>=', $today);
+        return $query->where(function ($inner) use ($today) {
+            $inner->where(function ($assigned) use ($today) {
+                $assigned->whereHas('status', fn ($statusQuery) => $statusQuery->whereIn('name', ['Active', 'Swap', 'Replacement Vehicle']))
+                    ->whereNull('termination_notice_date')
+                    ->whereDate('end_date', '>=', $today);
+            })->orWhere(function ($holdover) {
+                $this->constrainOpenHoldover($holdover);
+            });
+        });
     }
 
     /**

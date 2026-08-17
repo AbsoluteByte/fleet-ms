@@ -131,7 +131,7 @@ class AgreementBillingAnchorTest extends TestCase
         $this->assertTrue($invoices[1]->invoice_date->eq(Carbon::parse('2026-06-26')));
     }
 
-    public function test_non_active_agreement_does_not_generate_invoices_with_future_end_date(): void
+    public function test_terminated_agreement_does_not_generate_invoices_with_future_end_date(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-19 10:00:00'));
 
@@ -142,8 +142,8 @@ class AgreementBillingAnchorTest extends TestCase
             'rent_interval' => 'Weekly',
             'deposit_amount' => 250,
         ]);
-        $expiredStatus = Status::create(['name' => 'Expired', 'type' => 'agreement']);
-        $agreement->update(['status_id' => $expiredStatus->id]);
+        $terminatedStatus = Status::create(['name' => 'Terminated', 'type' => 'agreement']);
+        $agreement->update(['status_id' => $terminatedStatus->id]);
         $agreement->unsetRelation('status');
 
         $generated = $this->service->generateForAgreement(
@@ -157,6 +157,38 @@ class AgreementBillingAnchorTest extends TestCase
         );
         $this->assertFalse(
             Invoice::query()->where('source_id', $agreement->id)->exists()
+        );
+    }
+
+    public function test_expired_holdover_generates_invoices_after_end_date(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-10 10:00:00'));
+
+        $agreement = $this->persistAgreement([
+            'start_date' => Carbon::parse('2026-06-19'),
+            'end_date' => Carbon::parse('2026-07-03'),
+            'agreed_rent' => 500,
+            'rent_interval' => 'Weekly',
+            'deposit_amount' => 0,
+        ]);
+        $expiredStatus = Status::create(['name' => 'Expired', 'type' => 'agreement']);
+        $agreement->update(['status_id' => $expiredStatus->id]);
+        $agreement->unsetRelation('status');
+
+        $generated = $this->service->generateForAgreement(
+            $agreement->fresh(['status']),
+            Carbon::parse('2026-07-10')
+        );
+
+        $this->assertGreaterThan(0, $generated);
+        $this->assertTrue(
+            Agreement::query()->billable()->whereKey($agreement->id)->exists()
+        );
+        $this->assertTrue(
+            Invoice::query()
+                ->where('source_id', $agreement->id)
+                ->whereDate('invoice_date', '2026-07-10')
+                ->exists()
         );
     }
 

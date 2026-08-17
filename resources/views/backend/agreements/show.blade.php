@@ -45,6 +45,12 @@
                 <i class="fa fa-file-text-o me-2"></i>
                 Permission Letter
             </a>
+            @if(app(\App\Services\AgreementUpgradeService::class)->canRenew($agreement))
+                <a href="{{ route('agreements.renew', $agreement) }}" class="btn btn-outline-primary">
+                    <i class="fa fa-refresh me-2"></i>
+                    Renew Agreement
+                </a>
+            @endif
             @if($agreement->isClosedForDepositRefund())
                 <a href="{{ route('agreements.financial-summary', $agreement) }}" class="btn btn-outline-info" target="_blank" rel="noopener noreferrer">
                     <i class="fa fa-file-pdf-o me-2"></i>
@@ -169,6 +175,28 @@
                                             <a href="{{ route('agreements.show', $agreement->upgradedToAgreement) }}">
                                                 #{{ $agreement->upgradedToAgreement->id }}
                                                 — {{ $agreement->upgradedToAgreement->car->registration ?? '—' }}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endif
+                                @if($agreement->isRenewedAgreement() && $agreement->renewedFromAgreement)
+                                    <tr>
+                                        <td><strong>Renewed from:</strong></td>
+                                        <td>
+                                            <a href="{{ route('agreements.show', $agreement->renewedFromAgreement) }}">
+                                                #{{ $agreement->renewedFromAgreement->id }}
+                                                — {{ $agreement->renewedFromAgreement->car->registration ?? '—' }}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endif
+                                @if($agreement->renewedToAgreement)
+                                    <tr>
+                                        <td><strong>Renewed to:</strong></td>
+                                        <td>
+                                            <a href="{{ route('agreements.show', $agreement->renewedToAgreement) }}">
+                                                #{{ $agreement->renewedToAgreement->id }}
+                                                — {{ $agreement->renewedToAgreement->car->registration ?? '—' }}
                                             </a>
                                         </td>
                                     </tr>

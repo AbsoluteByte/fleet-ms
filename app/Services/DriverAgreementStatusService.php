@@ -21,7 +21,7 @@ class DriverAgreementStatusService
             return false;
         }
 
-        $shouldBeActive = $this->driverHasActiveOrSwapAgreement($driver);
+        $shouldBeActive = $this->driverHasBillableOnHireAgreement($driver);
 
         if ((bool) $driver->is_active === $shouldBeActive) {
             return false;
@@ -61,12 +61,20 @@ class DriverAgreementStatusService
 
     public function driverHasActiveOrSwapAgreement(Driver|int $driver): bool
     {
+        return $this->driverHasBillableOnHireAgreement($driver);
+    }
+
+    public function driverHasBillableOnHireAgreement(Driver|int $driver): bool
+    {
         $driverId = $driver instanceof Driver ? $driver->id : $driver;
 
         return Agreement::query()
             ->where('driver_id', $driverId)
             ->billable()
-            ->whereDate('end_date', '>=', now()->startOfDay())
+            ->where(function ($query) {
+                $query->whereHas('status', fn ($statusQuery) => $statusQuery->where('name', 'Expired'))
+                    ->orWhereDate('end_date', '>=', now()->startOfDay());
+            })
             ->exists();
     }
 }

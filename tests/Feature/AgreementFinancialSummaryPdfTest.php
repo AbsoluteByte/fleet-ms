@@ -136,7 +136,7 @@ class AgreementFinancialSummaryPdfTest extends TestCase
     {
         $agreement = $this->createActiveAgreement();
         $agreement->update([
-            'status_id' => $this->expiredStatus->id,
+            'status_id' => $this->terminatedStatus->id,
             'closing_date' => '2026-06-18 09:00:00',
             'refund_person_name' => 'Jane Doe',
             'refund_account_number' => '87654321',
@@ -186,7 +186,7 @@ class AgreementFinancialSummaryPdfTest extends TestCase
     {
         $agreement = $this->createActiveAgreement();
         $agreement->update([
-            'status_id' => $this->expiredStatus->id,
+            'status_id' => $this->terminatedStatus->id,
             'closing_date' => '2026-06-20 11:00:00',
         ]);
 

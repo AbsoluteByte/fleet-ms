@@ -98,7 +98,12 @@ class Car extends Model
     public function terminationNoticeAgreement(): ?Agreement
     {
         return $this->agreements
-            ->filter(fn (Agreement $agreement) => $agreement->isBillableStatus() && filled($agreement->termination_notice_date))
+            ->filter(function (Agreement $agreement) {
+                $statusName = strtolower(trim((string) optional($agreement->status)->name));
+
+                return in_array($statusName, ['active', 'swap'], true)
+                    && filled($agreement->termination_notice_date);
+            })
             ->sortByDesc(fn (Agreement $agreement) => [$agreement->termination_notice_date, $agreement->id])
             ->first();
     }
@@ -599,8 +604,15 @@ class Car extends Model
 
         $hasActiveAgreement = $this->agreements
             ->filter(function (Agreement $agreement) {
-                return $agreement->start_date?->copy()->startOfDay()->lte(now()->startOfDay())
-                    && $agreement->end_date?->copy()->startOfDay()->gte(now()->startOfDay())
+                if ($agreement->start_date?->copy()->startOfDay()->gt(now()->startOfDay())) {
+                    return false;
+                }
+
+                if ($agreement->isOpenHoldover()) {
+                    return true;
+                }
+
+                return $agreement->end_date?->copy()->startOfDay()->gte(now()->startOfDay())
                     && ! $agreement->termination_notice_date;
             })
             ->isNotEmpty();
