@@ -3,21 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\AgreementSignatureToken;
+use App\Services\AgreementPdfService;
 use App\Services\CustomSigningService;
 use Illuminate\Http\Request;
-use Carbon\Carbon;
-use PDF;
 
 class SigningController extends Controller
 {
-    /**
-     * Show signing page
-     */
-    public function show($token)
+    public function show(Request $request, $token)
     {
         $signatureToken = AgreementSignatureToken::where('token', $token)->firstOrFail();
+        $signatureToken->load(['agreement.company', 'agreement.driver', 'agreement.car', 'agreement.car.carModel']);
 
-        if ($signatureToken->isExpired()) {
+        if ($signatureToken->isExpired() && ! $signatureToken->isSigned()) {
             return view('signing.expired', compact('signatureToken'));
         }
 
@@ -25,48 +22,47 @@ class SigningController extends Controller
             return view('signing.already-signed', compact('signatureToken'));
         }
 
-        $signatureToken->load(['agreement.company', 'agreement.driver', 'agreement.car', 'agreement.car.carModel']);
+        $signatureToken->recordFirstOpen($request);
 
         return view('signing.sign', compact('signatureToken'));
     }
 
-    /**
-     * ✅ NEW: Stream agreement PDF inline for preview inside signing page
-     */
     public function preview($token)
     {
         $signatureToken = AgreementSignatureToken::where('token', $token)->firstOrFail();
 
-        // Expired ya already signed ho to bhi preview allow karo
-        $signatureToken->load(['agreement.company', 'agreement.driver', 'agreement.car', 'agreement.car.carModel', 'agreement.status']);
-
-        $agreement = $signatureToken->agreement;
-
-        $data = [
-            'agreement'   => $agreement,
-            'driver'      => $agreement->driver,
-            'car'         => $agreement->car,
-            'company'     => $agreement->company,
-            'currentDate' => Carbon::now()->format('d/m/Y'),
-        ];
-
-        $pdf = PDF::loadView('backend.agreements.agreement_pdf', $data);
-        $pdf->setPaper('A4', 'portrait');
-
-        // inline stream — download nahi hoga, browser mein show hoga
-        return response($pdf->output(), 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="agreement_preview.pdf"',
+        $signatureToken->load([
+            'agreement.company',
+            'agreement.driver',
+            'agreement.car',
+            'agreement.car.carModel',
+            'agreement.status',
         ]);
+
+        try {
+            [$pdf] = app(AgreementPdfService::class)->makeAgreementPdf($signatureToken->agreement);
+
+            return response($pdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="agreement_preview.pdf"',
+                'X-Frame-Options' => 'SAMEORIGIN',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('Agreement signing preview failed: '.$e->getMessage(), [
+                'token' => $token,
+                'agreement_id' => $signatureToken->agreement_id,
+            ]);
+
+            abort(500, 'Unable to generate the agreement preview.');
+        }
     }
 
-    /**
-     * Process signature submission
-     */
     public function submit(Request $request, $token)
     {
-        $request->validate([
+        $validated = $request->validate([
             'signature' => 'required|string',
+            'signature_method' => 'required|in:draw,typed',
+            'typed_name' => 'nullable|required_if:signature_method,typed|string|max:255',
         ]);
 
         $signatureToken = AgreementSignatureToken::where('token', $token)->firstOrFail();
@@ -80,37 +76,38 @@ class SigningController extends Controller
         }
 
         try {
-            $customSigningService = new CustomSigningService();
+            $customSigningService = new CustomSigningService;
 
             $result = $customSigningService->processSignature(
                 $signatureToken,
-                $request->signature,
-                $request->ip()
+                $validated['signature'],
+                $request->ip(),
+                [
+                    'signature_method' => $validated['signature_method'],
+                    'typed_name' => $validated['typed_name'] ?? null,
+                ]
             );
 
             if ($result['success']) {
                 return response()->json([
-                    'success'  => true,
-                    'redirect' => route('sign.success', ['token' => $token])
+                    'success' => true,
+                    'redirect' => route('sign.success', ['token' => $token]),
                 ]);
             }
 
             return response()->json(['error' => $result['error'] ?? 'Failed to process signature'], 500);
-
         } catch (\Exception $e) {
-            \Log::error('Signature Submission Error: ' . $e->getMessage());
+            \Log::error('Signature Submission Error: '.$e->getMessage());
+
             return response()->json(['error' => 'An error occurred'], 500);
         }
     }
 
-    /**
-     * Success page
-     */
     public function success($token)
     {
         $signatureToken = AgreementSignatureToken::where('token', $token)->firstOrFail();
 
-        if (!$signatureToken->isSigned()) {
+        if (! $signatureToken->isSigned()) {
             return redirect()->route('sign.show', ['token' => $token]);
         }
 

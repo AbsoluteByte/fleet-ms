@@ -46,6 +46,7 @@ class InvoiceReportController extends Controller
             ->whereDate('invoice_date', '<=', $to->toDateString())
             ->with([
                 'driver',
+                'sourceAgreement.car',
                 'paymentAllocations.payment',
             ])
             ->orderByDesc('invoice_date')
@@ -119,6 +120,7 @@ class InvoiceReportController extends Controller
      * @return array{
      *     invoice_no: string,
      *     customer: string,
+     *     vehicle: string,
      *     invoice_date: string,
      *     amount: string,
      *     status: string,
@@ -131,6 +133,7 @@ class InvoiceReportController extends Controller
         return [
             'invoice_no' => (string) ($invoice->invoice_no ?: '—'),
             'customer' => $invoice->driver?->selectOptionLabel() ?: '—',
+            'vehicle' => $invoice->vehicleRegistrationLabel(),
             'invoice_date' => optional($invoice->invoice_date)->format('d M Y') ?: '—',
             'amount' => '£'.number_format((float) $invoice->total_amount, 2),
             'status' => ucfirst((string) $invoice->status),

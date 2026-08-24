@@ -822,8 +822,32 @@ class Agreement extends Model
      */
     public function getSignedDocumentUrlAttribute()
     {
-        if ($this->esign_document_path && file_exists(public_path($this->esign_document_path))) {
-            return asset($this->esign_document_path);
+        if (! $this->esignDocumentAbsolutePath()) {
+            return null;
+        }
+
+        return route('agreements.view-signed', $this);
+    }
+
+    public function esignDocumentAbsolutePath(): ?string
+    {
+        $relative = $this->esign_document_path;
+
+        if (! filled($relative)) {
+            return null;
+        }
+
+        $candidates = [
+            storage_path('app/'.$relative),
+            storage_path($relative),
+            public_path($relative),
+            storage_path('app/public/'.$relative),
+        ];
+
+        foreach ($candidates as $fullPath) {
+            if (is_file($fullPath)) {
+                return $fullPath;
+            }
         }
 
         return null;
@@ -860,5 +884,14 @@ class Agreement extends Model
     public function getLatestSignatureToken()
     {
         return $this->signatureTokens()->latest()->first();
+    }
+
+    public function signedSignatureToken(): ?AgreementSignatureToken
+    {
+        return $this->signatureTokens()
+            ->where('status', 'signed')
+            ->whereNotNull('signature_data')
+            ->latest('signed_at')
+            ->first();
     }
 }
