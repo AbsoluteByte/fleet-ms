@@ -321,6 +321,7 @@ class AgreementController extends Controller
             'collections' => function ($query) {
                 $query->orderBy('due_date');
             },
+            'signatureTokens',
         ]);
 
         // Update overdue collections
@@ -329,8 +330,9 @@ class AgreementController extends Controller
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
         [$settlementPreview, $settlementRemainingDebt] = $this->settlementContextForAgreement($agreement);
         $canManageInvoices = strtolower(trim((string) Auth::user()?->email)) === 'jawad@samoretraders.com';
+        $latestSignatureToken = $agreement->getLatestSignatureToken();
 
-        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt', 'canManageInvoices'));
+        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt', 'canManageInvoices', 'latestSignatureToken'));
     }
 
     public function renew(Agreement $agreement)
@@ -2481,13 +2483,29 @@ class AgreementController extends Controller
             abort(403, 'Unauthorized access');
         }
 
-        if (! $agreement->esign_document_path) {
-            abort(404, 'Signed document not found');
+        $fullPath = $agreement->esignDocumentAbsolutePath();
+
+        if (! $fullPath && $agreement->signedSignatureToken()) {
+            [$pdf, $filename] = app(AgreementPdfService::class)->makeAgreementPdf($agreement);
+            $output = $pdf->output();
+
+            if (request()->boolean('download')) {
+                return response()->streamDownload(
+                    function () use ($output) {
+                        echo $output;
+                    },
+                    $filename,
+                    ['Content-Type' => 'application/pdf']
+                );
+            }
+
+            return response($output, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            ]);
         }
 
-        $fullPath = public_path($agreement->esign_document_path);
-
-        if (! file_exists($fullPath)) {
+        if (! $fullPath) {
             abort(404, 'Document file not found');
         }
 

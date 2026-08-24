@@ -27,6 +27,8 @@ class AgreementPdfService
             'upgradedFromAgreement.car',
         ]);
 
+        $signatureImage = $agreement->signedSignatureToken()?->signature_data;
+
         return [
             'agreement' => $agreement,
             'driver' => $agreement->driver,
@@ -34,6 +36,7 @@ class AgreementPdfService
             'company' => $agreement->documentCompany(),
             'currentDate' => Carbon::now()->format('d/m/Y'),
             'previousVehicleRegistration' => $agreement->previousVehicleRegistration(),
+            'signature_image' => $signatureImage,
         ];
     }
 
@@ -42,7 +45,12 @@ class AgreementPdfService
      */
     public function makeAgreementPdf(Agreement $agreement): array
     {
-        $pdf = PDF::loadView('backend.agreements.agreement_pdf', $this->agreementPdfViewData($agreement));
+        $data = $this->agreementPdfViewData($agreement);
+        $view = filled($data['signature_image'] ?? null)
+            ? 'backend.agreements.agreement_pdf_signed'
+            : 'backend.agreements.agreement_pdf';
+
+        $pdf = PDF::loadView($view, $data);
         $pdf->setPaper('A4', 'portrait');
 
         $driverName = str_replace(' ', '_', $agreement->driver?->full_name ?? 'Driver');

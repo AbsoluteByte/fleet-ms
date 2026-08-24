@@ -90,6 +90,78 @@ class InvoiceReportTest extends TestCase
         $response->assertSee('Export PDF');
         $response->assertSee('Invoices generated');
         $response->assertSee('Outstanding still to collect');
+        $response->assertSee('Vehicle');
+    }
+
+    public function test_vehicle_column_shows_registration_or_dash(): void
+    {
+        $companyId = DB::table('companies')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Report Co',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $carModelId = DB::table('car_models')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Report Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $carId = DB::table('cars')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $companyId,
+            'car_model_id' => $carModelId,
+            'registration' => 'AB12 CDE',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $statusId = DB::table('statuses')->insertGetId([
+            'name' => 'Active',
+            'type' => 'agreement',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $agreementId = DB::table('agreements')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $companyId,
+            'driver_id' => $this->driver->id,
+            'car_id' => $carId,
+            'status_id' => $statusId,
+            'start_date' => '2026-08-01 00:00:00',
+            'end_date' => '2026-12-31',
+            'agreed_rent' => 200,
+            'rent_interval' => 'weekly',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->createInvoice([
+            'invoice_no' => 'INV-WITH-CAR',
+            'invoice_date' => '2026-08-10',
+            'invoice_type' => 'agreement',
+            'source_id' => $agreementId,
+            'total_amount' => 200,
+            'status' => 'pending',
+        ]);
+        $this->createInvoice([
+            'invoice_no' => 'INV-NO-CAR',
+            'invoice_date' => '2026-08-11',
+            'invoice_type' => 'manual',
+            'source_id' => null,
+            'total_amount' => 50,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.invoices', [
+            'from' => '2026-08-01',
+            'to' => '2026-08-31',
+        ]));
+
+        $response->assertOk();
+        $rows = collect($response->viewData('rows'))->keyBy('invoice_no');
+        $this->assertSame('AB12 CDE', $rows['INV-WITH-CAR']['vehicle']);
+        $this->assertSame('—', $rows['INV-NO-CAR']['vehicle']);
+        $response->assertSee('AB12 CDE');
     }
 
     public function test_date_range_includes_invoices_in_range_and_excludes_those_outside(): void

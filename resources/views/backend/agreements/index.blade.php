@@ -107,9 +107,8 @@
                                                     </span>
                                                     @if($agreement->hellosign_status === 'signed' && $agreement->esign_document_path)
                                                         <br>
-                                                        <a href="{{ asset($agreement->esign_document_path) }}"
+                                                        <a href="{{ route('agreements.view-signed', ['agreement' => $agreement, 'download' => 1]) }}"
                                                            class="btn btn-sm btn-success mt-1"
-                                                           download
                                                            title="Download Signed Document">
                                                             <i class="fa fa-download"></i>
                                                         </a>

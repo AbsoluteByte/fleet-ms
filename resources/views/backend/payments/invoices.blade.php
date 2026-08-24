@@ -88,6 +88,7 @@
                                     <tr>
                                         <th>Invoice No</th>
                                         <th>Customer</th>
+                                        <th>Vehicle</th>
                                         <th>Invoice Date</th>
                                         <th>Amount</th>
                                         <th>Status</th>
@@ -100,6 +101,7 @@
                                         <tr>
                                             <td>{{ $row['invoice_no'] }}</td>
                                             <td>{{ $row['customer'] }}</td>
+                                            <td>{{ $row['vehicle'] }}</td>
                                             <td>{{ $row['invoice_date'] }}</td>
                                             <td>{{ $row['amount'] }}</td>
                                             <td>{{ $row['status'] }}</td>
@@ -108,7 +110,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">No invoices found for the selected filters.</td>
+                                            <td colspan="8" class="text-center text-muted py-4">No invoices found for the selected filters.</td>
                                         </tr>
                                     @endforelse
                                     </tbody>
@@ -169,7 +171,7 @@
             const dataTable = $('#invoicesReportTable').DataTable({
                 processing: true,
                 responsive: true,
-                order: [[2, 'desc']],
+                order: [[3, 'desc']],
             });
 
             const invoiceReportSummary = {
@@ -189,7 +191,7 @@
             }
 
             function getInvoicesExportHeaders() {
-                return ['Invoice No', 'Customer', 'Invoice Date', 'Amount', 'Status', 'Payment Date', 'Balance'];
+                return ['Invoice No', 'Customer', 'Vehicle', 'Invoice Date', 'Amount', 'Status', 'Payment Date', 'Balance'];
             }
 
             function formatDateLabel(value) {
@@ -265,7 +267,7 @@
                     }
 
                     const cells = node.querySelectorAll('td');
-                    if (cells.length < 7) {
+                    if (cells.length < 8) {
                         return;
                     }
 
@@ -282,6 +284,7 @@
                         (cells[4].textContent || '').trim(),
                         (cells[5].textContent || '').trim(),
                         (cells[6].textContent || '').trim(),
+                        (cells[7].textContent || '').trim(),
                     ]);
                 });
 
@@ -326,7 +329,7 @@
                     return;
                 }
 
-                const numericColumns = { 3: true, 6: true };
+                const numericColumns = { 4: true, 7: true };
                 const tableBody = [
                     exportHeaders.map(function (header, columnIndex) {
                         return {
@@ -371,7 +374,7 @@
                         {
                             table: {
                                 headerRows: 1,
-                                widths: [90, '*', 80, 70, 70, 80, 70],
+                                widths: [90, '*', 70, 80, 70, 70, 80, 70],
                                 body: tableBody,
                             },
                             layout: {

@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Signing Link Expired</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ asset('app-assets/fonts/font-awesome/css/font-awesome.min.css') }}">
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -37,7 +37,7 @@
     <div class="card">
         <div class="card-body text-center p-5">
             <div class="expired-icon mb-4">
-                <i class="fas fa-exclamation-triangle"></i>
+                <i class="fa fa-exclamation-triangle"></i>
             </div>
 
             <h2 class="mb-3">Signing Link Expired</h2>
@@ -46,7 +46,7 @@
             </p>
 
             <div class="alert alert-warning">
-                <i class="fas fa-info-circle me-2"></i>
+                <i class="fa fa-info-circle me-2"></i>
                 Please contact {{ $signatureToken->agreement->company->name }} to request a new signing link.
             </div>
 
@@ -54,10 +54,10 @@
                 <h6 class="mb-2">Company Contact</h6>
                 <p class="mb-0"><strong>{{ $signatureToken->agreement->company->name }}</strong></p>
                 @if($signatureToken->agreement->company->email)
-                    <p class="mb-0"><i class="fas fa-envelope me-2"></i>{{ $signatureToken->agreement->company->email }}</p>
+                    <p class="mb-0"><i class="fa fa-envelope me-2"></i>{{ $signatureToken->agreement->company->email }}</p>
                 @endif
                 @if($signatureToken->agreement->company->phone)
-                    <p class="mb-0"><i class="fas fa-phone me-2"></i>{{ $signatureToken->agreement->company->phone }}</p>
+                    <p class="mb-0"><i class="fa fa-phone me-2"></i>{{ $signatureToken->agreement->company->phone }}</p>
                 @endif
             </div>
         </div>

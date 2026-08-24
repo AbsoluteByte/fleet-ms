@@ -33,6 +33,10 @@
             Agreement Details
         </h1>
         <div class="btn-group">
+            @php
+                $agreementIsSigned = $agreement->hellosign_status === 'signed'
+                    || (! empty($latestSignatureToken) && $latestSignatureToken->isSigned());
+            @endphp
             <a href="{{ route('agreements.pdf.preview', $agreement) }}" class="btn btn-outline-danger" target="_blank" rel="noopener noreferrer">
                 <i class="fa fa-eye me-2"></i>
                 Preview
@@ -45,6 +49,36 @@
                 <i class="fa fa-file-text-o me-2"></i>
                 Permission Letter
             </a>
+            @if($agreementIsSigned)
+                <span class="btn btn-success disabled" style="pointer-events: none;">
+                    <i class="fa fa-check me-2"></i>
+                    Signed
+                </span>
+            @elseif($agreement->hellosign_status === 'pending')
+                <form action="{{ route('agreements.resend-esign', $agreement) }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-warning"
+                            onclick="return confirm('Resend the signing link to {{ $agreement->driver->email ?? 'the driver' }}?')">
+                        <i class="fa fa-paper-plane me-2"></i>
+                        Resend Signature
+                    </button>
+                </form>
+            @elseif($agreement->canSendForESignature())
+                <form action="{{ route('agreements.send-esign', $agreement) }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-primary"
+                            onclick="return confirm('Send this agreement for signature to {{ $agreement->driver->email }}?')">
+                        <i class="fa fa-signature me-2"></i>
+                        Send Signature
+                    </button>
+                </form>
+            @else
+                <button type="button" class="btn btn-outline-secondary" disabled
+                        title="Driver email is required for e-signature">
+                    <i class="fa fa-signature me-2"></i>
+                    Send Signature
+                </button>
+            @endif
             @if(app(\App\Services\AgreementUpgradeService::class)->canRenew($agreement))
                 <a href="{{ route('agreements.renew', $agreement) }}" class="btn btn-outline-primary">
                     <i class="fa fa-refresh me-2"></i>
@@ -703,8 +737,38 @@
                             </div>
                         @endif
 
+                        @if(!empty($latestSignatureToken))
+                            @if($latestSignatureToken->opened_at)
+                                <div class="mb-3">
+                                    <h6>Link opened</h6>
+                                    <p class="mb-0 small">{{ $latestSignatureToken->opened_at->format('M d, Y h:i A') }}</p>
+                                    @if($latestSignatureToken->opened_ip)
+                                        <p class="mb-0 small text-muted">IP: {{ $latestSignatureToken->opened_ip }}</p>
+                                    @endif
+                                    @if($latestSignatureToken->referrer)
+                                        <p class="mb-0 small text-muted text-break">Referrer: {{ $latestSignatureToken->referrer }}</p>
+                                    @endif
+                                    @if($latestSignatureToken->user_agent)
+                                        <p class="mb-0 small text-muted text-break">Device: {{ $latestSignatureToken->user_agent }}</p>
+                                    @endif
+                                </div>
+                            @endif
+                            @if($latestSignatureToken->isSigned())
+                                <div class="mb-3">
+                                    <h6>Signature method</h6>
+                                    <p class="mb-0 small">{{ $latestSignatureToken->signature_method === 'typed' ? 'Typed name' : 'Drawn' }}</p>
+                                    @if($latestSignatureToken->typed_name)
+                                        <p class="mb-0 small text-muted">Name: {{ $latestSignatureToken->typed_name }}</p>
+                                    @endif
+                                    @if($latestSignatureToken->ip_address)
+                                        <p class="mb-0 small text-muted">Signed from IP: {{ $latestSignatureToken->ip_address }}</p>
+                                    @endif
+                                </div>
+                            @endif
+                        @endif
+
                         {{-- ✅ PENDING STATUS - Show Check Status + Resend --}}
-                        @if($agreement->hellosign_status == 'pending')
+                        @if($agreement->hellosign_status == 'pending' && ! $agreementIsSigned)
                             <div class="d-grid gap-2">
                                 {{-- ✅ Check Status Button --}}
                                 <form action="{{ route('agreements.esign-status', $agreement) }}" method="GET">
@@ -726,7 +790,7 @@
                         @endif
 
                         {{-- ✅ SIGNED STATUS - Show Download Button --}}
-                        @if($agreement->hellosign_status == 'signed' && $agreement->esign_document_path)
+                        @if($agreement->hellosign_status == 'signed')
                             <div class="d-grid gap-2">
                                 <a href="{{ document_view_url(route('agreements.view-signed', $agreement)) }}"
                                    class="btn btn-success btn-sm w-100 document-view-link" target="_blank">
@@ -734,24 +798,12 @@
                                     View Signed Document
                                 </a>
 
-                                <a href="{{ asset($agreement->esign_document_path) }}"
-                                   class="btn btn-outline-success btn-sm w-100" download>
+                                <a href="{{ route('agreements.view-signed', ['agreement' => $agreement, 'download' => 1]) }}"
+                                   class="btn btn-outline-success btn-sm w-100">
                                     <i class="fa fa-download me-1"></i>
                                     Download Signed PDF
                                 </a>
                             </div>
-                        @elseif($agreement->hellosign_status == 'signed' && !$agreement->esign_document_path)
-                            {{-- ✅ If signed but no document, fetch it --}}
-                            <div class="alert alert-info">
-                                <i class="fa fa-info-circle me-1"></i>
-                                Document is signed. Click below to download:
-                            </div>
-                            <form action="{{ route('agreements.esign-status', $agreement) }}" method="GET">
-                                <button type="submit" class="btn btn-success btn-sm w-100">
-                                    <i class="fa fa-download me-1"></i>
-                                    Download Signed Document
-                                </button>
-                            </form>
                         @endif
 
                     @else
