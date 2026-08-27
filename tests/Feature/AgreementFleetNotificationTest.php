@@ -37,6 +37,8 @@ class AgreementFleetNotificationTest extends TestCase
 
     private Status $expiredStatus;
 
+    private Status $replacementStatus;
+
     private User $user;
 
     protected function setUp(): void
@@ -84,6 +86,7 @@ class AgreementFleetNotificationTest extends TestCase
         $this->swapStatus = Status::query()->create(['name' => 'Swap', 'type' => 'agreement']);
         $this->terminatedStatus = Status::query()->create(['name' => 'Terminated', 'type' => 'agreement']);
         $this->expiredStatus = Status::query()->create(['name' => 'Expired', 'type' => 'agreement']);
+        $this->replacementStatus = Status::query()->create(['name' => 'Replacement Vehicle', 'type' => 'agreement']);
 
         $this->user = User::factory()->create();
         $this->user->tenants()->attach($this->tenant->id, [
@@ -351,6 +354,42 @@ class AgreementFleetNotificationTest extends TestCase
         $this->assertSame('agreement_upcoming_'.$upcomingAgreement->id, $rows->last()['id']);
     }
 
+    public function test_client_insurance_notifications_only_for_active_swap_replacement(): void
+    {
+        $ownInsuranceAttrs = [
+            'using_own_insurance' => true,
+            'own_insurance_end_date' => '2026-07-22',
+            'end_date' => '2027-07-20',
+        ];
+
+        $active = $this->createAgreement(array_merge($ownInsuranceAttrs, [
+            'status_id' => $this->activeStatus->id,
+            'car_id' => $this->createSecondCar('INS001')->id,
+        ]));
+        $swap = $this->createAgreement(array_merge($ownInsuranceAttrs, [
+            'status_id' => $this->swapStatus->id,
+            'car_id' => $this->createSecondCar('INS002')->id,
+        ]));
+        $replacement = $this->createAgreement(array_merge($ownInsuranceAttrs, [
+            'status_id' => $this->replacementStatus->id,
+            'car_id' => $this->createSecondCar('INS003')->id,
+        ]));
+        $terminated = $this->createAgreement(array_merge($ownInsuranceAttrs, [
+            'status_id' => $this->terminatedStatus->id,
+            'car_id' => $this->createSecondCar('INS004')->id,
+        ]));
+        $expired = $this->createAgreement(array_merge($ownInsuranceAttrs, [
+            'status_id' => $this->expiredStatus->id,
+            'car_id' => $this->createSecondCar('INS005')->id,
+        ]));
+
+        $this->assertNotNull($this->clientInsuranceNotificationFor($active->id));
+        $this->assertNotNull($this->clientInsuranceNotificationFor($swap->id));
+        $this->assertNotNull($this->clientInsuranceNotificationFor($replacement->id));
+        $this->assertNull($this->clientInsuranceNotificationFor($terminated->id));
+        $this->assertNull($this->clientInsuranceNotificationFor($expired->id));
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -380,6 +419,19 @@ class AgreementFleetNotificationTest extends TestCase
         $counselId = DB::table('counsels')->value('id');
 
         return $this->createCompliantCar($registration, (int) $carModelId, (int) $counselId, 'rented');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function clientInsuranceNotificationFor(int $agreementId): ?array
+    {
+        $response = $this->getJson(route('dashboard.fleet-notifications'));
+
+        $response->assertOk();
+
+        return collect($response->json('notifications'))
+            ->firstWhere('id', 'agreement_client_insurance_'.$agreementId);
     }
 
     /**
@@ -421,22 +473,42 @@ class AgreementFleetNotificationTest extends TestCase
         });
 
         Schema::table('drivers', function (Blueprint $table) {
-            $table->boolean('is_active')->default(true);
-            $table->date('driver_license_expiry_date')->nullable();
-            $table->date('phd_license_expiry_date')->nullable();
+            if (! Schema::hasColumn('drivers', 'is_active')) {
+                $table->boolean('is_active')->default(true);
+            }
+            if (! Schema::hasColumn('drivers', 'driver_license_expiry_date')) {
+                $table->date('driver_license_expiry_date')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'phd_license_expiry_date')) {
+                $table->date('phd_license_expiry_date')->nullable();
+            }
         });
 
         Schema::table('agreements', function (Blueprint $table) {
-            $table->unsignedBigInteger('parent_agreement_id')->nullable();
-            $table->string('paying_company_name')->nullable();
+            if (! Schema::hasColumn('agreements', 'parent_agreement_id')) {
+                $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            }
+            if (! Schema::hasColumn('agreements', 'paying_company_name')) {
+                $table->string('paying_company_name')->nullable();
+            }
         });
 
         Schema::table('car_insurances', function (Blueprint $table) {
-            $table->foreignId('status_id')->nullable();
-            $table->date('applied_date')->nullable();
-            $table->date('start_date')->nullable();
-            $table->date('expiry_date')->nullable();
-            $table->integer('notify_before_expiry')->default(30);
+            if (! Schema::hasColumn('car_insurances', 'status_id')) {
+                $table->foreignId('status_id')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'applied_date')) {
+                $table->date('applied_date')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'start_date')) {
+                $table->date('start_date')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'expiry_date')) {
+                $table->date('expiry_date')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'notify_before_expiry')) {
+                $table->integer('notify_before_expiry')->default(30);
+            }
         });
 
         Schema::create('car_services', function (Blueprint $table) {

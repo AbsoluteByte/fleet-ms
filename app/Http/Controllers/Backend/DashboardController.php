@@ -388,6 +388,7 @@ class DashboardController extends Controller
             ->whereNotNull('own_insurance_end_date')
             ->whereDate('own_insurance_end_date', '<=', now()->addDays(3))
             ->whereDate('end_date', '>=', now())
+            ->whereHas('status', fn ($query) => $query->whereIn('name', ['Active', 'Swap', 'Replacement Vehicle']))
             ->whereHas('driver', fn ($query) => $query->where('is_active', true))
             ->whereHas('car', function ($query) use ($nonRoadTaxNotificationExcludedStatuses) {
                 $query->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
