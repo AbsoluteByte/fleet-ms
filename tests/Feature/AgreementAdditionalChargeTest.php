@@ -264,6 +264,64 @@ class AgreementAdditionalChargeTest extends TestCase
         $this->assertSame(0, AgreementAdditionalCharge::query()->count());
     }
 
+    public function test_jawad_can_add_damage_on_terminated_agreement(): void
+    {
+        $this->user->forceFill(['email' => 'jawad@samoretraders.com'])->save();
+        $terminatedStatus = Status::query()->create(['name' => 'Terminated', 'type' => 'agreement']);
+        $agreement = $this->createActiveAgreement([
+            'status_id' => $terminatedStatus->id,
+            'end_date' => '2026-06-10',
+            'closing_date' => '2026-06-10 12:00:00',
+            'termination_notice_date' => '2026-06-10',
+        ]);
+
+        $response = $this->put(route('agreements.update', $agreement), $this->basePayload([
+            'status_id' => $terminatedStatus->id,
+            'end_date' => '2026-06-10',
+            'closing_date' => '2026-06-10T12:00',
+            'termination_notice_date' => '2026-06-10',
+            'additional_charges_present' => 1,
+            'additional_charges' => [
+                $this->damageRow(['amount' => 95, 'notes' => 'Post-close damage']),
+            ],
+        ]));
+
+        $response->assertRedirect(route('agreements.index'));
+        $response->assertSessionHasNoErrors();
+
+        $charge = AgreementAdditionalCharge::query()->where('agreement_id', $agreement->id)->first();
+        $this->assertNotNull($charge);
+        $this->assertSame('95.00', number_format((float) $charge->amount, 2, '.', ''));
+        $this->assertNotNull($charge->invoice_id);
+    }
+
+    public function test_other_user_cannot_add_damage_on_terminated_agreement(): void
+    {
+        $this->user->forceFill(['email' => 'other@example.com'])->save();
+        $terminatedStatus = Status::query()->create(['name' => 'Terminated', 'type' => 'agreement']);
+        $agreement = $this->createActiveAgreement([
+            'status_id' => $terminatedStatus->id,
+            'end_date' => '2026-06-10',
+            'closing_date' => '2026-06-10 12:00:00',
+            'termination_notice_date' => '2026-06-10',
+        ]);
+
+        $response = $this->from(route('agreements.edit', $agreement))
+            ->put(route('agreements.update', $agreement), $this->basePayload([
+                'status_id' => $terminatedStatus->id,
+                'end_date' => '2026-06-10',
+                'closing_date' => '2026-06-10T12:00',
+                'termination_notice_date' => '2026-06-10',
+                'additional_charges_present' => 1,
+                'additional_charges' => [
+                    $this->damageRow(['amount' => 95, 'notes' => 'Post-close damage']),
+                ],
+            ]));
+
+        $response->assertSessionHasErrors('additional_charges');
+        $this->assertSame(0, AgreementAdditionalCharge::query()->count());
+    }
+
     public function test_driver_outstanding_balance_increases_by_charge_amount(): void
     {
         $agreement = $this->createActiveAgreement();

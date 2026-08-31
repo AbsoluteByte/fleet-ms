@@ -47,7 +47,7 @@
                                 <i class="feather icon-clock text-warning font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['insurance_applied'] }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="insurance_applied">{{ $summary['insurance_applied'] }}</h2>
                         <p class="mb-0 font-small-3">Insurance Applied</p>
                     </div>
                 </div>
@@ -64,7 +64,7 @@
                                 <i class="feather icon-shield text-primary font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['expiring_insurance'] }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="expiring_insurance">{{ $summary['expiring_insurance'] }}</h2>
                         <p class="mb-0 font-small-3">Insurance</p>
                     </div>
                 </div>
@@ -81,7 +81,7 @@
                                 <i class="feather icon-award text-secondary font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['expiring_phv'] }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="expiring_phv">{{ $summary['expiring_phv'] }}</h2>
                         <p class="mb-0 font-small-3">PHVL</p>
                     </div>
                 </div>
@@ -98,7 +98,7 @@
                                 <i class="feather icon-tool text-warning font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['expiring_mot'] }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="expiring_mot">{{ $summary['expiring_mot'] }}</h2>
                         <p class="mb-0 font-small-3">MOT</p>
                     </div>
                 </div>
@@ -115,7 +115,7 @@
                                 <i class="feather icon-credit-card text-success font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['expiring_road_tax'] }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="expiring_road_tax">{{ $summary['expiring_road_tax'] }}</h2>
                         <p class="mb-0 font-small-3">Road Tax</p>
                     </div>
                 </div>
@@ -132,7 +132,7 @@
                                 <i class="feather icon-user text-info font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['expiring_driver_licenses'] }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="expiring_driver_licenses">{{ $summary['expiring_driver_licenses'] }}</h2>
                         <p class="mb-0 font-small-3">Driver License</p>
                     </div>
                 </div>
@@ -149,7 +149,7 @@
                                 <i class="feather icon-user-check text-secondary font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['expiring_phd_licenses'] }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="expiring_phd_licenses">{{ $summary['expiring_phd_licenses'] }}</h2>
                         <p class="mb-0 font-small-3">PHD License</p>
                     </div>
                 </div>
@@ -166,7 +166,7 @@
                                 <i class="feather icon-file-text text-info font-large-1"></i>
                             </div>
                         </div>
-                        <h2 class="text-bold-700">{{ $summary['agreement_notifications'] ?? 0 }}</h2>
+                        <h2 class="text-bold-700" data-summary-key="agreement_notifications">{{ $summary['agreement_notifications'] ?? 0 }}</h2>
                         <p class="mb-0 font-small-3">Agreements</p>
                     </div>
                 </div>
@@ -182,7 +182,7 @@
                     <li class="nav-item">
                         <a class="nav-link active" href="javascript:void(0)" data-notification-filter="" onclick="filterNotifications('')">
                             All Fleet
-                            <span class="badge badge-pill badge-light ml-50">
+                            <span class="badge badge-pill badge-light ml-50" data-summary-key="all_fleet">
                                 {{ $summary['insurance_applied'] + $summary['expiring_insurance'] + $summary['expiring_phv'] + $summary['expiring_mot'] + $summary['expiring_road_tax'] + $summary['expiring_driver_licenses'] + $summary['expiring_phd_licenses'] + ($summary['agreement_notifications'] ?? 0) }}
                             </span>
                         </a>
@@ -190,49 +190,49 @@
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="insurance_applied" onclick="filterNotifications('insurance_applied')">
                             Insurance Applied
-                            <span class="badge badge-pill badge-warning ml-50">{{ $summary['insurance_applied'] }}</span>
+                            <span class="badge badge-pill badge-warning ml-50" data-summary-key="insurance_applied">{{ $summary['insurance_applied'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="insurance_expiry" onclick="filterNotifications('insurance_expiry')">
                             Insurance
-                            <span class="badge badge-pill badge-primary ml-50">{{ $summary['expiring_insurance'] }}</span>
+                            <span class="badge badge-pill badge-primary ml-50" data-summary-key="expiring_insurance">{{ $summary['expiring_insurance'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="phv_expiry" onclick="filterNotifications('phv_expiry')">
                             PHVL
-                            <span class="badge badge-pill badge-secondary ml-50">{{ $summary['expiring_phv'] }}</span>
+                            <span class="badge badge-pill badge-secondary ml-50" data-summary-key="expiring_phv">{{ $summary['expiring_phv'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="mot_expiry" onclick="filterNotifications('mot_expiry')">
                             MOT
-                            <span class="badge badge-pill badge-warning ml-50">{{ $summary['expiring_mot'] }}</span>
+                            <span class="badge badge-pill badge-warning ml-50" data-summary-key="expiring_mot">{{ $summary['expiring_mot'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="road_tax_expiry" onclick="filterNotifications('road_tax_expiry')">
                             Road Tax
-                            <span class="badge badge-pill badge-success ml-50">{{ $summary['expiring_road_tax'] }}</span>
+                            <span class="badge badge-pill badge-success ml-50" data-summary-key="expiring_road_tax">{{ $summary['expiring_road_tax'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="driver_license_expiry" onclick="filterNotifications('driver_license_expiry')">
                             Driver License
-                            <span class="badge badge-pill badge-info ml-50">{{ $summary['expiring_driver_licenses'] }}</span>
+                            <span class="badge badge-pill badge-info ml-50" data-summary-key="expiring_driver_licenses">{{ $summary['expiring_driver_licenses'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="phd_license_expiry" onclick="filterNotifications('phd_license_expiry')">
                             PHD License
-                            <span class="badge badge-pill badge-secondary ml-50">{{ $summary['expiring_phd_licenses'] }}</span>
+                            <span class="badge badge-pill badge-secondary ml-50" data-summary-key="expiring_phd_licenses">{{ $summary['expiring_phd_licenses'] }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="javascript:void(0)" data-notification-filter="agreement_notifications" onclick="filterNotifications('agreement_notifications')">
                             Agreements
-                            <span class="badge badge-pill badge-info ml-50">{{ $summary['agreement_notifications'] ?? 0 }}</span>
+                            <span class="badge badge-pill badge-info ml-50" data-summary-key="agreement_notifications">{{ $summary['agreement_notifications'] ?? 0 }}</span>
                         </a>
                     </li>
                 </ul>
@@ -327,6 +327,9 @@
     <script>
         let notificationsTable;
         let currentFilter = '';
+        const canDismissFleetNotifications = @json($canDismissFleetNotifications ?? false);
+        const dismissNotificationUrl = @json(route('notifications.dismiss'));
+        const csrfToken = @json(csrf_token());
 
         $(document).ready(function() {
             initializeDataTable();
@@ -443,6 +446,18 @@
                         </a>`;
                             }
 
+                            if (canDismissFleetNotifications && row.source_record_id) {
+                                html += `<button type="button" class="btn btn-sm btn-outline-danger js-dismiss-notification" title="Dismiss notification"
+                                    data-notification-id="${row.id || ''}"
+                                    data-notification-type="${row.type || ''}"
+                                    data-source-record-id="${row.source_record_id || ''}"
+                                    data-sort-key="${row.sort_key || ''}"
+                                    data-car-id="${row.car_id || ''}"
+                                    data-driver-id="${row.driver_id || ''}">
+                            <i class="feather icon-trash-2"></i>
+                        </button>`;
+                            }
+
                             html += '</div>';
                             return html;
                         }
@@ -468,6 +483,96 @@
                     }
                 }
             });
+
+            $('#notificationsTable').on('click', '.js-dismiss-notification', function() {
+                dismissFleetNotification($(this));
+            });
+        }
+
+        function updateSummaryCounts(summary) {
+            if (!summary) {
+                return;
+            }
+
+            Object.keys(summary).forEach(function(key) {
+                $(`[data-summary-key="${key}"]`).text(summary[key] ?? 0);
+            });
+
+            const allFleetTotal =
+                (summary.insurance_applied || 0) +
+                (summary.expiring_insurance || 0) +
+                (summary.expiring_phv || 0) +
+                (summary.expiring_mot || 0) +
+                (summary.expiring_road_tax || 0) +
+                (summary.expiring_driver_licenses || 0) +
+                (summary.expiring_phd_licenses || 0) +
+                (summary.agreement_notifications || 0);
+
+            $('[data-summary-key="all_fleet"]').text(allFleetTotal);
+        }
+
+        async function dismissFleetNotification(button) {
+            const notificationId = button.data('notification-id');
+            const notificationType = button.data('notification-type');
+            const sourceRecordId = button.data('source-record-id');
+            const sortKey = button.data('sort-key');
+            const carId = button.data('car-id');
+            const driverId = button.data('driver-id');
+
+            if (!notificationId || !notificationType || !sourceRecordId || !sortKey) {
+                return;
+            }
+
+            if (!confirm('Dismiss this notification for this vehicle until the data is updated?')) {
+                return;
+            }
+
+            button.prop('disabled', true);
+
+            try {
+                const payload = {
+                    _token: csrfToken,
+                    notification_id: notificationId,
+                    notification_type: notificationType,
+                    source_record_id: sourceRecordId,
+                    sort_key: sortKey,
+                };
+
+                if (carId) {
+                    payload.car_id = carId;
+                }
+
+                if (driverId) {
+                    payload.driver_id = driverId;
+                }
+
+                const response = await fetch(dismissNotificationUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Unable to dismiss notification.');
+                }
+
+                notificationsTable.ajax.reload(null, false);
+                updateSummaryCounts(data.summary);
+                toastr.success(data.message || 'Notification dismissed.', 'Success', {
+                    positionClass: 'toast-top-right'
+                });
+            } catch (error) {
+                button.prop('disabled', false);
+                toastr.error(error.message || 'Unable to dismiss notification.', 'Error', {
+                    positionClass: 'toast-top-right'
+                });
+            }
         }
 
         function setActiveNotificationFilter(type) {

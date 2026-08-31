@@ -10,6 +10,7 @@ use App\Models\CarStatusHistory;
 use App\Models\Driver;
 use App\Models\VehicleSwap;
 use App\Services\CarStatusChangeService;
+use App\Services\PhvlSuspensionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
@@ -252,22 +253,44 @@ class CarStatusController extends Controller
                 'nullable',
                 'string',
             ],
-            'payload.insurance_claim_reference' => [
-                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'),
-                'nullable',
-                'string',
-                'max:255',
-            ],
+            'payload.insurance_claim_reference' => 'nullable|string|max:255',
+            'payload.claim_handler_name' => 'nullable|string|max:255',
             'payload.mechanical' => 'nullable|boolean',
             'payload.mechanical_notes' => [
                 Rule::requiredIf(fn () => $request->boolean('payload.mechanical')),
                 'nullable',
                 'string',
             ],
+            'payload.phvl_suspension_status' => [
+                'required',
+                Rule::in(PhvlSuspensionService::statuses()),
+            ],
+            'payload.phvl_suspension_status_date' => [
+                Rule::requiredIf(fn () => $request->input('payload.phvl_suspension_status', PhvlSuspensionService::STATUS_ACTIVE) !== PhvlSuspensionService::STATUS_ACTIVE),
+                'nullable',
+                'date',
+            ],
+            'payload.phvl_suspension_notes' => 'nullable|string|max:1000',
         ]);
 
         $payload = $validated['payload'] ?? [];
         $payload['mechanical'] = $request->boolean('payload.mechanical');
+        $payload['phvl_suspension_status'] = $request->input(
+            'payload.phvl_suspension_status',
+            PhvlSuspensionService::STATUS_ACTIVE
+        );
+
+        if ($payload['phvl_suspension_status'] === PhvlSuspensionService::STATUS_ACTIVE) {
+            unset($payload['phvl_suspension_status_date']);
+        }
+
+        if (($payload['insurance_claim_reference'] ?? '') === '') {
+            $payload['insurance_claim_reference'] = null;
+        }
+
+        if (($payload['claim_handler_name'] ?? '') === '') {
+            $payload['claim_handler_name'] = null;
+        }
 
         return $payload;
     }
@@ -301,16 +324,22 @@ class CarStatusController extends Controller
                 'nullable',
                 'string',
             ],
-            'payload.insurance_claim_reference' => [
-                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'),
-                'nullable',
-                'string',
-                'max:255',
-            ],
+            'payload.insurance_claim_reference' => 'nullable|string|max:255',
+            'payload.claim_handler_name' => 'nullable|string|max:255',
             'payload.written_notes' => 'nullable|string',
         ]);
 
-        return $validated['payload'] ?? [];
+        $payload = $validated['payload'] ?? [];
+
+        if (($payload['insurance_claim_reference'] ?? '') === '') {
+            $payload['insurance_claim_reference'] = null;
+        }
+
+        if (($payload['claim_handler_name'] ?? '') === '') {
+            $payload['claim_handler_name'] = null;
+        }
+
+        return $payload;
     }
 
     /**

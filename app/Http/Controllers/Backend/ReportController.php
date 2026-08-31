@@ -9,10 +9,12 @@ use App\Models\CarPhv;
 use App\Models\Company;
 use App\Models\InsuranceProvider;
 use App\Services\InsuranceDateRangeReportService;
+use App\Services\InsuranceReconciliationService;
 use App\Services\TicketTrackingReportService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
@@ -21,6 +23,7 @@ class ReportController extends Controller
     public function __construct(
         private readonly InsuranceDateRangeReportService $insuranceReportService,
         private readonly TicketTrackingReportService $ticketTrackingService,
+        private readonly InsuranceReconciliationService $insuranceReconciliationService,
     ) {
         $this->middleware('role:admin|manager|user');
         view()->share('dir', $this->dir);
@@ -35,7 +38,62 @@ class ReportController extends Controller
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        $cars = Car::where('tenant_id', $tenant->id)
+        return view($this->dir.'index', $this->reportsIndexData($request, $tenant->id) + [
+            'reconciliation' => null,
+            'reconciliationError' => null,
+            'reconciliationFrom' => null,
+            'reconciliationTo' => null,
+        ]);
+    }
+
+    public function runInsuranceReconciliation(Request $request)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found! Please contact administrator.');
+        }
+
+        $validated = $request->validate([
+            'reconciliation_from' => 'required|date',
+            'reconciliation_to' => 'required|date|after_or_equal:reconciliation_from',
+            'policy_schedule_pdf' => 'required|file|mimes:pdf|max:51200',
+        ]);
+
+        $from = Carbon::parse($validated['reconciliation_from'])->startOfDay();
+        $to = Carbon::parse($validated['reconciliation_to'])->startOfDay();
+        $uploaded = $request->file('policy_schedule_pdf');
+        $reconciliation = null;
+        $reconciliationError = null;
+
+        try {
+            $reconciliation = $this->insuranceReconciliationService->reconcile(
+                $tenant->id,
+                $from,
+                $to,
+                $uploaded->getRealPath()
+            );
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            $reconciliationError = $e->getMessage() ?: 'Unable to reconcile the uploaded policy schedule.';
+        }
+
+        return view($this->dir.'index', $this->reportsIndexData($request, $tenant->id) + [
+            'reconciliation' => $reconciliation,
+            'reconciliationError' => $reconciliationError,
+            'reconciliationFrom' => $from->toDateString(),
+            'reconciliationTo' => $to->toDateString(),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function reportsIndexData(Request $request, int $tenantId): array
+    {
+        $cars = Car::where('tenant_id', $tenantId)
             ->with([
                 'company',
                 'carModel',
@@ -79,12 +137,12 @@ class ReportController extends Controller
         $insuranceActiveOnInsurance = collect();
 
         $reportCompanies = Company::query()
-            ->where('tenant_id', $tenant->id)
+            ->where('tenant_id', $tenantId)
             ->orderBy('name')
             ->get(['id', 'name']);
 
         $reportInsuranceProviders = InsuranceProvider::query()
-            ->where('tenant_id', $tenant->id)
+            ->where('tenant_id', $tenantId)
             ->orderBy('provider_name')
             ->get(['id', 'provider_name', 'expiry_date']);
 
@@ -104,16 +162,16 @@ class ReportController extends Controller
             } else {
                 [$from, $to] = $parsedRange;
                 $insuranceRemovedInRange = $this->insuranceReportService->removedInRange(
-                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                    $tenantId, $from, $to, $insuranceCompanyId, $insuranceProviderId
                 );
                 $insuranceActivatedInRange = $this->insuranceReportService->activatedInRange(
-                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                    $tenantId, $from, $to, $insuranceCompanyId, $insuranceProviderId
                 );
                 $insuranceActivatedOrRemovedInRange = $this->insuranceReportService->activatedOrRemovedInRange(
-                    $tenant->id, $from, $to, $insuranceCompanyId, $insuranceProviderId
+                    $tenantId, $from, $to, $insuranceCompanyId, $insuranceProviderId
                 );
                 $insuranceActiveOnInsurance = $this->insuranceReportService->activeOnInsurance(
-                    $tenant->id, $insuranceCompanyId, $insuranceProviderId
+                    $tenantId, $insuranceCompanyId, $insuranceProviderId
                 );
             }
         }
@@ -150,7 +208,7 @@ class ReportController extends Controller
                     $ticketTrackingError = 'The selected vehicle is not valid.';
                 } elseif ($parsedAt) {
                     $ticketTrackingResult = $this->ticketTrackingService->findAssignment(
-                        $tenant->id,
+                        $tenantId,
                         $ticketCarId,
                         $parsedAt
                     );
@@ -160,7 +218,7 @@ class ReportController extends Controller
             }
         }
 
-        return view($this->dir.'index', compact(
+        return compact(
             'cars',
             'insuranceFrom',
             'insuranceTo',
@@ -182,7 +240,7 @@ class ReportController extends Controller
             'ticketTrackingReady',
             'ticketTrackingQueriedAt',
             'ticketCars',
-        ));
+        );
     }
 
     private function latestMotForCar(Car $car): ?CarMot

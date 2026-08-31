@@ -16,8 +16,10 @@ use App\Models\Driver;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Services\FleetNotificationDismissalService;
 use App\Services\PaymentAllocationService;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -331,6 +333,8 @@ class DashboardController extends Controller
                 'border_color' => '#f59e0b',
                 'created_at' => $appliedDate ?? $policy->updated_at,
                 'sort_key' => ($appliedDate ?? $policy->updated_at)->timestamp,
+                'car_id' => $policy->car_id,
+                'source_record_id' => $policy->id,
             ]);
         }
 
@@ -379,6 +383,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6366f1',
                 'created_at' => $policy->expiry_date,
                 'sort_key' => $policy->expiry_date->timestamp,
+                'car_id' => $policy->car_id,
+                'source_record_id' => $policy->id,
             ]);
         }
 
@@ -431,6 +437,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6366f1',
                 'created_at' => $expiryDate,
                 'sort_key' => $expiryDate->timestamp,
+                'car_id' => $agreement->car_id,
+                'source_record_id' => $agreement->id,
             ]);
         }
 
@@ -483,6 +491,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6b7280',
                 'created_at' => $phv->expiry_date,
                 'sort_key' => $phv->expiry_date->timestamp,
+                'car_id' => $phv->car_id,
+                'source_record_id' => $phv->id,
             ]);
         }
 
@@ -533,6 +543,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#f59e0b',
                 'created_at' => $mot->expiry_date,
                 'sort_key' => $mot->expiry_date->timestamp,
+                'car_id' => $mot->car_id,
+                'source_record_id' => $mot->id,
             ]);
         }
 
@@ -587,6 +599,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#22c55e',
                 'created_at' => $expiryDate,
                 'sort_key' => $expiryDate->timestamp,
+                'car_id' => $roadTax->car_id,
+                'source_record_id' => $roadTax->id,
             ]);
         }
 
@@ -609,6 +623,8 @@ class DashboardController extends Controller
                 'border_color' => '#f59e0b',
                 'created_at' => $car->created_at ?? now(),
                 'sort_key' => now()->timestamp,
+                'car_id' => $car->id,
+                'source_record_id' => $car->id,
             ]);
         }
 
@@ -664,6 +680,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#3b82f6',
                 'created_at' => $service->due_date,
                 'sort_key' => $service->due_date->timestamp,
+                'car_id' => $service->car_id,
+                'source_record_id' => $service->id,
             ]);
         }
 
@@ -741,6 +759,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#3b82f6',
                 'created_at' => $driver->driver_license_expiry_date,
                 'sort_key' => $driver->driver_license_expiry_date->timestamp,
+                'driver_id' => $driver->id,
+                'source_record_id' => $driver->id,
             ]);
         }
 
@@ -781,6 +801,8 @@ class DashboardController extends Controller
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6b7280',
                 'created_at' => $driver->phd_license_expiry_date,
                 'sort_key' => $driver->phd_license_expiry_date->timestamp,
+                'driver_id' => $driver->id,
+                'source_record_id' => $driver->id,
             ]);
         }
 
@@ -788,30 +810,31 @@ class DashboardController extends Controller
         $sortedNotifications = $notifications->sortBy([
             ['sort_key', 'asc'],
             ['id', 'asc'],
-        ]);
+        ])->values();
 
-        // Generate summary counts
-        $summary = [
-            'overdue_payments' => $overdueInvoices->count(),
-            'due_today' => $dueTodayInvoices->count(),
-            'due_this_week' => $dueThisWeekInvoices->count(),
-            'insurance_applied' => $appliedInsurance->count(),
-            'expiring_insurance' => $expiringInsurance->count() + $clientInsuranceAgreements->count(),
-            'expiring_phv' => $expiringPhvs->count(),
-            'expiring_mot' => $expiringMots->count(),
-            'expiring_road_tax' => $expiringRoadTaxes->count() + $carsMissingRoadTax->count(),
-            'car_service_due' => $serviceNotifications->count(),
-            'expiring_agreement_end_dates' => $agreementUpcomingNotifications->where('type', 'agreement_end_date')->count(),
-            'expiring_agreement_termination_notices' => $agreementUpcomingNotifications->where('type', 'agreement_termination_notice')->count(),
-            'expired_agreements' => $agreementExpiredNotifications->count(),
-            'agreement_notifications' => $agreementUpcomingNotifications->count() + $agreementExpiredNotifications->count(),
-            'expiring_driver_licenses' => $expiringDriverLicenses->count(),
-            'expiring_phd_licenses' => $expiringPhdLicenses->count(),
-            'total_count' => $sortedNotifications->count(),
-        ];
+        $dismissalService = app(FleetNotificationDismissalService::class);
+        $user = Auth::user();
+        $dismissals = ($user && $dismissalService->canDismiss($user))
+            ? $dismissalService->dismissedForUser($user, $tenant)
+            : collect();
+
+        $filteredNotifications = $sortedNotifications->reject(function (array $notification) use ($dismissalService, $dismissals) {
+            if (in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week'], true)) {
+                return false;
+            }
+
+            return $dismissalService->shouldHide($notification, $dismissals);
+        })->values();
+
+        $summary = $this->buildNotificationSummary(
+            $filteredNotifications,
+            $overdueInvoices->count(),
+            $dueTodayInvoices->count(),
+            $dueThisWeekInvoices->count()
+        );
 
         return [
-            'notifications' => $sortedNotifications,
+            'notifications' => $filteredNotifications,
             'summary' => $summary,
         ];
     }
@@ -869,7 +892,7 @@ class DashboardController extends Controller
         }
 
         return Cache::remember(
-            "tenant:{$tenant->id}:car_notification_counts",
+            "tenant:{$tenant->id}:user:".Auth::id().':car_notification_counts',
             now()->addMinutes(2),
             fn () => $this->buildCarNotificationCounts()
         );
@@ -936,8 +959,102 @@ class DashboardController extends Controller
         // ✅ Regular page load
         $data = $this->getUnifiedNotifications();
         $summary = $data['summary'];
+        $canDismissFleetNotifications = app(FleetNotificationDismissalService::class)->canDismiss(Auth::user());
 
-        return view($this->dir.'notifications', compact('summary'));
+        return view($this->dir.'notifications', compact('summary', 'canDismissFleetNotifications'));
+    }
+
+    public function dismissFleetNotification(Request $request, FleetNotificationDismissalService $dismissalService): JsonResponse
+    {
+        if (! $dismissalService->canDismiss(Auth::user())) {
+            abort(403, 'You are not allowed to dismiss fleet notifications.');
+        }
+
+        $validated = $request->validate([
+            'notification_id' => 'required|string',
+            'notification_type' => 'required|string',
+            'source_record_id' => 'required|integer|min:1',
+            'sort_key' => 'required|integer',
+            'car_id' => 'nullable|integer|min:1',
+            'driver_id' => 'nullable|integer|min:1',
+        ]);
+
+        $tenant = Auth::user()->currentTenant();
+        if (! $tenant) {
+            abort(403, 'No active company found.');
+        }
+
+        if (! empty($validated['car_id'])) {
+            $car = Car::query()
+                ->where('tenant_id', $tenant->id)
+                ->whereKey($validated['car_id'])
+                ->first();
+            if (! $car) {
+                abort(404, 'Vehicle not found.');
+            }
+        }
+
+        if (! empty($validated['driver_id'])) {
+            $driver = Driver::query()
+                ->where('tenant_id', $tenant->id)
+                ->whereKey($validated['driver_id'])
+                ->first();
+            if (! $driver) {
+                abort(404, 'Driver not found.');
+            }
+        }
+
+        $notification = [
+            'id' => $validated['notification_id'],
+            'type' => $validated['notification_type'],
+            'source_record_id' => (int) $validated['source_record_id'],
+            'sort_key' => (int) $validated['sort_key'],
+            'car_id' => isset($validated['car_id']) ? (int) $validated['car_id'] : null,
+            'driver_id' => isset($validated['driver_id']) ? (int) $validated['driver_id'] : null,
+        ];
+
+        $dismissalService->dismiss(Auth::user(), $tenant, $notification);
+
+        Cache::forget("tenant:{$tenant->id}:user:".Auth::id().':car_notification_counts');
+
+        $data = $this->getUnifiedNotifications();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Notification dismissed.',
+            'summary' => $data['summary'],
+        ]);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function buildNotificationSummary(Collection $notifications, int $overduePayments, int $dueToday, int $dueThisWeek): array
+    {
+        $fleetNotifications = $notifications->reject(function (array $notification) {
+            return in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week'], true);
+        });
+
+        $agreementUpcoming = $fleetNotifications->whereIn('type', ['agreement_end_date', 'agreement_termination_notice']);
+
+        return [
+            'overdue_payments' => $overduePayments,
+            'due_today' => $dueToday,
+            'due_this_week' => $dueThisWeek,
+            'insurance_applied' => $fleetNotifications->where('type', 'insurance_applied')->count(),
+            'expiring_insurance' => $fleetNotifications->where('type', 'insurance_expiry')->count(),
+            'expiring_phv' => $fleetNotifications->where('type', 'phv_expiry')->count(),
+            'expiring_mot' => $fleetNotifications->where('type', 'mot_expiry')->count(),
+            'expiring_road_tax' => $fleetNotifications->whereIn('type', ['road_tax_expiry', 'road_tax_missing'])->count(),
+            'car_service_due' => $fleetNotifications->where('type', 'car_service_due')->count(),
+            'expiring_agreement_end_dates' => $fleetNotifications->where('type', 'agreement_end_date')->count(),
+            'expiring_agreement_termination_notices' => $fleetNotifications->where('type', 'agreement_termination_notice')->count(),
+            'expired_agreements' => $fleetNotifications->where('type', 'agreement_expired')->count(),
+            'agreement_notifications' => $agreementUpcoming->count() + $fleetNotifications->where('type', 'agreement_expired')->count(),
+            'expiring_driver_licenses' => $fleetNotifications->where('type', 'driver_license_expiry')->count(),
+            'expiring_phd_licenses' => $fleetNotifications->where('type', 'phd_license_expiry')->count(),
+            'total_count' => $notifications->count(),
+        ];
     }
 
     public function paymentsIndex(Request $request, PaymentAllocationService $paymentAllocationService)
@@ -1270,6 +1387,8 @@ class DashboardController extends Controller
                 'border_color' => $borderColor,
                 'created_at' => $nearestDate,
                 'sort_key' => $nearestDate->timestamp,
+                'car_id' => $agreement->car_id,
+                'source_record_id' => $agreement->id,
             ]);
         }
 
@@ -1338,6 +1457,8 @@ class DashboardController extends Controller
                 'border_color' => '#ef4444',
                 'created_at' => $endDate,
                 'sort_key' => $endDate->timestamp,
+                'car_id' => $agreement->car_id,
+                'source_record_id' => $agreement->id,
             ]);
         }
 

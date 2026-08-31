@@ -109,6 +109,17 @@ trait SetupAgreementChangeCarDatabase
             $table->softDeletes();
         });
 
+        Schema::create('car_status_histories', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('car_id');
+            $table->string('previous_status')->nullable();
+            $table->string('new_status');
+            $table->json('status_data')->nullable();
+            $table->unsignedBigInteger('changed_by')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('drivers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->nullable();
@@ -239,6 +250,7 @@ trait SetupAgreementChangeCarDatabase
         Schema::dropIfExists('drivers');
         Schema::dropIfExists('car_reservations');
         Schema::dropIfExists('car_insurances');
+        Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('car_phvs');
         Schema::dropIfExists('car_road_taxes');
         Schema::dropIfExists('car_mots');

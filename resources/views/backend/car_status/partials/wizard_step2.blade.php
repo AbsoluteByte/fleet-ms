@@ -7,6 +7,22 @@
     $activeTargetStatus = old('target_status', $prefillTargetStatus);
     $activeCarId = old('car_id', $prefillCarId);
     $payloadOld = fn (string $key, $default = '') => old('payload.'.$key, $prefillStatusPayload[$key] ?? $default);
+    $payloadDateOld = function (string $key, $default = '') use ($prefillStatusPayload) {
+        $value = old('payload.'.$key, $prefillStatusPayload[$key] ?? $default);
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (is_string($value) && strlen($value) >= 10) {
+            return substr($value, 0, 10);
+        }
+
+        return $value ?: $default;
+    };
+    $damagedFaultTypeOld = (string) $payloadOld('fault_type');
+    $writtenFaultTypeOld = (string) $payloadOld('fault_type');
+    $damagedMechanicalOld = filter_var($payloadOld('mechanical'), FILTER_VALIDATE_BOOLEAN);
 
     $step2OldCarId = $activeCarId;
     $step2OldTarget = $activeTargetStatus;
@@ -195,7 +211,7 @@
                 <label for="fleet_damaged_damage_date">Damage date <span class="text-danger">*</span></label>
                 <input type="date" name="payload[damage_date]" id="fleet_damaged_damage_date"
                        class="form-control @error('payload.damage_date') is-invalid @enderror"
-                       value="{{ old('payload.damage_date') }}">
+                       value="{{ $payloadDateOld('damage_date') }}">
                 @error('payload.damage_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -233,7 +249,7 @@
                             class="text-danger">*</span></label>
                 <input type="number" name="payload[insurance_excess_amount]" id="fleet_damaged_insurance_excess"
                        class="form-control @error('payload.insurance_excess_amount') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('payload.insurance_excess_amount') }}">
+                       step="0.01" min="0" value="{{ $payloadOld('insurance_excess_amount') }}">
                 @error('payload.insurance_excess_amount')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -243,8 +259,8 @@
                 <select name="payload[fault_type]" id="fleet_damaged_fault_type"
                         class="form-control fleet-damaged-fault-select @error('payload.fault_type') is-invalid @enderror">
                     <option value="">— Select —</option>
-                    <option value="fault" {{ old('payload.fault_type') === 'fault' ? 'selected' : '' }}>Fault</option>
-                    <option value="non_fault" {{ old('payload.fault_type') === 'non_fault' ? 'selected' : '' }}>Non-fault</option>
+                    <option value="fault" {{ $damagedFaultTypeOld === 'fault' ? 'selected' : '' }}>Fault</option>
+                    <option value="non_fault" {{ $damagedFaultTypeOld === 'non_fault' ? 'selected' : '' }}>Non-fault</option>
                 </select>
                 @error('payload.fault_type')
                 <div class="invalid-feedback">{{ $message }}</div>
@@ -254,34 +270,43 @@
                 <label for="fleet_damaged_incident_date">Incident date <span class="text-danger">*</span></label>
                 <input type="date" name="payload[incident_date]" id="fleet_damaged_incident_date"
                        class="form-control @error('payload.incident_date') is-invalid @enderror"
-                       value="{{ old('payload.incident_date') }}">
+                       value="{{ $payloadDateOld('incident_date') }}">
                 @error('payload.incident_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-6 form-group fleet-damaged-fault-only {{ old('payload.fault_type') === 'fault' ? '' : 'd-none' }}">
+            <div class="col-md-6 form-group fleet-damaged-fault-only {{ $damagedFaultTypeOld === 'fault' ? '' : 'd-none' }}">
                 <label for="fleet_damaged_excess_status">Excess status <span class="text-danger">*</span></label>
                 <input type="text" name="payload[excess_status]" id="fleet_damaged_excess_status"
                        class="form-control @error('payload.excess_status') is-invalid @enderror"
-                       maxlength="255" value="{{ old('payload.excess_status') }}">
+                       maxlength="255" value="{{ $payloadOld('excess_status') }}">
                 @error('payload.excess_status')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-6 form-group fleet-damaged-fault-only {{ old('payload.fault_type') === 'fault' ? '' : 'd-none' }}">
+            <div class="col-md-6 form-group fleet-damaged-fault-only {{ $damagedFaultTypeOld === 'fault' ? '' : 'd-none' }}">
                 <label for="fleet_damaged_fault_notes">Fault notes <span class="text-danger">*</span></label>
                 <textarea name="payload[fault_notes]" id="fleet_damaged_fault_notes" rows="2"
-                          class="form-control @error('payload.fault_notes') is-invalid @enderror">{{ old('payload.fault_notes') }}</textarea>
+                          class="form-control @error('payload.fault_notes') is-invalid @enderror">{{ $payloadOld('fault_notes') }}</textarea>
                 @error('payload.fault_notes')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-12 form-group fleet-damaged-nonfault-only {{ old('payload.fault_type') === 'non_fault' ? '' : 'd-none' }}">
-                <label for="fleet_damaged_claim_ref">Insurance claim reference <span class="text-danger">*</span></label>
+            <div class="col-md-6 form-group">
+                <label for="fleet_damaged_claim_ref">Insurance claim reference</label>
                 <input type="text" name="payload[insurance_claim_reference]" id="fleet_damaged_claim_ref"
                        class="form-control @error('payload.insurance_claim_reference') is-invalid @enderror"
-                       maxlength="255" value="{{ old('payload.insurance_claim_reference') }}">
+                       maxlength="255" value="{{ $payloadOld('insurance_claim_reference') }}">
                 @error('payload.insurance_claim_reference')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-6 form-group">
+                <label for="fleet_damaged_claim_handler_name">Claim handler name</label>
+                <input type="text" name="payload[claim_handler_name]" id="fleet_damaged_claim_handler_name"
+                       class="form-control @error('payload.claim_handler_name') is-invalid @enderror"
+                       maxlength="255" value="{{ $payloadOld('claim_handler_name') }}">
+                @error('payload.claim_handler_name')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
@@ -289,7 +314,7 @@
                 $phvlSuspensionStatusOld = old('payload.phvl_suspension_status', $payloadOld('phvl_suspension_status', \App\Services\PhvlSuspensionService::STATUS_ACTIVE));
                 $phvlStatusRequiresDate = $phvlSuspensionStatusOld !== \App\Services\PhvlSuspensionService::STATUS_ACTIVE;
             @endphp
-            <div class="col-md-6 form-group fleet-damaged-phvl-only {{ old('payload.fault_type') === 'non_fault' ? '' : 'd-none' }}">
+            <div class="col-md-6 form-group fleet-damaged-phvl-only">
                 <label for="fleet_damaged_phvl_status">PHVL suspension status <span class="text-danger">*</span></label>
                 <select name="payload[phvl_suspension_status]" id="fleet_damaged_phvl_status"
                         class="form-control @error('payload.phvl_suspension_status') is-invalid @enderror">
@@ -302,21 +327,21 @@
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-6 form-group fleet-damaged-phvl-only fleet-damaged-phvl-date-only {{ old('payload.fault_type') === 'non_fault' && $phvlStatusRequiresDate ? '' : 'd-none' }}"
+            <div class="col-md-6 form-group fleet-damaged-phvl-only fleet-damaged-phvl-date-only {{ $phvlStatusRequiresDate ? '' : 'd-none' }}"
                  id="fleet_damaged_phvl_date_wrap">
                 <label for="fleet_damaged_phvl_status_date">PHVL status date <span class="text-danger">*</span></label>
                 <input type="date" name="payload[phvl_suspension_status_date]" id="fleet_damaged_phvl_status_date"
                        class="form-control @error('payload.phvl_suspension_status_date') is-invalid @enderror"
-                       value="{{ old('payload.phvl_suspension_status_date', $payloadOld('phvl_suspension_status_date')) }}">
+                       value="{{ $payloadDateOld('phvl_suspension_status_date') }}">
                 @error('payload.phvl_suspension_status_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-12 form-group fleet-damaged-phvl-only {{ old('payload.fault_type') === 'non_fault' ? '' : 'd-none' }}">
+            <div class="col-md-12 form-group fleet-damaged-phvl-only">
                 <label for="fleet_damaged_phvl_notes">PHVL suspension notes</label>
                 <textarea name="payload[phvl_suspension_notes]" id="fleet_damaged_phvl_notes" rows="2"
                           class="form-control @error('payload.phvl_suspension_notes') is-invalid @enderror"
-                          placeholder="Optional">{{ old('payload.phvl_suspension_notes', $payloadOld('phvl_suspension_notes')) }}</textarea>
+                          placeholder="Optional">{{ $payloadOld('phvl_suspension_notes') }}</textarea>
                 @error('payload.phvl_suspension_notes')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -325,15 +350,15 @@
                 <div class="custom-control custom-checkbox">
                     <input type="checkbox" class="custom-control-input" id="fleet_payload_mechanical"
                            name="payload[mechanical]" value="1"
-                        {{ old('payload.mechanical') ? 'checked' : '' }}>
+                        {{ $damagedMechanicalOld ? 'checked' : '' }}>
                     <label class="custom-control-label" for="fleet_payload_mechanical">Mechanical damage</label>
                 </div>
             </div>
-            <div class="col-md-12 form-group {{ old('payload.mechanical') ? '' : 'd-none' }}"
+            <div class="col-md-12 form-group {{ $damagedMechanicalOld ? '' : 'd-none' }}"
                  id="fleet_payload_mechanical_notes_wrap">
                 <label for="fleet_payload_mechanical_notes">Mechanical notes <span class="text-danger">*</span></label>
                 <textarea name="payload[mechanical_notes]" id="fleet_payload_mechanical_notes" rows="2"
-                          class="form-control @error('payload.mechanical_notes') is-invalid @enderror">{{ old('payload.mechanical_notes') }}</textarea>
+                          class="form-control @error('payload.mechanical_notes') is-invalid @enderror">{{ $payloadOld('mechanical_notes') }}</textarea>
                 @error('payload.mechanical_notes')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -343,7 +368,7 @@
 
     {{-- Written off --}}
     @php
-        $writtenOffDisposalOld = old('payload.disposal_outcome');
+        $writtenOffDisposalOld = $payloadOld('disposal_outcome');
         $writtenOffDisposalOptions = \App\Services\CarStatusChangeService::WRITTEN_OFF_DISPOSAL_OUTCOMES;
     @endphp
     <div class="fleet-status-panel {{ $activeTargetStatus === 'written_off' ? '' : 'd-none' }}"
@@ -398,7 +423,7 @@
                             class="text-danger">*</span></label>
                 <input type="number" name="payload[insurance_excess_amount]" id="fleet_written_insurance_excess"
                        class="form-control @error('payload.insurance_excess_amount') is-invalid @enderror"
-                       step="0.01" min="0" value="{{ old('payload.insurance_excess_amount') }}">
+                       step="0.01" min="0" value="{{ $payloadOld('insurance_excess_amount') }}">
                 @error('payload.insurance_excess_amount')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -408,8 +433,8 @@
                 <select name="payload[fault_type]" id="fleet_written_fault_type"
                         class="form-control fleet-written-fault-select @error('payload.fault_type') is-invalid @enderror">
                     <option value="">— Select —</option>
-                    <option value="fault" {{ old('payload.fault_type') === 'fault' ? 'selected' : '' }}>Fault</option>
-                    <option value="non_fault" {{ old('payload.fault_type') === 'non_fault' ? 'selected' : '' }}>Non-fault</option>
+                    <option value="fault" {{ $writtenFaultTypeOld === 'fault' ? 'selected' : '' }}>Fault</option>
+                    <option value="non_fault" {{ $writtenFaultTypeOld === 'non_fault' ? 'selected' : '' }}>Non-fault</option>
                 </select>
                 @error('payload.fault_type')
                 <div class="invalid-feedback">{{ $message }}</div>
@@ -419,41 +444,50 @@
                 <label for="fleet_written_incident_date">Incident date <span class="text-danger">*</span></label>
                 <input type="date" name="payload[incident_date]" id="fleet_written_incident_date"
                        class="form-control @error('payload.incident_date') is-invalid @enderror"
-                       value="{{ old('payload.incident_date') }}">
+                       value="{{ $payloadDateOld('incident_date') }}">
                 @error('payload.incident_date')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-6 form-group fleet-written-fault-only {{ old('payload.fault_type') === 'fault' ? '' : 'd-none' }}">
+            <div class="col-md-6 form-group fleet-written-fault-only {{ $writtenFaultTypeOld === 'fault' ? '' : 'd-none' }}">
                 <label for="fleet_written_excess_status">Excess status <span class="text-danger">*</span></label>
                 <input type="text" name="payload[excess_status]" id="fleet_written_excess_status"
                        class="form-control @error('payload.excess_status') is-invalid @enderror"
-                       maxlength="255" value="{{ old('payload.excess_status') }}">
+                       maxlength="255" value="{{ $payloadOld('excess_status') }}">
                 @error('payload.excess_status')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-6 form-group fleet-written-fault-only {{ old('payload.fault_type') === 'fault' ? '' : 'd-none' }}">
+            <div class="col-md-6 form-group fleet-written-fault-only {{ $writtenFaultTypeOld === 'fault' ? '' : 'd-none' }}">
                 <label for="fleet_written_fault_notes">Fault notes <span class="text-danger">*</span></label>
                 <textarea name="payload[fault_notes]" id="fleet_written_fault_notes" rows="2"
-                          class="form-control @error('payload.fault_notes') is-invalid @enderror">{{ old('payload.fault_notes') }}</textarea>
+                          class="form-control @error('payload.fault_notes') is-invalid @enderror">{{ $payloadOld('fault_notes') }}</textarea>
                 @error('payload.fault_notes')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
-            <div class="col-md-12 form-group fleet-written-nonfault-only {{ old('payload.fault_type') === 'non_fault' ? '' : 'd-none' }}">
-                <label for="fleet_written_claim_ref">Insurance claim reference <span class="text-danger">*</span></label>
+            <div class="col-md-6 form-group">
+                <label for="fleet_written_claim_ref">Insurance claim reference</label>
                 <input type="text" name="payload[insurance_claim_reference]" id="fleet_written_claim_ref"
                        class="form-control @error('payload.insurance_claim_reference') is-invalid @enderror"
-                       maxlength="255" value="{{ old('payload.insurance_claim_reference') }}">
+                       maxlength="255" value="{{ $payloadOld('insurance_claim_reference') }}">
                 @error('payload.insurance_claim_reference')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-6 form-group">
+                <label for="fleet_written_claim_handler_name">Claim handler name</label>
+                <input type="text" name="payload[claim_handler_name]" id="fleet_written_claim_handler_name"
+                       class="form-control @error('payload.claim_handler_name') is-invalid @enderror"
+                       maxlength="255" value="{{ $payloadOld('claim_handler_name') }}">
+                @error('payload.claim_handler_name')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
             <div class="col-md-12 form-group">
                 <label for="fleet_written_notes">Written-off notes</label>
                 <textarea name="payload[written_notes]" id="fleet_written_notes" rows="2"
-                          class="form-control @error('payload.written_notes') is-invalid @enderror">{{ old('payload.written_notes') }}</textarea>
+                          class="form-control @error('payload.written_notes') is-invalid @enderror">{{ $payloadOld('written_notes') }}</textarea>
                 @error('payload.written_notes')
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror

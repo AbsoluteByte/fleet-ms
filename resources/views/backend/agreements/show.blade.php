@@ -91,13 +91,21 @@
                     Export Financial
                 </a>
             @endif
+            @if(!empty($agreement->driver?->email))
             <form action="{{ route('agreements.send-client-documents', $agreement) }}" method="POST" class="d-inline">
                 @csrf
-                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Send client documents to jawad@samoretraders.com?')">
+                <button type="submit" class="btn btn-outline-success" onclick="return confirm('Send client documents to {{ $agreement->driver->email }} (CC: jawad@samoretraders.com)?')">
                     <i class="fa fa-envelope me-2"></i>
                     Send Client Documents
                 </button>
             </form>
+            @else
+            <button type="button" class="btn btn-outline-success" disabled style="opacity: .45;"
+                    title="Driver email is required to send client documents">
+                <i class="fa fa-envelope me-2"></i>
+                Send Client Documents
+            </button>
+            @endif
             @if(config('app.dev_mode'))
                 <a href="{{ route('agreements.preview-client-documents-email', $agreement) }}" class="btn btn-outline-secondary" target="_blank" rel="noopener noreferrer">
                     <i class="fa fa-eye me-2"></i>

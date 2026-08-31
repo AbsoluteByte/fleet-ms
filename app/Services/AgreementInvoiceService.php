@@ -466,11 +466,13 @@ class AgreementInvoiceService
         $throughDate = $throughDate?->copy()->startOfDay() ?? now()->startOfDay();
         $endDate = $agreement->billingThroughDate($throughDate);
         $generated = 0;
-        $upgradeDate = $agreement->start_date->copy()->startOfDay();
-        $originalStart = $old->start_date->copy()->startOfDay();
+        $currentDate = $this->firstBillingDateForUpgradedAgreement($agreement);
+
+        if (! $currentDate) {
+            return 0;
+        }
+
         $rentInterval = (string) $agreement->rent_interval;
-        $nextAnchor = $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval);
-        $currentDate = $nextAnchor->copy();
 
         while ($currentDate <= $endDate) {
             if ($this->createInvoiceForDate($agreement, $currentDate)) {
@@ -495,10 +497,13 @@ class AgreementInvoiceService
         }
 
         $dates = [];
-        $upgradeDate = $agreement->start_date->copy()->startOfDay();
-        $originalStart = $old->start_date->copy()->startOfDay();
+        $currentDate = $this->firstBillingDateForUpgradedAgreement($agreement);
+
+        if (! $currentDate) {
+            return [];
+        }
+
         $rentInterval = (string) $agreement->rent_interval;
-        $currentDate = $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval)->copy();
 
         while ($currentDate <= $endDate) {
             $dates[] = $currentDate->toDateString();
@@ -506,6 +511,25 @@ class AgreementInvoiceService
         }
 
         return $dates;
+    }
+
+    private function firstBillingDateForUpgradedAgreement(Agreement $agreement): ?Carbon
+    {
+        $old = $agreement->upgradedFromAgreement;
+
+        if (! $old || ! $old->start_date || ! $agreement->start_date) {
+            return null;
+        }
+
+        $upgradeDate = $agreement->start_date->copy()->startOfDay();
+        $originalStart = $old->start_date->copy()->startOfDay();
+        $rentInterval = (string) $agreement->rent_interval;
+
+        if ($this->isBillingAnchor($originalStart, $upgradeDate, $rentInterval)) {
+            return $upgradeDate->copy();
+        }
+
+        return $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval);
     }
 
     private function syncDepositInvoice(Agreement $agreement): bool

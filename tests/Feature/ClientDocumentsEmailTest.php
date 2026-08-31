@@ -160,6 +160,8 @@ class ClientDocumentsEmailTest extends TestCase
     {
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
+        Schema::dropIfExists('agreement_signature_tokens');
+        Schema::dropIfExists('car_services');
         Schema::dropIfExists('tenant_user');
         Schema::dropIfExists('insurance_providers');
         $this->tearDownAgreementChangeCarDatabase();
@@ -222,12 +224,13 @@ class ClientDocumentsEmailTest extends TestCase
 
         $response->assertRedirect();
         Mail::assertSent(AgreementClientDocumentsMail::class, function (AgreementClientDocumentsMail $mail) {
-            return $mail->hasTo('jawad@samoretraders.com')
+            return $mail->hasTo('docs-driver@example.com')
+                && $mail->hasCc('jawad@samoretraders.com')
                 && count($mail->attachmentsData) > 0;
         });
     }
 
-    public function test_send_client_documents_succeeds_without_driver_email(): void
+    public function test_send_client_documents_blocked_without_driver_email(): void
     {
         Mail::fake();
         $this->driver->update(['email' => null]);
@@ -236,10 +239,8 @@ class ClientDocumentsEmailTest extends TestCase
         $response = $this->post(route('agreements.send-client-documents', $agreement));
 
         $response->assertRedirect();
-        $response->assertSessionHasNoErrors();
-        Mail::assertSent(AgreementClientDocumentsMail::class, function (AgreementClientDocumentsMail $mail) {
-            return $mail->hasTo('jawad@samoretraders.com');
-        });
+        $response->assertSessionHas('error');
+        Mail::assertNothingSent();
     }
 
     public function test_preview_client_documents_email_returns_404_when_dev_mode_disabled(): void
@@ -261,6 +262,7 @@ class ClientDocumentsEmailTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('DEV MODE');
+        $response->assertSee('docs-driver@example.com');
         $response->assertSee('jawad@samoretraders.com');
         $response->assertSee('Client Documents');
         $response->assertSee('Attached Documents');
@@ -310,6 +312,30 @@ class ClientDocumentsEmailTest extends TestCase
             $table->string('provider_name')->nullable();
             $table->string('policy_number')->nullable();
             $table->date('expiry_date')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('car_services', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('car_id');
+            $table->date('service_date');
+            $table->decimal('amount', 10, 2)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('agreement_signature_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('agreement_id');
+            $table->string('token', 100)->unique();
+            $table->string('signer_email');
+            $table->string('signer_name');
+            $table->string('status')->default('pending');
+            $table->longText('signature_data')->nullable();
+            $table->string('signature_method', 20)->nullable();
+            $table->string('typed_name', 255)->nullable();
+            $table->string('ip_address', 50)->nullable();
+            $table->timestamp('signed_at')->nullable();
+            $table->timestamp('expires_at');
             $table->timestamps();
         });
 

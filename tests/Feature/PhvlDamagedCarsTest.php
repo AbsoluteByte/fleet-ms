@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Car;
-use App\Models\CarPhvlSuspensionHistory;
 use App\Models\CarStatusHistory;
 use App\Models\Company;
 use App\Models\Tenant;
@@ -110,7 +109,7 @@ class PhvlDamagedCarsTest extends TestCase
         $this->assertNotContains('DMG001', collect($activeResponse->json('data'))->pluck('registration')->all());
     }
 
-    public function test_fault_damaged_does_not_require_phvl_fields(): void
+    public function test_fault_damaged_saves_without_claim_reference_and_applies_phvl_status(): void
     {
         $car = $this->createCar('DMG002', Car::FLEET_STATUS_AVAILABLE_FOR_RENT);
 
@@ -125,6 +124,7 @@ class PhvlDamagedCarsTest extends TestCase
                 'incident_date' => '2026-05-30',
                 'excess_status' => 'Pending',
                 'fault_notes' => 'Driver at fault',
+                'phvl_suspension_status' => PhvlSuspensionService::STATUS_ACTIVE,
             ],
         ]);
 
@@ -132,7 +132,11 @@ class PhvlDamagedCarsTest extends TestCase
 
         $car->refresh();
         $this->assertNull($car->phvl_suspension_status);
-        $this->assertSame(0, CarPhvlSuspensionHistory::query()->where('car_id', $car->id)->count());
+
+        $history = CarStatusHistory::query()->where('car_id', $car->id)->latest('id')->firstOrFail();
+        $this->assertSame('fault', $history->status_data['fault_type']);
+        $this->assertNull($history->status_data['insurance_claim_reference'] ?? null);
+        $this->assertSame(PhvlSuspensionService::STATUS_ACTIVE, $history->status_data['phvl_suspension_status']);
 
         $allResponse = $this->getJson(route('phvl.damaged-cars.data', ['tab' => 'all']));
         $allResponse->assertOk();
