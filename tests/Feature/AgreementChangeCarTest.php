@@ -249,6 +249,82 @@ class AgreementChangeCarTest extends TestCase
         $this->assertSame($anchorInvoice->id, $newAgreement->fresh()->discount_consumed_invoice_id);
     }
 
+    public function test_swap_on_billing_anchor_creates_full_rent_invoice_on_swap_agreement(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-24 10:00:00'));
+
+        app(AgreementInvoiceService::class)->generateForAgreement(
+            $this->agreement->fresh(['status']),
+            Carbon::parse('2026-06-24')
+        );
+
+        $oldAnchorInvoice = Invoice::query()
+            ->where('source_id', $this->agreement->id)
+            ->where('invoice_type', 'agreement')
+            ->whereDate('invoice_date', '2026-06-24')
+            ->firstOrFail();
+
+        $this->assertSame('200.00', $oldAnchorInvoice->subtotal);
+        $this->assertSame(0.0, (float) $oldAnchorInvoice->paid_amount);
+
+        $newAgreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($this->agreement->fresh(), [
+            'car_id' => $this->newCar->id,
+            'driver_id' => $this->driver->id,
+            'agreed_rent' => 300,
+            'start_date' => '2026-06-24 10:00:00',
+        ]);
+
+        $this->assertDatabaseMissing('invoices', [
+            'id' => $oldAnchorInvoice->id,
+        ]);
+
+        $swapAnchorInvoice = Invoice::query()
+            ->where('source_id', $newAgreement->id)
+            ->where('invoice_type', 'agreement')
+            ->whereDate('invoice_date', '2026-06-24')
+            ->first();
+
+        $this->assertNotNull($swapAnchorInvoice);
+        $this->assertSame('300.00', $swapAnchorInvoice->subtotal);
+        $this->assertSame(0.0, (float) $swapAnchorInvoice->discount_amount);
+        $this->assertSame(1, Invoice::query()
+            ->where('source_id', $newAgreement->id)
+            ->where('invoice_type', 'agreement')
+            ->count());
+    }
+
+    public function test_swap_on_billing_anchor_transfers_one_time_discount_to_swap_invoice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-24 10:00:00'));
+
+        $startedAt = Carbon::parse('2026-06-10 09:00:00');
+        $this->agreement->update([
+            'discount_type' => 'percentage',
+            'discount_value' => 10,
+            'discount_notes' => 'Welcome discount',
+            'discount_is_one_time' => true,
+            'discount_started_at' => $startedAt,
+        ]);
+
+        $newAgreement = app(AgreementUpgradeService::class)->createSwapFromAgreement($this->agreement->fresh(), [
+            'car_id' => $this->newCar->id,
+            'driver_id' => $this->driver->id,
+            'agreed_rent' => 300,
+            'start_date' => '2026-06-24 10:00:00',
+        ]);
+
+        $this->assertFalse($newAgreement->fresh()->hasPendingOneTimeDiscount());
+
+        $swapAnchorInvoice = Invoice::query()
+            ->where('source_id', $newAgreement->id)
+            ->where('invoice_type', 'agreement')
+            ->whereDate('invoice_date', '2026-06-24')
+            ->firstOrFail();
+
+        $this->assertSame(30.0, (float) $swapAnchorInvoice->discount_amount);
+        $this->assertSame($swapAnchorInvoice->id, $newAgreement->fresh()->discount_consumed_invoice_id);
+    }
+
     private function createCompliantCar(string $registration, int $carModelId, int $counselId, string $fleetStatus): Car
     {
         $car = Car::create([

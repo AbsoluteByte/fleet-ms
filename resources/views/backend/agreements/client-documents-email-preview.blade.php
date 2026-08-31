@@ -29,6 +29,10 @@
             {{ $recipient ?: '— (no driver email)' }}
         </div>
         <div class="meta-row">
+            <span class="meta-label">CC:</span>
+            {{ $ccRecipient ?? '—' }}
+        </div>
+        <div class="meta-row">
             <span class="meta-label">Subject:</span>
             {{ $subject }}
         </div>

@@ -172,6 +172,24 @@
             height: 38px;
             margin-bottom: 3px;
         }
+        .sig-container {
+            position: relative;
+            height: 38px;
+            margin-bottom: 3px;
+        }
+        .sig-underline {
+            border-bottom: 1px solid #000;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+        .sig-img {
+            max-width: 100%;
+            max-height: 36px;
+            display: block;
+            margin: 0 auto;
+        }
         .sig-label {
             font-size: 10.5px;
             font-weight: bold;
@@ -292,8 +310,7 @@
             <div class="sig-label">Client</div>
         </td>
         <td>
-            <div class="sig-line"></div>
-            <div class="sig-label">{{ strtoupper($company->name ?? 'SAMORE TRADERS LTD') }}</div>
+            @include('backend.agreements._company_owner_signature_pdf')
         </td>
         <td>
             <div class="sig-line"></div>

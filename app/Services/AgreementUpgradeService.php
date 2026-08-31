@@ -53,7 +53,9 @@ class AgreementUpgradeService
 
     /**
      * Create a Swap agreement from an Active original: terminate original, carry deposit,
-     * inherit billing cycle via upgraded_from_agreement_id. No invoices or credits on create.
+     * inherit billing cycle via upgraded_from_agreement_id. Generates a full-period rent
+     * invoice when the swap occurs on a billing anchor day; mid-period swaps stay invoice-free
+     * until the next anchor.
      *
      * @param  array<string, mixed>  $input
      */
@@ -184,7 +186,12 @@ class AgreementUpgradeService
 
             app(CarFleetRentStatusService::class)->syncForAgreement($newAgreement, (int) $old->car_id, Auth::id());
 
-            return $newAgreement;
+            $this->invoiceService->generateForAgreement(
+                $newAgreement->fresh(['upgradedFromAgreement', 'status']),
+                $changeDate
+            );
+
+            return $newAgreement->fresh(['upgradedFromAgreement', 'status']);
         });
     }
 

@@ -24,9 +24,12 @@
                             @php
                                 $insuranceReportRequested = filled($insuranceFrom) || filled($insuranceTo);
                                 $ticketReportRequested = filled($ticketCarId ?? null) || filled($ticketAt ?? null);
-                                $activeMainTab = $ticketReportRequested
-                                    ? 'ticket'
-                                    : ($insuranceReportRequested ? 'insurance' : 'mots');
+                                $reconciliationRequested = ($reconciliation ?? null) !== null || filled($reconciliationError ?? null);
+                                $activeMainTab = $reconciliationRequested
+                                    ? 'reconciliation'
+                                    : ($ticketReportRequested
+                                        ? 'ticket'
+                                        : ($insuranceReportRequested ? 'insurance' : 'mots'));
                                 $ticketAtInputValue = filled($ticketAt ?? null)
                                     ? \Carbon\Carbon::parse($ticketAt)->format('Y-m-d\TH:i')
                                     : '';
@@ -45,6 +48,9 @@
                                 </li>
                                 <li class="nav-item">
                                     <a class="nav-link {{ $activeMainTab === 'ticket' ? 'active' : '' }}" id="reports-ticket-tab" data-toggle="pill" href="#reports-ticket-pane" role="tab" aria-controls="reports-ticket-pane" aria-selected="{{ $activeMainTab === 'ticket' ? 'true' : 'false' }}">Ticket Tracking</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link {{ $activeMainTab === 'reconciliation' ? 'active' : '' }}" id="reports-reconciliation-tab" data-toggle="pill" href="#reports-reconciliation-pane" role="tab" aria-controls="reports-reconciliation-pane" aria-selected="{{ $activeMainTab === 'reconciliation' ? 'true' : 'false' }}">Insurance Reconciliation</a>
                                 </li>
                             </ul>
 
@@ -316,6 +322,46 @@
                                                 No driver was assigned to this vehicle at the selected date and time.
                                             </div>
                                         @endif
+                                    @endif
+                                </div>
+
+                                <div class="tab-pane fade {{ $activeMainTab === 'reconciliation' ? 'show active' : '' }}" id="reports-reconciliation-pane" role="tabpanel" aria-labelledby="reports-reconciliation-tab">
+                                    <form method="POST" action="{{ route('reports.insurance-reconciliation') }}" enctype="multipart/form-data" class="mb-2" id="reportsInsuranceReconciliationForm">
+                                        @csrf
+                                        <div class="form-row align-items-end">
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="reconciliation_from">From</label>
+                                                <input type="date" name="reconciliation_from" id="reconciliation_from" class="form-control @error('reconciliation_from') is-invalid @enderror" value="{{ old('reconciliation_from', $reconciliationFrom) }}" required>
+                                                @error('reconciliation_from')
+                                                    <div class="invalid-feedback">{{ $message }}</div>
+                                                @enderror
+                                            </div>
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="reconciliation_to">To</label>
+                                                <input type="date" name="reconciliation_to" id="reconciliation_to" class="form-control @error('reconciliation_to') is-invalid @enderror" value="{{ old('reconciliation_to', $reconciliationTo) }}" required>
+                                                @error('reconciliation_to')
+                                                    <div class="invalid-feedback">{{ $message }}</div>
+                                                @enderror
+                                            </div>
+                                            <div class="form-group col-md-4 col-lg-4 mb-1">
+                                                <label class="small text-muted mb-25 d-block" for="policy_schedule_pdf">Policy schedule PDF</label>
+                                                <input type="file" name="policy_schedule_pdf" id="policy_schedule_pdf" class="form-control-file @error('policy_schedule_pdf') is-invalid @enderror" accept="application/pdf,.pdf" required>
+                                                @error('policy_schedule_pdf')
+                                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                                @enderror
+                                            </div>
+                                            <div class="form-group col-md-3 col-lg-2 mb-1">
+                                                <button type="submit" class="btn btn-primary btn-block">Run report</button>
+                                            </div>
+                                        </div>
+                                    </form>
+
+                                    @if($reconciliationError ?? false)
+                                        <div class="alert alert-danger">{{ $reconciliationError }}</div>
+                                    @elseif(! ($reconciliation ?? null))
+                                        <p class="text-muted mb-0">Upload an insurer fleet policy schedule PDF and choose the period to compare against Fleet IQ insurance history.</p>
+                                    @else
+                                        @include('backend.reports.partials.insurance-reconciliation-results', ['reconciliation' => $reconciliation])
                                     @endif
                                 </div>
                             </div>
@@ -635,7 +681,7 @@
                 $('#reportsExportGroup').toggle(isVisible);
             }
 
-            if (activeReportTab === 'ticket') {
+            if (activeReportTab === 'ticket' || activeReportTab === 'reconciliation') {
                 setReportsExportVisible(false);
             }
 
@@ -879,6 +925,9 @@
                     }
                 } else if (href === '#reports-ticket-pane') {
                     activeReportTab = 'ticket';
+                    setReportsExportVisible(false);
+                } else if (href === '#reports-reconciliation-pane') {
+                    activeReportTab = 'reconciliation';
                     setReportsExportVisible(false);
                 } else {
                     activeReportTab = 'mots';
@@ -1131,7 +1180,7 @@
             }
 
             function runActiveTabExport(exportFn) {
-                if (activeReportTab === 'ticket') {
+                if (activeReportTab === 'ticket' || activeReportTab === 'reconciliation') {
                     return;
                 }
 

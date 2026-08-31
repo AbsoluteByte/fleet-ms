@@ -120,7 +120,7 @@ class CarStatusChangeService
                 ]);
             }
 
-            if ($target === 'damaged' && ($statusData['fault_type'] ?? '') === 'non_fault') {
+            if ($target === 'damaged') {
                 $phvlStatus = $statusData['phvl_suspension_status'] ?? PhvlSuspensionService::STATUS_ACTIVE;
                 $eventDate = ! empty($statusData['phvl_suspension_status_date'])
                     ? Carbon::parse($statusData['phvl_suspension_status_date'])
@@ -318,12 +318,8 @@ class CarStatusChangeService
                 'nullable',
                 'string',
             ],
-            'payload.insurance_claim_reference' => [
-                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'),
-                'nullable',
-                'string',
-                'max:255',
-            ],
+            'payload.insurance_claim_reference' => 'nullable|string|max:255',
+            'payload.claim_handler_name' => 'nullable|string|max:255',
             'payload.mechanical' => 'nullable|boolean',
             'payload.mechanical_notes' => [
                 Rule::requiredIf(fn () => $request->boolean('payload.mechanical')),
@@ -331,13 +327,11 @@ class CarStatusChangeService
                 'string',
             ],
             'payload.phvl_suspension_status' => [
-                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'),
-                'nullable',
+                'required',
                 Rule::in(PhvlSuspensionService::statuses()),
             ],
             'payload.phvl_suspension_status_date' => [
-                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'
-                    && $request->input('payload.phvl_suspension_status', PhvlSuspensionService::STATUS_ACTIVE) !== PhvlSuspensionService::STATUS_ACTIVE),
+                Rule::requiredIf(fn () => $request->input('payload.phvl_suspension_status', PhvlSuspensionService::STATUS_ACTIVE) !== PhvlSuspensionService::STATUS_ACTIVE),
                 'nullable',
                 'date',
             ],
@@ -346,21 +340,21 @@ class CarStatusChangeService
 
         $payload = $validated['payload'];
         $payload['mechanical'] = $request->boolean('payload.mechanical');
+        $payload['phvl_suspension_status'] = $request->input(
+            'payload.phvl_suspension_status',
+            PhvlSuspensionService::STATUS_ACTIVE
+        );
 
-        if ($payload['fault_type'] === 'non_fault') {
-            $payload['phvl_suspension_status'] = $request->input(
-                'payload.phvl_suspension_status',
-                PhvlSuspensionService::STATUS_ACTIVE
-            );
-            if ($payload['phvl_suspension_status'] === PhvlSuspensionService::STATUS_ACTIVE) {
-                unset($payload['phvl_suspension_status_date']);
-            }
-        } else {
-            unset(
-                $payload['phvl_suspension_status'],
-                $payload['phvl_suspension_status_date'],
-                $payload['phvl_suspension_notes']
-            );
+        if ($payload['phvl_suspension_status'] === PhvlSuspensionService::STATUS_ACTIVE) {
+            unset($payload['phvl_suspension_status_date']);
+        }
+
+        if (($payload['insurance_claim_reference'] ?? '') === '') {
+            $payload['insurance_claim_reference'] = null;
+        }
+
+        if (($payload['claim_handler_name'] ?? '') === '') {
+            $payload['claim_handler_name'] = null;
         }
 
         $this->cancelActiveReservationsAndSwapsForCar($car);
@@ -404,14 +398,20 @@ class CarStatusChangeService
                 'nullable',
                 'string',
             ],
-            'payload.insurance_claim_reference' => [
-                Rule::requiredIf(fn () => $request->input('payload.fault_type') === 'non_fault'),
-                'nullable',
-                'string',
-                'max:255',
-            ],
+            'payload.insurance_claim_reference' => 'nullable|string|max:255',
+            'payload.claim_handler_name' => 'nullable|string|max:255',
             'payload.written_notes' => 'nullable|string',
         ]);
+
+        $payload = $validated['payload'];
+
+        if (($payload['insurance_claim_reference'] ?? '') === '') {
+            $payload['insurance_claim_reference'] = null;
+        }
+
+        if (($payload['claim_handler_name'] ?? '') === '') {
+            $payload['claim_handler_name'] = null;
+        }
 
         $this->cancelActiveReservationsAndSwapsForCar($car);
 
@@ -420,7 +420,7 @@ class CarStatusChangeService
             'available_from_date' => null,
         ]);
 
-        return $validated['payload'];
+        return $payload;
     }
 
     /**

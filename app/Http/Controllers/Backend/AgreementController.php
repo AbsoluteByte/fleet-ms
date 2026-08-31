@@ -1050,6 +1050,10 @@ class AgreementController extends Controller
             ]);
         }
 
+        if ($this->canAddDamagesAfterClose()) {
+            return;
+        }
+
         if (! $agreement->isBillableStatus()) {
             throw ValidationException::withMessages([
                 'additional_charges' => 'Damages can only be added while the agreement is active.',
@@ -1663,6 +1667,11 @@ class AgreementController extends Controller
         return strtolower(trim((string) Auth::user()?->email)) === self::DISCOUNT_ALLOWED_EMAIL;
     }
 
+    private function canAddDamagesAfterClose(): bool
+    {
+        return $this->canManageDiscount();
+    }
+
     private function prepareAgreementPaymentData(array $validated, Request $request, bool $isReplacementVehicle = false): array
     {
         $paymentData = [];
@@ -2016,6 +2025,11 @@ class AgreementController extends Controller
 
         $agreement->loadMissing(['driver', 'car', 'company', 'car.company']);
 
+        $driverEmail = trim((string) ($agreement->driver?->email ?? ''));
+        if ($driverEmail === '') {
+            return redirect()->back()->with('error', 'Driver email is required to send client documents.');
+        }
+
         $service = app(AgreementClientDocumentsService::class);
         $generatedTempFiles = [];
 
@@ -2023,17 +2037,19 @@ class AgreementController extends Controller
             $payload = $service->collectForAgreement($agreement);
             $generatedTempFiles = $payload['generatedTempFiles'];
 
-            Mail::to(self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL)->send(new AgreementClientDocumentsMail(
-                $agreement,
-                $payload['attachments'],
-                $payload['attachedLabels'],
-                $payload['missingDocuments']
-            ));
+            Mail::to($driverEmail)
+                ->cc(self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL)
+                ->send(new AgreementClientDocumentsMail(
+                    $agreement,
+                    $payload['attachments'],
+                    $payload['attachedLabels'],
+                    $payload['missingDocuments']
+                ));
 
             $sentCount = count($payload['attachments']);
             $missingCount = count($payload['missingDocuments']);
 
-            $message = 'Client documents email sent to '.self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL.". Attached: {$sentCount}.";
+            $message = 'Client documents email sent to '.$driverEmail.' (CC: '.self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL."). Attached: {$sentCount}.";
             if ($missingCount > 0) {
                 $message .= " Missing listed in email: {$missingCount}.";
             }
@@ -2081,10 +2097,12 @@ class AgreementController extends Controller
             $company = $agreement->documentCompany();
             $carReg = $agreement->car?->registration ?: 'Vehicle';
             $subject = "Documents for {$carReg} - Agreement #{$agreement->id}";
+            $driverEmail = trim((string) ($agreement->driver?->email ?? ''));
 
             return view('backend.agreements.client-documents-email-preview', [
                 'agreement' => $agreement,
-                'recipient' => self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL,
+                'recipient' => $driverEmail,
+                'ccRecipient' => self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL,
                 'subject' => $subject,
                 'attachments' => $payload['attachments'],
                 'attachedLabels' => $payload['attachedLabels'],

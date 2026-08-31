@@ -28,15 +28,20 @@ class AgreementPdfService
         ]);
 
         $signatureImage = $agreement->signedSignatureToken()?->signature_data;
+        $documentCompany = $agreement->documentCompany();
+        $letterMeta = $documentCompany
+            ? app(PermissionLetterService::class)->resolveLetterMeta($documentCompany)
+            : [];
 
         return [
             'agreement' => $agreement,
             'driver' => $agreement->driver,
             'car' => $agreement->car,
-            'company' => $agreement->documentCompany(),
+            'company' => $documentCompany,
             'currentDate' => Carbon::now()->format('d/m/Y'),
             'previousVehicleRegistration' => $agreement->previousVehicleRegistration(),
             'signature_image' => $signatureImage,
+            'letterMeta' => $letterMeta,
         ];
     }
 

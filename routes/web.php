@@ -90,6 +90,8 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('phvl/archive/{archive}/timeline', [App\Http\Controllers\Backend\PhvlArchiveController::class, 'timeline'])->name('phvl.archive.timeline');
 
     Route::get('reports', [App\Http\Controllers\Backend\ReportController::class, 'index'])->name('reports.index');
+    Route::post('reports/insurance-reconciliation', [App\Http\Controllers\Backend\ReportController::class, 'runInsuranceReconciliation'])
+        ->name('reports.insurance-reconciliation');
     Route::get('ai', [App\Http\Controllers\Backend\AiController::class, 'index'])->name('ai.index');
     Route::post('ai/road-tax/analyze', [App\Http\Controllers\Backend\AiController::class, 'analyzeRoadTax'])->name('ai.road-tax.analyze');
     Route::get('ai/road-tax/review', [App\Http\Controllers\Backend\AiController::class, 'reviewRoadTax'])->name('ai.road-tax.review');
@@ -240,6 +242,9 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     // ✅ Notifications index page
     Route::get('notifications', [App\Http\Controllers\Backend\DashboardController::class, 'notificationsIndex'])
         ->name('notifications.index');
+
+    Route::post('notifications/dismiss', [App\Http\Controllers\Backend\DashboardController::class, 'dismissFleetNotification'])
+        ->name('notifications.dismiss');
 
     Route::get('payments-notifications', [App\Http\Controllers\Backend\DashboardController::class, 'paymentsIndex'])
         ->name('payments.notifications');

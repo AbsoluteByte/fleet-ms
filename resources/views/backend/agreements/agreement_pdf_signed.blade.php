@@ -197,8 +197,7 @@
             @endif
         </td>
         <td>
-            <div class="sig-container"><div class="sig-underline"></div></div>
-            <div class="sig-label">{{ strtoupper($company->name ?? 'SAMORE TRADERS LTD') }}</div>
+            @include('backend.agreements._company_owner_signature_pdf')
         </td>
         <td>
             <div class="sig-container">

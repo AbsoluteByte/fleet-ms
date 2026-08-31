@@ -128,17 +128,14 @@
         });
 
         function toggleDamagedPhvlDate() {
-            const fault = String($('#fleet_damaged_fault_type').val() || '');
             const status = String($('#fleet_damaged_phvl_status').val() || 'active');
-            const showDate = fault === 'non_fault' && status !== 'active';
+            const showDate = status !== 'active';
             $('#fleet_damaged_phvl_date_wrap').toggleClass('d-none', !showDate);
         }
 
         function toggleDamagedFault() {
             const v = String($('#fleet_damaged_fault_type').val() || '');
             $('.fleet-damaged-fault-only').toggleClass('d-none', v !== 'fault');
-            $('.fleet-damaged-nonfault-only').toggleClass('d-none', v !== 'non_fault');
-            $('.fleet-damaged-phvl-only').toggleClass('d-none', v !== 'non_fault');
             toggleDamagedPhvlDate();
         }
 
@@ -152,7 +149,6 @@
         function toggleWrittenFault() {
             const v = String($('#fleet_written_fault_type').val() || '');
             $('.fleet-written-fault-only').toggleClass('d-none', v !== 'fault');
-            $('.fleet-written-nonfault-only').toggleClass('d-none', v !== 'non_fault');
         }
 
         $('#fleet_written_fault_type').on('change', toggleWrittenFault);
@@ -265,26 +261,40 @@
             $el.val(value);
         }
 
+        function inputHasValue(el) {
+            if (el.type === 'checkbox') {
+                return el.checked;
+            }
+
+            return String($(el).val() || '').trim() !== '';
+        }
+
         function maybeApplyPrefillStatusData() {
             const keys = Object.keys(prefillStatusData || {});
             if (!keys.length) {
                 return;
             }
 
-            const hasOldPayloadInput = $('[name^="payload["]').filter(function () {
-                if (this.type === 'checkbox') {
-                    return this.checked;
-                }
-                return String($(this).val() || '').trim() !== '';
-            }).length > 0;
-
-            if (hasOldPayloadInput) {
-                return;
-            }
-
             keys.forEach(function (key) {
-                setInputValueByName('payload[' + key + ']', prefillStatusData[key]);
+                const name = 'payload[' + key + ']';
+                const $el = $('[name="' + name + '"]');
+                if (!$el.length) {
+                    return;
+                }
+
+                $el.each(function () {
+                    if (inputHasValue(this)) {
+                        return;
+                    }
+
+                    setInputValueByName(name, prefillStatusData[key]);
+                });
             });
+
+            $('#fleet_payload_mechanical_notes_wrap').toggleClass(
+                'd-none',
+                !$('#fleet_payload_mechanical').prop('checked')
+            );
         }
 
         $('#fleet_wizard_next').on('click', function () {
