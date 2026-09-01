@@ -15,6 +15,8 @@ class InvoiceReportController extends Controller
 {
     private const STATUS_FILTERS = ['all', 'paid', 'pending', 'partial'];
 
+    private const INVOICE_TYPE_FILTERS = ['all', 'agreement', 'agreement_deposit', 'agreement_additional_charge', 'manual', 'subscription'];
+
     public function __construct()
     {
         $this->middleware('role:admin|manager|user');
@@ -33,11 +35,13 @@ class InvoiceReportController extends Controller
             'from' => 'nullable|date',
             'to' => 'nullable|date|after_or_equal:from',
             'status' => ['nullable', Rule::in(self::STATUS_FILTERS)],
+            'invoice_type' => ['nullable', Rule::in(self::INVOICE_TYPE_FILTERS)],
         ]);
 
         $from = Carbon::parse($validated['from'] ?? now()->startOfMonth()->toDateString())->startOfDay();
         $to = Carbon::parse($validated['to'] ?? now()->toDateString())->endOfDay();
         $statusFilter = $validated['status'] ?? 'all';
+        $invoiceTypeFilter = $validated['invoice_type'] ?? 'all';
 
         $invoices = Invoice::query()
             ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenant->id))
@@ -53,8 +57,10 @@ class InvoiceReportController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        $summary = $this->buildSummary($invoices);
-        $filteredInvoices = $this->applyStatusFilter($invoices, $statusFilter);
+        $typeFilteredInvoices = $this->applyInvoiceTypeFilter($invoices, $invoiceTypeFilter);
+        $summary = $this->buildSummary($typeFilteredInvoices);
+        $uniqueVehiclesCount = $this->countUniqueVehicles($typeFilteredInvoices);
+        $filteredInvoices = $this->applyStatusFilter($typeFilteredInvoices, $statusFilter);
 
         $rows = $filteredInvoices->map(fn (Invoice $invoice) => $this->mapInvoiceRow($invoice));
 
@@ -62,6 +68,8 @@ class InvoiceReportController extends Controller
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
             'statusFilter' => $statusFilter,
+            'invoiceTypeFilter' => $invoiceTypeFilter,
+            'uniqueVehiclesCount' => $uniqueVehiclesCount,
             'summary' => $summary,
             'rows' => $rows,
         ]);
@@ -100,6 +108,31 @@ class InvoiceReportController extends Controller
                 ->filter(fn (Invoice $invoice) => in_array($invoice->status, ['pending', 'overdue', 'partial'], true))
                 ->sum('balance_amount'), 2),
         ];
+    }
+
+    /**
+     * @param  Collection<int, Invoice>  $invoices
+     * @return Collection<int, Invoice>
+     */
+    private function applyInvoiceTypeFilter(Collection $invoices, string $invoiceTypeFilter): Collection
+    {
+        if ($invoiceTypeFilter === 'all') {
+            return $invoices->values();
+        }
+
+        return $invoices->where('invoice_type', $invoiceTypeFilter)->values();
+    }
+
+    /**
+     * @param  Collection<int, Invoice>  $invoices
+     */
+    private function countUniqueVehicles(Collection $invoices): int
+    {
+        return $invoices
+            ->map(fn (Invoice $invoice) => $invoice->vehicleRegistrationLabel())
+            ->filter(fn (string $registration) => $registration !== '' && $registration !== '—')
+            ->unique()
+            ->count();
     }
 
     /**
