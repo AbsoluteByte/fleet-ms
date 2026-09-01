@@ -528,6 +528,64 @@ class InvoiceReportTest extends TestCase
         $this->assertSame(1, $response->viewData('uniqueVehiclesCount'));
     }
 
+    public function test_unique_vehicles_count_excludes_terminated_agreements(): void
+    {
+        $activeAgreementId = $this->createAgreementWithCar('AB12 CDE', 'Active');
+        $terminatedAgreementId = $this->createAgreementWithCar('XY99 ZZZ', 'Terminated');
+
+        $this->createInvoice([
+            'invoice_no' => 'INV-ACTIVE',
+            'invoice_date' => '2026-08-10',
+            'invoice_type' => 'agreement',
+            'source_id' => $activeAgreementId,
+            'total_amount' => 200,
+            'status' => 'pending',
+        ]);
+        $this->createInvoice([
+            'invoice_no' => 'INV-TERMINATED',
+            'invoice_date' => '2026-08-10',
+            'invoice_type' => 'agreement',
+            'source_id' => $terminatedAgreementId,
+            'total_amount' => 200,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.invoices', [
+            'from' => '2026-08-01',
+            'to' => '2026-08-31',
+            'invoice_type' => 'agreement',
+        ]));
+
+        $response->assertOk();
+        $this->assertSame(1, $response->viewData('uniqueVehiclesCount'));
+        $invoiceNos = collect($response->viewData('rows'))->pluck('invoice_no');
+        $this->assertTrue($invoiceNos->contains('INV-ACTIVE'));
+        $this->assertTrue($invoiceNos->contains('INV-TERMINATED'));
+    }
+
+    public function test_unique_vehicles_count_includes_swap_agreements(): void
+    {
+        $swapAgreementId = $this->createAgreementWithCar('SW01 PAA', 'Swap');
+
+        $this->createInvoice([
+            'invoice_no' => 'INV-SWAP',
+            'invoice_date' => '2026-08-10',
+            'invoice_type' => 'agreement',
+            'source_id' => $swapAgreementId,
+            'total_amount' => 200,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.invoices', [
+            'from' => '2026-08-01',
+            'to' => '2026-08-31',
+            'invoice_type' => 'agreement',
+        ]));
+
+        $response->assertOk();
+        $this->assertSame(1, $response->viewData('uniqueVehiclesCount'));
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -549,7 +607,7 @@ class InvoiceReportTest extends TestCase
         ], $overrides));
     }
 
-    private function createAgreementWithCar(string $registration): int
+    private function createAgreementWithCar(string $registration, string $statusName = 'Active'): int
     {
         $companyId = DB::table('companies')->insertGetId([
             'tenant_id' => $this->tenant->id,
@@ -572,7 +630,7 @@ class InvoiceReportTest extends TestCase
             'updated_at' => now(),
         ]);
         $statusId = DB::table('statuses')->insertGetId([
-            'name' => 'Active',
+            'name' => $statusName,
             'type' => 'agreement',
             'created_at' => now(),
             'updated_at' => now(),

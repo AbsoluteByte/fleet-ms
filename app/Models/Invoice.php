@@ -95,6 +95,17 @@ class Invoice extends Model
         return is_string($registration) && $registration !== '' ? $registration : '—';
     }
 
+    public function linkedAgreementHasActiveOrSwapStatus(): bool
+    {
+        if (! in_array($this->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) || ! $this->source_id) {
+            return false;
+        }
+
+        $statusName = (string) optional($this->sourceAgreement?->status)->name;
+
+        return in_array($statusName, ['Active', 'Swap'], true);
+    }
+
     public function payingCompanyNameLabel(): ?string
     {
         if (! in_array($this->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true) || ! $this->source_id) {
