@@ -107,6 +107,7 @@
                                             data-color="{{ $car->color }}"
                                             data-car-status="{{ $carStatusLabel }}"
                                             data-fleet-status="{{ $car->fleet_status ?? 'available_for_rent' }}"
+                                            data-has-active-or-swap-agreement="{{ in_array($car->id, $activeOrSwapCarIds ?? [], true) ? '1' : '0' }}"
                                             data-available-by-phv="{{ $isAvailableByPhv ? '1' : '0' }}"
                                             data-awaiting-phv="{{ $isAwaitingPhv ? '1' : '0' }}"
                                             data-awaiting-log-book="{{ $isAwaitingLogBook ? '1' : '0' }}"
@@ -1034,6 +1035,10 @@
 
                 if (quickFilter === 'available_by_phv') {
                     return row.dataset.availableByPhv === '1';
+                }
+
+                if (quickFilter === 'on_rent') {
+                    return row.dataset.hasActiveOrSwapAgreement === '1';
                 }
 
                 return row.dataset.fleetStatus === quickFilter;

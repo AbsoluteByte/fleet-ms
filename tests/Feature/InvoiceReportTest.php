@@ -445,14 +445,15 @@ class InvoiceReportTest extends TestCase
         $this->assertSame($this->driver->fresh()->selectOptionLabel(), $rows['INV-PAID-DATE']['customer']);
     }
 
-    public function test_page_renders_invoice_type_filter_and_cars_on_rent_summary(): void
+    public function test_page_renders_invoice_type_filter(): void
     {
         $response = $this->get(route('payments.invoices'));
 
         $response->assertOk();
         $response->assertSee('Invoice type');
-        $response->assertSee('Unique vehicles in selected filters');
         $response->assertSee('id="invoice_type"', false);
+        $response->assertDontSee('Cars on rent');
+        $response->assertDontSee('Unique vehicles in selected filters');
     }
 
     public function test_invoice_type_filter_limits_rows_to_rent_only(): void
@@ -486,104 +487,6 @@ class InvoiceReportTest extends TestCase
         $invoiceNos = collect($response->viewData('rows'))->pluck('invoice_no');
         $this->assertTrue($invoiceNos->contains('INV-RENT'));
         $this->assertFalse($invoiceNos->contains('INV-MANUAL'));
-        $response->assertSee('Cars on rent');
-    }
-
-    public function test_unique_vehicles_count_excludes_duplicates_and_dashes(): void
-    {
-        $agreementId = $this->createAgreementWithCar('AB12 CDE');
-
-        $this->createInvoice([
-            'invoice_no' => 'INV-RENT-1',
-            'invoice_date' => '2026-08-10',
-            'invoice_type' => 'agreement',
-            'source_id' => $agreementId,
-            'total_amount' => 200,
-            'status' => 'pending',
-        ]);
-        $this->createInvoice([
-            'invoice_no' => 'INV-RENT-2',
-            'invoice_date' => '2026-08-11',
-            'invoice_type' => 'agreement',
-            'source_id' => $agreementId,
-            'total_amount' => 200,
-            'status' => 'paid',
-        ]);
-        $this->createInvoice([
-            'invoice_no' => 'INV-MANUAL',
-            'invoice_date' => '2026-08-12',
-            'invoice_type' => 'manual',
-            'source_id' => null,
-            'total_amount' => 50,
-            'status' => 'pending',
-        ]);
-
-        $response = $this->get(route('payments.invoices', [
-            'from' => '2026-08-01',
-            'to' => '2026-08-31',
-            'invoice_type' => 'agreement',
-        ]));
-
-        $response->assertOk();
-        $this->assertSame(1, $response->viewData('uniqueVehiclesCount'));
-    }
-
-    public function test_unique_vehicles_count_excludes_terminated_agreements(): void
-    {
-        $activeAgreementId = $this->createAgreementWithCar('AB12 CDE', 'Active');
-        $terminatedAgreementId = $this->createAgreementWithCar('XY99 ZZZ', 'Terminated');
-
-        $this->createInvoice([
-            'invoice_no' => 'INV-ACTIVE',
-            'invoice_date' => '2026-08-10',
-            'invoice_type' => 'agreement',
-            'source_id' => $activeAgreementId,
-            'total_amount' => 200,
-            'status' => 'pending',
-        ]);
-        $this->createInvoice([
-            'invoice_no' => 'INV-TERMINATED',
-            'invoice_date' => '2026-08-10',
-            'invoice_type' => 'agreement',
-            'source_id' => $terminatedAgreementId,
-            'total_amount' => 200,
-            'status' => 'pending',
-        ]);
-
-        $response = $this->get(route('payments.invoices', [
-            'from' => '2026-08-01',
-            'to' => '2026-08-31',
-            'invoice_type' => 'agreement',
-        ]));
-
-        $response->assertOk();
-        $this->assertSame(1, $response->viewData('uniqueVehiclesCount'));
-        $invoiceNos = collect($response->viewData('rows'))->pluck('invoice_no');
-        $this->assertTrue($invoiceNos->contains('INV-ACTIVE'));
-        $this->assertTrue($invoiceNos->contains('INV-TERMINATED'));
-    }
-
-    public function test_unique_vehicles_count_includes_swap_agreements(): void
-    {
-        $swapAgreementId = $this->createAgreementWithCar('SW01 PAA', 'Swap');
-
-        $this->createInvoice([
-            'invoice_no' => 'INV-SWAP',
-            'invoice_date' => '2026-08-10',
-            'invoice_type' => 'agreement',
-            'source_id' => $swapAgreementId,
-            'total_amount' => 200,
-            'status' => 'pending',
-        ]);
-
-        $response = $this->get(route('payments.invoices', [
-            'from' => '2026-08-01',
-            'to' => '2026-08-31',
-            'invoice_type' => 'agreement',
-        ]));
-
-        $response->assertOk();
-        $this->assertSame(1, $response->viewData('uniqueVehiclesCount'));
     }
 
     /**

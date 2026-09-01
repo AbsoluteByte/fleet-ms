@@ -552,6 +552,21 @@ class Agreement extends Model
     /**
      * @return list<int>
      */
+    public static function activeOrSwapCarIdsForTenant(int $tenantId): array
+    {
+        return static::query()
+            ->where('tenant_id', $tenantId)
+            ->whereHas('status', fn ($query) => $query->whereIn('name', ['Active', 'Swap']))
+            ->pluck('car_id')
+            ->unique()
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<int>
+     */
     public static function rentedCarIdsForTenant(int $tenantId, ?int $excludeAgreementId = null): array
     {
         return static::query()

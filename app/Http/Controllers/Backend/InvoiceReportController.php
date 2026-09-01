@@ -51,7 +51,6 @@ class InvoiceReportController extends Controller
             ->with([
                 'driver',
                 'sourceAgreement.car',
-                'sourceAgreement.status',
                 'paymentAllocations.payment',
             ])
             ->orderByDesc('invoice_date')
@@ -60,7 +59,6 @@ class InvoiceReportController extends Controller
 
         $typeFilteredInvoices = $this->applyInvoiceTypeFilter($invoices, $invoiceTypeFilter);
         $summary = $this->buildSummary($typeFilteredInvoices);
-        $uniqueVehiclesCount = $this->countUniqueVehicles($typeFilteredInvoices);
         $filteredInvoices = $this->applyStatusFilter($typeFilteredInvoices, $statusFilter);
 
         $rows = $filteredInvoices->map(fn (Invoice $invoice) => $this->mapInvoiceRow($invoice));
@@ -70,7 +68,6 @@ class InvoiceReportController extends Controller
             'to' => $to->toDateString(),
             'statusFilter' => $statusFilter,
             'invoiceTypeFilter' => $invoiceTypeFilter,
-            'uniqueVehiclesCount' => $uniqueVehiclesCount,
             'summary' => $summary,
             'rows' => $rows,
         ]);
@@ -122,19 +119,6 @@ class InvoiceReportController extends Controller
         }
 
         return $invoices->where('invoice_type', $invoiceTypeFilter)->values();
-    }
-
-    /**
-     * @param  Collection<int, Invoice>  $invoices
-     */
-    private function countUniqueVehicles(Collection $invoices): int
-    {
-        return $invoices
-            ->filter(fn (Invoice $invoice) => $invoice->linkedAgreementHasActiveOrSwapStatus())
-            ->map(fn (Invoice $invoice) => $invoice->vehicleRegistrationLabel())
-            ->filter(fn (string $registration) => $registration !== '' && $registration !== '—')
-            ->unique()
-            ->count();
     }
 
     /**
