@@ -51,6 +51,7 @@ class InvoiceReportController extends Controller
             ->with([
                 'driver',
                 'sourceAgreement.car',
+                'sourceAgreement.status',
                 'paymentAllocations.payment',
             ])
             ->orderByDesc('invoice_date')
@@ -129,6 +130,7 @@ class InvoiceReportController extends Controller
     private function countUniqueVehicles(Collection $invoices): int
     {
         return $invoices
+            ->filter(fn (Invoice $invoice) => $invoice->linkedAgreementHasActiveOrSwapStatus())
             ->map(fn (Invoice $invoice) => $invoice->vehicleRegistrationLabel())
             ->filter(fn (string $registration) => $registration !== '' && $registration !== '—')
             ->unique()
