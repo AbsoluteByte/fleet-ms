@@ -445,6 +445,89 @@ class InvoiceReportTest extends TestCase
         $this->assertSame($this->driver->fresh()->selectOptionLabel(), $rows['INV-PAID-DATE']['customer']);
     }
 
+    public function test_page_renders_invoice_type_filter_and_cars_on_rent_summary(): void
+    {
+        $response = $this->get(route('payments.invoices'));
+
+        $response->assertOk();
+        $response->assertSee('Invoice type');
+        $response->assertSee('Unique vehicles in selected filters');
+        $response->assertSee('id="invoice_type"', false);
+    }
+
+    public function test_invoice_type_filter_limits_rows_to_rent_only(): void
+    {
+        $agreementId = $this->createAgreementWithCar('XY99 ZZZ');
+
+        $this->createInvoice([
+            'invoice_no' => 'INV-RENT',
+            'invoice_date' => '2026-08-10',
+            'invoice_type' => 'agreement',
+            'source_id' => $agreementId,
+            'total_amount' => 200,
+            'status' => 'pending',
+        ]);
+        $this->createInvoice([
+            'invoice_no' => 'INV-MANUAL',
+            'invoice_date' => '2026-08-11',
+            'invoice_type' => 'manual',
+            'source_id' => null,
+            'total_amount' => 50,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.invoices', [
+            'from' => '2026-08-01',
+            'to' => '2026-08-31',
+            'invoice_type' => 'agreement',
+        ]));
+
+        $response->assertOk();
+        $invoiceNos = collect($response->viewData('rows'))->pluck('invoice_no');
+        $this->assertTrue($invoiceNos->contains('INV-RENT'));
+        $this->assertFalse($invoiceNos->contains('INV-MANUAL'));
+        $response->assertSee('Cars on rent');
+    }
+
+    public function test_unique_vehicles_count_excludes_duplicates_and_dashes(): void
+    {
+        $agreementId = $this->createAgreementWithCar('AB12 CDE');
+
+        $this->createInvoice([
+            'invoice_no' => 'INV-RENT-1',
+            'invoice_date' => '2026-08-10',
+            'invoice_type' => 'agreement',
+            'source_id' => $agreementId,
+            'total_amount' => 200,
+            'status' => 'pending',
+        ]);
+        $this->createInvoice([
+            'invoice_no' => 'INV-RENT-2',
+            'invoice_date' => '2026-08-11',
+            'invoice_type' => 'agreement',
+            'source_id' => $agreementId,
+            'total_amount' => 200,
+            'status' => 'paid',
+        ]);
+        $this->createInvoice([
+            'invoice_no' => 'INV-MANUAL',
+            'invoice_date' => '2026-08-12',
+            'invoice_type' => 'manual',
+            'source_id' => null,
+            'total_amount' => 50,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.invoices', [
+            'from' => '2026-08-01',
+            'to' => '2026-08-31',
+            'invoice_type' => 'agreement',
+        ]));
+
+        $response->assertOk();
+        $this->assertSame(1, $response->viewData('uniqueVehiclesCount'));
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -464,6 +547,50 @@ class InvoiceReportTest extends TestCase
             'balance_amount' => $total,
             'status' => 'pending',
         ], $overrides));
+    }
+
+    private function createAgreementWithCar(string $registration): int
+    {
+        $companyId = DB::table('companies')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Report Co',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $carModelId = DB::table('car_models')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Report Model',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $carId = DB::table('cars')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $companyId,
+            'car_model_id' => $carModelId,
+            'registration' => $registration,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $statusId = DB::table('statuses')->insertGetId([
+            'name' => 'Active',
+            'type' => 'agreement',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return DB::table('agreements')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $companyId,
+            'driver_id' => $this->driver->id,
+            'car_id' => $carId,
+            'status_id' => $statusId,
+            'start_date' => '2026-08-01 00:00:00',
+            'end_date' => '2026-12-31',
+            'agreed_rent' => 200,
+            'rent_interval' => 'weekly',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function setUpHttpTestExtras(): void

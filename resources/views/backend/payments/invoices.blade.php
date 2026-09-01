@@ -40,6 +40,17 @@
                                         </select>
                                     </div>
                                     <div class="form-group col-md-3 col-lg-2 mb-1">
+                                        <label class="small text-muted mb-25 d-block" for="invoice_type">Invoice type</label>
+                                        <select name="invoice_type" id="invoice_type" class="form-control">
+                                            <option value="all" {{ $invoiceTypeFilter === 'all' ? 'selected' : '' }}>All</option>
+                                            <option value="agreement" {{ $invoiceTypeFilter === 'agreement' ? 'selected' : '' }}>Rent</option>
+                                            <option value="agreement_deposit" {{ $invoiceTypeFilter === 'agreement_deposit' ? 'selected' : '' }}>Deposit</option>
+                                            <option value="agreement_additional_charge" {{ $invoiceTypeFilter === 'agreement_additional_charge' ? 'selected' : '' }}>Additional charge</option>
+                                            <option value="manual" {{ $invoiceTypeFilter === 'manual' ? 'selected' : '' }}>Manual</option>
+                                            <option value="subscription" {{ $invoiceTypeFilter === 'subscription' ? 'selected' : '' }}>Subscription</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group col-md-3 col-lg-2 mb-1">
                                         <button type="submit" class="btn btn-primary">Apply</button>
                                     </div>
                                 </div>
@@ -78,6 +89,13 @@
                                     <div class="payment-summary-card border-danger" data-summary="outstanding">
                                         <span>Outstanding still to collect</span>
                                         <strong>£{{ number_format($summary['outstanding'], 2) }}</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-xl mb-1">
+                                    <div class="payment-summary-card border-secondary" data-summary="unique-vehicles">
+                                        <span>{{ $invoiceTypeFilter === 'agreement' ? 'Cars on rent' : 'Unique vehicles' }}</span>
+                                        <strong>{{ $uniqueVehiclesCount }}</strong>
+                                        <small>Unique vehicles in selected filters</small>
                                     </div>
                                 </div>
                             </div>
@@ -158,6 +176,35 @@
             justify-content: flex-end;
             align-items: center;
         }
+
+        #invoicesReportTable_filter {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .invoices-table-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+
+        .card-dashboard .dataTables_wrapper .dataTables_filter {
+            margin-top: 0;
+            float: none;
+        }
+
+        #invoicesReportTable_filter label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0;
+        }
+
+        #invoicesReportTable_filter input {
+            margin-left: .5rem;
+        }
     </style>
 @endsection
 @section('js')
@@ -174,6 +221,15 @@
                 order: [[3, 'desc']],
             });
 
+            const $filter = $('#invoicesReportTable_filter');
+            const $toolbar = $('#invoicesTableToolbar');
+            if ($filter.length && $toolbar.length && !$filter.parent().hasClass('invoices-table-controls')) {
+                const $controls = $('<div class="invoices-table-controls"></div>');
+                $filter.before($controls);
+                $controls.append($toolbar);
+                $controls.append($filter);
+            }
+
             const invoiceReportSummary = {
                 generatedCount: {{ (int) $summary['generated_count'] }},
                 generatedTotal: @json(number_format($summary['generated_total'], 2)),
@@ -184,6 +240,7 @@
                 partialCount: {{ (int) $summary['partial_count'] }},
                 partialTotal: @json(number_format($summary['partial_total'], 2)),
                 outstanding: @json(number_format($summary['outstanding'], 2)),
+                uniqueVehiclesCount: {{ (int) $uniqueVehiclesCount }},
             };
 
             function invoicesExportFilename(extension) {
@@ -216,17 +273,30 @@
                 return select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : 'All';
             }
 
+            function selectedInvoiceTypeLabel() {
+                const select = document.getElementById('invoice_type');
+                if (!select) {
+                    return 'All';
+                }
+
+                return select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : 'All';
+            }
+
             function buildInvoicesExportMeta() {
                 const from = document.getElementById('invoice_from') ? document.getElementById('invoice_from').value : '';
                 const to = document.getElementById('invoice_to') ? document.getElementById('invoice_to').value : '';
                 const lines = [
                     'Invoice date: ' + formatDateLabel(from) + ' to ' + formatDateLabel(to),
+                    'Invoice type filter: ' + selectedInvoiceTypeLabel(),
                     'Table status filter: ' + selectedStatusLabel(),
                     'Invoices generated: ' + invoiceReportSummary.generatedCount + ' (£' + invoiceReportSummary.generatedTotal + ')',
                     'Paid: ' + invoiceReportSummary.paidCount + ' (£' + invoiceReportSummary.paidTotal + ')',
                     'Pending / unpaid: ' + invoiceReportSummary.pendingCount + ' (£' + invoiceReportSummary.pendingTotal + ')',
                     'Partially paid: ' + invoiceReportSummary.partialCount + ' (£' + invoiceReportSummary.partialTotal + ')',
                     'Outstanding still to collect: £' + invoiceReportSummary.outstanding,
+                    (document.getElementById('invoice_type') && document.getElementById('invoice_type').value === 'agreement'
+                        ? 'Cars on rent: '
+                        : 'Unique vehicles: ') + invoiceReportSummary.uniqueVehiclesCount,
                 ];
 
                 const searchTerm = (dataTable.search() || '').trim();

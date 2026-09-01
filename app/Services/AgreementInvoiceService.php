@@ -320,6 +320,10 @@ class AgreementInvoiceService
             foreach ($invoices->filter(
                 fn (Invoice $invoice) => $invoice->invoice_date->copy()->startOfDay()->gte($closingDate)
             ) as $invoice) {
+                if ($this->invoiceIsSettled($invoice)) {
+                    continue;
+                }
+
                 $this->releaseInvoiceCommitments($invoice, 0);
                 $this->removePendingManualAllocationTarget($invoice);
                 $this->releaseOneTimeDiscountFromInvoice($agreement, $invoice);
@@ -526,10 +530,135 @@ class AgreementInvoiceService
         $rentInterval = (string) $agreement->rent_interval;
 
         if ($this->isBillingAnchor($originalStart, $upgradeDate, $rentInterval)) {
+            if ($this->oldAgreementAnchorInvoiceWasSettled($old, $upgradeDate)) {
+                return $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval);
+            }
+
             return $upgradeDate->copy();
         }
 
         return $this->nextBillingAnchor($originalStart, $upgradeDate, $rentInterval);
+    }
+
+    public function oldAgreementAnchorInvoiceWasSettled(Agreement $old, Carbon $anchorDate): bool
+    {
+        $invoice = Invoice::query()
+            ->where('invoice_type', 'agreement')
+            ->where('source_id', $old->id)
+            ->whereDate('invoice_date', $anchorDate->toDateString())
+            ->first();
+
+        return $invoice !== null && $this->invoiceIsSettled($invoice);
+    }
+
+    public function invoiceIsSettled(Invoice $invoice): bool
+    {
+        if ((float) $invoice->paid_amount > 0) {
+            return true;
+        }
+
+        if ($invoice->paymentAllocations()->count() > 0) {
+            return true;
+        }
+
+        return $invoice->status === 'paid';
+    }
+
+    /**
+     * @return list<array{
+     *     swap_agreement_id: int,
+     *     swap_invoice_id: int,
+     *     invoice_date: string,
+     *     old_agreement_id: int,
+     *     old_invoice_id: int
+     * }>
+     */
+    public function findDuplicateSwapInvoices(?int $swapAgreementId = null): array
+    {
+        $query = Agreement::query()
+            ->with('upgradedFromAgreement')
+            ->whereNotNull('upgraded_from_agreement_id');
+
+        if ($swapAgreementId !== null) {
+            $query->whereKey($swapAgreementId);
+        }
+
+        $duplicates = [];
+
+        foreach ($query->get() as $swapAgreement) {
+            $oldAgreement = $swapAgreement->upgradedFromAgreement;
+
+            if (! $oldAgreement || ! $oldAgreement->start_date || ! $swapAgreement->start_date) {
+                continue;
+            }
+
+            $throughDate = $swapAgreement->start_date->copy()->startOfDay();
+            $originalStart = $oldAgreement->start_date->copy()->startOfDay();
+            $rentInterval = (string) $swapAgreement->rent_interval;
+            $currentDate = $originalStart->copy();
+
+            while ($currentDate->lte($throughDate)) {
+                if ($this->oldAgreementAnchorInvoiceWasSettled($oldAgreement, $currentDate)) {
+                    $oldInvoice = Invoice::query()
+                        ->where('invoice_type', 'agreement')
+                        ->where('source_id', $oldAgreement->id)
+                        ->whereDate('invoice_date', $currentDate->toDateString())
+                        ->first();
+
+                    $swapInvoice = Invoice::query()
+                        ->where('invoice_type', 'agreement')
+                        ->where('source_id', $swapAgreement->id)
+                        ->whereDate('invoice_date', $currentDate->toDateString())
+                        ->first();
+
+                    if (
+                        $oldInvoice
+                        && $swapInvoice
+                        && ! $this->invoiceIsSettled($swapInvoice)
+                    ) {
+                        $duplicates[] = [
+                            'swap_agreement_id' => (int) $swapAgreement->id,
+                            'swap_invoice_id' => (int) $swapInvoice->id,
+                            'invoice_date' => $currentDate->toDateString(),
+                            'old_agreement_id' => (int) $oldAgreement->id,
+                            'old_invoice_id' => (int) $oldInvoice->id,
+                        ];
+                    }
+                }
+
+                $currentDate = $this->nextInvoiceDate($currentDate, $rentInterval);
+            }
+        }
+
+        return $duplicates;
+    }
+
+    public function deleteUnsettledAgreementInvoice(Invoice $invoice): void
+    {
+        DB::transaction(function () use ($invoice) {
+            $invoice = Invoice::query()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($this->invoiceIsSettled($invoice)) {
+                throw new \InvalidArgumentException('Cannot delete a settled agreement invoice.');
+            }
+
+            $agreement = Agreement::query()
+                ->whereKey($invoice->source_id)
+                ->lockForUpdate()
+                ->first();
+
+            $this->releaseInvoiceCommitments($invoice, 0);
+            $this->removePendingManualAllocationTarget($invoice);
+
+            if ($agreement) {
+                $this->releaseOneTimeDiscountFromInvoice($agreement, $invoice);
+            }
+
+            $invoice->delete();
+        });
     }
 
     private function syncDepositInvoice(Agreement $agreement): bool
