@@ -73,8 +73,9 @@ class CarController extends Controller
             ->get();
 
         $rentedCarIds = Agreement::rentedCarIdsForTenant($tenant->id);
+        $activeOrSwapCarIds = Agreement::activeOrSwapCarIdsForTenant($tenant->id);
 
-        return view($this->dir.'index', compact('cars', 'rentedCarIds'));
+        return view($this->dir.'index', compact('cars', 'rentedCarIds', 'activeOrSwapCarIds'));
     }
 
     // ✅ Updated Create

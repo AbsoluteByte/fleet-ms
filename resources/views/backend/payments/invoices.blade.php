@@ -91,13 +91,6 @@
                                         <strong>£{{ number_format($summary['outstanding'], 2) }}</strong>
                                     </div>
                                 </div>
-                                <div class="col-md-6 col-xl mb-1">
-                                    <div class="payment-summary-card border-secondary" data-summary="unique-vehicles">
-                                        <span>{{ $invoiceTypeFilter === 'agreement' ? 'Cars on rent' : 'Unique vehicles' }}</span>
-                                        <strong>{{ $uniqueVehiclesCount }}</strong>
-                                        <small>Unique vehicles in selected filters</small>
-                                    </div>
-                                </div>
                             </div>
 
                             <div class="table-responsive">
@@ -240,7 +233,6 @@
                 partialCount: {{ (int) $summary['partial_count'] }},
                 partialTotal: @json(number_format($summary['partial_total'], 2)),
                 outstanding: @json(number_format($summary['outstanding'], 2)),
-                uniqueVehiclesCount: {{ (int) $uniqueVehiclesCount }},
             };
 
             function invoicesExportFilename(extension) {
@@ -294,9 +286,6 @@
                     'Pending / unpaid: ' + invoiceReportSummary.pendingCount + ' (£' + invoiceReportSummary.pendingTotal + ')',
                     'Partially paid: ' + invoiceReportSummary.partialCount + ' (£' + invoiceReportSummary.partialTotal + ')',
                     'Outstanding still to collect: £' + invoiceReportSummary.outstanding,
-                    (document.getElementById('invoice_type') && document.getElementById('invoice_type').value === 'agreement'
-                        ? 'Cars on rent: '
-                        : 'Unique vehicles: ') + invoiceReportSummary.uniqueVehiclesCount,
                 ];
 
                 const searchTerm = (dataTable.search() || '').trim();
